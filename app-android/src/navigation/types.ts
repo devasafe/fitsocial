@@ -20,6 +20,7 @@ export type AppStackParams = {
   Leaderboard: undefined;
   PostDetail: { post: Post };
   ImportPlan: undefined;
+  History: undefined;
 };
 
 // Abas inferiores dentro de "Tabs".

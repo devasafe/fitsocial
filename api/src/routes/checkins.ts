@@ -66,3 +66,29 @@ checkinsRouter.get(
     res.json({ logs: logs.map(serializeLog) });
   })
 );
+
+// Evolução de carga por exercício (para o gráfico). Ignora exercícios sem peso.
+checkinsRouter.get(
+  "/progress",
+  asyncHandler(async (req, res) => {
+    const logs = await WorkoutLog.find({ user: req.user!._id }).sort({ date: 1 });
+
+    const byExercise = new Map<string, { date: Date; weightKg: number }[]>();
+    for (const log of logs) {
+      const day = log.date;
+      for (const e of log.entries) {
+        if (!e.weightKg || e.weightKg <= 0) continue; // pula cardio/sem peso
+        const points = byExercise.get(e.exerciseName) ?? [];
+        points.push({ date: day, weightKg: e.weightKg });
+        byExercise.set(e.exerciseName, points);
+      }
+    }
+
+    // Mais treinados primeiro.
+    const exercises = [...byExercise.entries()]
+      .map(([name, points]) => ({ name, points }))
+      .sort((a, b) => b.points.length - a.points.length);
+
+    res.json({ exercises });
+  })
+);

@@ -33,3 +33,24 @@ export function createCheckIn(
 export function getCheckInStats(token: string) {
   return apiFetch<{ stats: CheckInStats }>("/checkins/stats", { token });
 }
+
+export interface WorkoutLogItem {
+  id: string;
+  sessionDay: string;
+  date: string;
+  entries: { exerciseName: string; weightKg?: number; reps?: number }[];
+  notes: string;
+}
+
+export function getHistory(token: string) {
+  return apiFetch<{ logs: WorkoutLogItem[] }>("/checkins", { token });
+}
+
+export interface ExerciseProgress {
+  name: string;
+  points: { date: string; weightKg: number }[];
+}
+
+export function getProgress(token: string) {
+  return apiFetch<{ exercises: ExerciseProgress[] }>("/checkins/progress", { token });
+}

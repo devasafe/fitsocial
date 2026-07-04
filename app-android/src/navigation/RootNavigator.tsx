@@ -20,6 +20,7 @@ import { PostDetailScreen } from "../screens/PostDetailScreen";
 import { CoachScreen } from "../screens/CoachScreen";
 import { ImportPlanScreen } from "../screens/ImportPlanScreen";
 import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
+import { HistoryScreen } from "../screens/HistoryScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -145,6 +146,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="ImportPlan"
             component={ImportPlanScreen}
             options={{ headerShown: true, title: "Importar plano", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="History"
+            component={HistoryScreen}
+            options={{ headerShown: true, title: "📊 Histórico", ...headerStyle }}
           />
         </>
       )}

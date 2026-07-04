@@ -130,6 +130,26 @@ describe("Check-ins + reajuste", () => {
     expect(feed.body.posts.some((p: any) => p.text.includes("Dia B"))).toBe(true);
   });
 
+  it("progresso lista a evolução de carga por exercício (ignora cardio)", async () => {
+    // Mais um treino de Supino com carga maior + um cardio (sem peso).
+    await auth(
+      request(app).post("/checkins").send({
+        sessionDay: "Dia A — Peito",
+        entries: [
+          { exerciseName: "Supino", weightKg: 45, reps: 10 },
+          { exerciseName: "Esteira" }, // cardio: sem peso, não entra no gráfico
+        ],
+      })
+    );
+
+    const res = await auth(request(app).get("/checkins/progress"));
+    expect(res.status).toBe(200);
+    const supino = res.body.exercises.find((e: any) => e.name === "Supino");
+    expect(supino.points.length).toBe(2); // 40 e depois 45
+    expect(supino.points.map((p: any) => p.weightKg)).toEqual([40, 45]);
+    expect(res.body.exercises.find((e: any) => e.name === "Esteira")).toBeUndefined();
+  });
+
   it("reajuste é bloqueado para free (402)", async () => {
     const res = await auth(request(app).post("/plans/adjust"));
     expect(res.status).toBe(402);

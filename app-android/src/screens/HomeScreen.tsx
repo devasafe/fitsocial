@@ -160,12 +160,20 @@ export function HomeScreen() {
                   <Text style={styles.progressLabel}>total</Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.rankingLink}
-                onPress={() => navigation.navigate("Leaderboard")}
-              >
-                <Text style={styles.rankingText}>🏆 Ver ranking entre amigos</Text>
-              </TouchableOpacity>
+              <View style={styles.linksRow}>
+                <TouchableOpacity
+                  style={styles.rankingLink}
+                  onPress={() => navigation.navigate("Leaderboard")}
+                >
+                  <Text style={styles.rankingText}>🏆 Ranking</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.rankingLink}
+                  onPress={() => navigation.navigate("History")}
+                >
+                  <Text style={styles.rankingText}>📊 Evolução</Text>
+                </TouchableOpacity>
+              </View>
             </>
           )}
 
@@ -269,6 +277,7 @@ const styles = StyleSheet.create({
   progressValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
   progressLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   progressDivider: { width: 1, height: 32, backgroundColor: colors.border },
+  linksRow: { flexDirection: "row", justifyContent: "center", gap: spacing.xl },
   rankingLink: { alignItems: "center", paddingVertical: spacing.sm },
   rankingText: { color: colors.primary, fontWeight: "700" },
   importLink: { alignItems: "center", paddingVertical: spacing.md },
