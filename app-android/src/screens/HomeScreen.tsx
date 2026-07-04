@@ -135,22 +135,30 @@ export function HomeScreen() {
       ) : (
         <>
           {stats && (
-            <View style={styles.progressCard}>
-              <View style={styles.progressItem}>
-                <Text style={styles.progressValue}>🔥 {stats.streak}</Text>
-                <Text style={styles.progressLabel}>dias seguidos</Text>
+            <>
+              <View style={styles.progressCard}>
+                <View style={styles.progressItem}>
+                  <Text style={styles.progressValue}>🔥 {stats.streak}</Text>
+                  <Text style={styles.progressLabel}>dias seguidos</Text>
+                </View>
+                <View style={styles.progressDivider} />
+                <View style={styles.progressItem}>
+                  <Text style={styles.progressValue}>{stats.week}</Text>
+                  <Text style={styles.progressLabel}>na semana</Text>
+                </View>
+                <View style={styles.progressDivider} />
+                <View style={styles.progressItem}>
+                  <Text style={styles.progressValue}>{stats.total}</Text>
+                  <Text style={styles.progressLabel}>total</Text>
+                </View>
               </View>
-              <View style={styles.progressDivider} />
-              <View style={styles.progressItem}>
-                <Text style={styles.progressValue}>{stats.week}</Text>
-                <Text style={styles.progressLabel}>na semana</Text>
-              </View>
-              <View style={styles.progressDivider} />
-              <View style={styles.progressItem}>
-                <Text style={styles.progressValue}>{stats.total}</Text>
-                <Text style={styles.progressLabel}>total</Text>
-              </View>
-            </View>
+              <TouchableOpacity
+                style={styles.rankingLink}
+                onPress={() => navigation.navigate("Leaderboard")}
+              >
+                <Text style={styles.rankingText}>🏆 Ver ranking entre amigos</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           <View style={styles.card}>
@@ -246,6 +254,8 @@ const styles = StyleSheet.create({
   progressValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
   progressLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   progressDivider: { width: 1, height: 32, backgroundColor: colors.border },
+  rankingLink: { alignItems: "center", paddingVertical: spacing.sm },
+  rankingText: { color: colors.primary, fontWeight: "700" },
   adjustBtn: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,

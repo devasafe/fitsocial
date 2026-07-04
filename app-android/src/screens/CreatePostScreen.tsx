@@ -7,10 +7,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { createPost } from "../api/social";
+import { uploadImage } from "../api/uploads";
 import { PrimaryButton } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
@@ -18,15 +23,56 @@ export function CreatePostScreen() {
   const nav = useNavigation();
   const { token } = useAuth();
   const [text, setText] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  async function pickImage() {
+    // Em nativo, pede permissão da galeria (no web não é necessário).
+    if (Platform.OS !== "web") {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Permissão necessária", "Autorize o acesso às fotos para adicionar uma imagem.");
+        return;
+      }
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      const form = new FormData();
+      if (Platform.OS === "web") {
+        // No web, o uri é blob/data URL: converte para blob antes de enviar.
+        const blob = await (await fetch(asset.uri)).blob();
+        form.append("image", blob, asset.fileName ?? "foto.jpg");
+      } else {
+        form.append("image", {
+          uri: asset.uri,
+          name: asset.fileName ?? "foto.jpg",
+          type: asset.mimeType ?? "image/jpeg",
+        } as unknown as Blob);
+      }
+      const { url } = await uploadImage(token!, form);
+      setImageUrl(url);
+    } catch (err) {
+      Alert.alert("Não foi possível enviar a foto", (err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handlePost() {
     const body = text.trim();
     if (!body) return;
     setSaving(true);
     try {
-      await createPost(token!, body, imageUrl.trim() || undefined);
+      await createPost(token!, body, imageUrl ?? undefined);
       nav.goBack();
     } catch (err) {
       Alert.alert("Não foi possível postar", (err as Error).message);
@@ -52,23 +98,30 @@ export function CreatePostScreen() {
           autoFocus
         />
 
-        <Text style={styles.label}>URL da foto (opcional)</Text>
-        <TextInput
-          style={styles.input}
-          value={imageUrl}
-          onChangeText={setImageUrl}
-          placeholder="https://…"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-        <Text style={styles.hint}>
-          O envio de fotos direto da galeria entra numa próxima etapa; por ora, cole
-          uma URL de imagem.
-        </Text>
+        {imageUrl ? (
+          <View style={styles.previewWrap}>
+            <Image source={{ uri: imageUrl }} style={styles.preview} />
+            <TouchableOpacity style={styles.removeBtn} onPress={() => setImageUrl(null)}>
+              <Text style={styles.removeText}>Remover foto</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.pickBtn} onPress={pickImage} disabled={uploading}>
+            {uploading ? (
+              <ActivityIndicator color={colors.primary} />
+            ) : (
+              <Text style={styles.pickText}>📷 Adicionar foto</Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: spacing.lg }} />
-        <PrimaryButton title="Publicar" onPress={handlePost} loading={saving} disabled={!text.trim()} />
+        <PrimaryButton
+          title="Publicar"
+          onPress={handlePost}
+          loading={saving}
+          disabled={!text.trim() || uploading}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -89,15 +142,18 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: "top",
   },
-  input: {
-    backgroundColor: colors.surfaceAlt,
+  pickBtn: {
+    marginTop: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.primary,
+    borderStyle: "dashed",
     borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: colors.text,
-    fontSize: 16,
+    paddingVertical: spacing.lg,
+    alignItems: "center",
   },
-  hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs, lineHeight: 17 },
+  pickText: { color: colors.primary, fontWeight: "700" },
+  previewWrap: { marginTop: spacing.md },
+  preview: { width: "100%", height: 240, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  removeBtn: { alignSelf: "center", padding: spacing.sm },
+  removeText: { color: colors.danger, fontWeight: "600" },
 });

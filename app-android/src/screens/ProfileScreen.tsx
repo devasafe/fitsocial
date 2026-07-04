@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import {
   getUserProfile,
@@ -16,6 +17,8 @@ import {
   type UserProfile,
 } from "../api/social";
 import { PostCard } from "../components/PostCard";
+import { Badges } from "../components/Badges";
+import { getBadges, type Badge } from "../api/gamification";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -30,18 +33,24 @@ function Stat({ label, value }: { label: string; value: number }) {
 
 export function ProfileScreen() {
   const route = useRoute<RouteProp<AppStackParams, "UserProfile">>();
-  const nav = useNavigation();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { user: me, token, logout } = useAuth();
   // Sem param => perfil próprio (aba); com param => perfil de outra pessoa.
   const targetId = route.params?.userId ?? me!.id;
 
   const [data, setData] = useState<UserProfile | null>(null);
+  const [badges, setBadges] = useState<Badge[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setData(await getUserProfile(token!, targetId));
+      const [profile, b] = await Promise.all([
+        getUserProfile(token!, targetId),
+        getBadges(token!, targetId),
+      ]);
+      setData(profile);
+      setBadges(b.badges);
     } finally {
       setLoading(false);
     }
@@ -88,6 +97,7 @@ export function ProfileScreen() {
       keyExtractor={(p) => p.id}
       contentContainerStyle={styles.list}
       ListHeaderComponent={
+        <>
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{data.user.name.slice(0, 1).toUpperCase()}</Text>
@@ -116,9 +126,13 @@ export function ProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        {badges.length > 0 && <Badges badges={badges} />}
+        </>
       }
       ListEmptyComponent={<Text style={styles.empty}>Nenhum post ainda.</Text>}
-      renderItem={({ item }) => <PostCard post={item} />}
+      renderItem={({ item }) => (
+        <PostCard post={item} onPressComments={(post) => nav.navigate("PostDetail", { post })} />
+      )}
     />
   );
 }

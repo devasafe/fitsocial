@@ -8,6 +8,7 @@ import { User } from "../models/User.js";
 import { Post } from "../models/Post.js";
 import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
+import { Comment } from "../models/Comment.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -29,6 +30,7 @@ function serializePost(
     text: post.text,
     imageUrl: post.imageUrl,
     likeCount: post.likeCount,
+    commentCount: post.commentCount,
     likedByMe: likedIds.has(post._id.toString()),
     createdAt: post.get("createdAt") as Date,
     author: { id: author._id.toString(), name: author.name },
@@ -176,5 +178,50 @@ socialRouter.get(
       isMe: user._id.toString() === me.toString(),
       posts: posts.map((p) => serializePost(p, likedIds)),
     });
+  })
+);
+
+// ---- comentários ----
+
+const createCommentSchema = z.object({ text: z.string().min(1, "Escreva algo").max(1000) });
+
+function serializeComment(comment: InstanceType<typeof Comment>) {
+  const author = comment.author as unknown as PopulatedAuthor;
+  return {
+    id: comment._id.toString(),
+    text: comment.text,
+    createdAt: comment.get("createdAt") as Date,
+    author: { id: author._id.toString(), name: author.name },
+  };
+}
+
+// Cria um comentário e incrementa a contagem do post.
+socialRouter.post(
+  "/posts/:id/comments",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const { text } = createCommentSchema.parse(req.body);
+    const post = await Post.findById(req.params.id);
+    if (!post) throw new HttpError(404, "Post não encontrado");
+
+    const comment = await Comment.create({ post: post._id, author: req.user!._id, text });
+    post.commentCount += 1;
+    await post.save();
+
+    await comment.populate("author", "name");
+    res.status(201).json({ comment: serializeComment(comment) });
+  })
+);
+
+// Lista os comentários de um post (mais antigos primeiro).
+socialRouter.get(
+  "/posts/:id/comments",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const comments = await Comment.find({ post: req.params.id })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .populate("author", "name");
+    res.json({ comments: comments.map(serializeComment) });
   })
 );

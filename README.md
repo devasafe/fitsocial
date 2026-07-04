@@ -107,6 +107,19 @@ Para dispositivo físico, defina `EXPO_PUBLIC_API_URL` com o IP da sua máquina.
 
 ### v2
 - [x] **v2.1 — Check-in de treino + reajuste** (log carga/reps, streak/progresso, coach reajusta o plano por adesão)
+- [x] **v2.2 — Gamificação** (badges por conquistas no perfil + ranking entre seguidos)
+- [x] **v2.3 — Upload real de fotos** (galeria/câmera → upload → post com imagem)
+- [x] **v2.4 — Comentários nos posts** (comentar, listar, contagem; tela de detalhe do post)
+
+Endpoints v2.2–v2.4 (Bearer token):
+
+| Método | Rota                              | Descrição                          |
+|--------|-----------------------------------|------------------------------------|
+| GET    | `/gamification/users/:id`         | Badges de um usuário               |
+| GET    | `/gamification/leaderboard`       | Ranking entre seguidos (7 dias)    |
+| POST   | `/uploads`                        | Upload de imagem (multipart)       |
+| POST   | `/social/posts/:id/comments`      | Comentar em um post                |
+| GET    | `/social/posts/:id/comments`      | Listar comentários                 |
 
 ### v2.1 — Check-in de treino + reajuste (requer Bearer token)
 

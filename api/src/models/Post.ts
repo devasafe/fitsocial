@@ -6,8 +6,9 @@ const postSchema = new Schema(
     text: { type: String, required: true, trim: true, maxlength: 2000 },
     // MVP: URL da imagem (upload real de arquivo fica para uma etapa posterior).
     imageUrl: { type: String, default: "" },
-    // Denormalizado para o feed não precisar contar likes a cada leitura.
+    // Denormalizados para o feed não precisar contar a cada leitura.
     likeCount: { type: Number, default: 0 },
+    commentCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

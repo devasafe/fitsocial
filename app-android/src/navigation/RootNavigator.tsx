@@ -15,6 +15,8 @@ import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
+import { LeaderboardScreen } from "../screens/LeaderboardScreen";
+import { PostDetailScreen } from "../screens/PostDetailScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -115,6 +117,16 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="CheckIn"
             component={CheckInScreen}
             options={{ headerShown: true, title: "Concluir treino", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Leaderboard"
+            component={LeaderboardScreen}
+            options={{ headerShown: true, title: "🏆 Ranking", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="PostDetail"
+            component={PostDetailScreen}
+            options={{ headerShown: true, title: "Post", ...headerStyle }}
           />
         </>
       )}

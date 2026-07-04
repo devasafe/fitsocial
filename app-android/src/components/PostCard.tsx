@@ -11,9 +11,11 @@ function initials(name: string) {
 export function PostCard({
   post,
   onPressAuthor,
+  onPressComments,
 }: {
   post: Post;
   onPressAuthor?: (authorId: string) => void;
+  onPressComments?: (post: Post) => void;
 }) {
   const { token } = useAuth();
   // Estado otimista da curtida (atualiza a UI antes da resposta do servidor).
@@ -52,11 +54,20 @@ export function PostCard({
       {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.image} /> : null}
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.likeBtn} onPress={toggleLike}>
+        <TouchableOpacity style={styles.action} onPress={toggleLike}>
           <Text style={[styles.likeIcon, liked && styles.likeIconActive]}>
             {liked ? "♥" : "♡"}
           </Text>
-          <Text style={styles.likeCount}>{count}</Text>
+          <Text style={styles.actionCount}>{count}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.action}
+          onPress={() => onPressComments?.(post)}
+          disabled={!onPressComments}
+        >
+          <Text style={styles.commentIcon}>💬</Text>
+          <Text style={styles.actionCount}>{post.commentCount}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -90,9 +101,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     backgroundColor: colors.surfaceAlt,
   },
-  footer: { flexDirection: "row", marginTop: spacing.md },
-  likeBtn: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  footer: { flexDirection: "row", marginTop: spacing.md, gap: spacing.lg },
+  action: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
   likeIcon: { color: colors.textMuted, fontSize: 22 },
   likeIconActive: { color: colors.danger },
-  likeCount: { color: colors.textMuted, fontWeight: "600" },
+  commentIcon: { fontSize: 16 },
+  actionCount: { color: colors.textMuted, fontWeight: "600" },
 });

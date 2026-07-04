@@ -1,11 +1,13 @@
 import express from "express";
 import cors from "cors";
 import { env } from "./config/env.js";
+import { uploadsRouter, UPLOADS_DIR } from "./routes/uploads.js";
 import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
 import { plansRouter } from "./routes/plans.js";
 import { socialRouter } from "./routes/social.js";
 import { checkinsRouter } from "./routes/checkins.js";
+import { gamificationRouter } from "./routes/gamification.js";
 import { billingRouter } from "./routes/billing.js";
 import { errorHandler } from "./middleware/error.js";
 
@@ -18,11 +20,16 @@ export function createApp() {
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
 
+  // Servir e receber imagens (GET estático + POST de upload no mesmo caminho).
+  app.use("/uploads", express.static(UPLOADS_DIR));
+  app.use("/uploads", uploadsRouter);
+
   app.use("/auth", authRouter);
   app.use("/onboarding", onboardingRouter);
   app.use("/plans", plansRouter);
   app.use("/social", socialRouter);
   app.use("/checkins", checkinsRouter);
+  app.use("/gamification", gamificationRouter);
   app.use("/billing", billingRouter);
 
   // Rota não encontrada.

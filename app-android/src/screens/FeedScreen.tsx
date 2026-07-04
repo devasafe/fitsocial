@@ -79,7 +79,11 @@ export function FeedScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <PostCard post={item} onPressAuthor={(id) => nav.navigate("UserProfile", { userId: id })} />
+          <PostCard
+            post={item}
+            onPressAuthor={(id) => nav.navigate("UserProfile", { userId: id })}
+            onPressComments={(post) => nav.navigate("PostDetail", { post })}
+          />
         )}
       />
     </View>

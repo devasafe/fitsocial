@@ -122,4 +122,37 @@ describe("Rede social", () => {
       .set("Authorization", `Bearer ${ana.token}`);
     expect(res.status).toBe(400);
   });
+
+  it("Ana comenta no post do Bruno e a contagem sobe", async () => {
+    const res = await request(app)
+      .post(`/social/posts/${brunoPostId}/comments`)
+      .set("Authorization", `Bearer ${ana.token}`)
+      .send({ text: "Arrasou! 🔥" });
+    expect(res.status).toBe(201);
+    expect(res.body.comment.text).toBe("Arrasou! 🔥");
+    expect(res.body.comment.author.name).toBe("Ana");
+
+    const feed = await request(app)
+      .get("/social/feed")
+      .set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find((p: any) => p.id === brunoPostId);
+    expect(post.commentCount).toBe(1);
+  });
+
+  it("lista os comentários do post", async () => {
+    const res = await request(app)
+      .get(`/social/posts/${brunoPostId}/comments`)
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.comments.length).toBe(1);
+    expect(res.body.comments[0].text).toBe("Arrasou! 🔥");
+  });
+
+  it("comentário vazio é rejeitado (400)", async () => {
+    const res = await request(app)
+      .post(`/social/posts/${brunoPostId}/comments`)
+      .set("Authorization", `Bearer ${ana.token}`)
+      .send({ text: "" });
+    expect(res.status).toBe(400);
+  });
 });
