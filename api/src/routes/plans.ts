@@ -5,7 +5,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import { Plan } from "../models/Plan.js";
-import { generatePlan } from "../services/ai/planGenerator.js";
+import { WorkoutLog } from "../models/WorkoutLog.js";
+import { generatePlan, adjustPlan } from "../services/ai/planGenerator.js";
+import { buildAdherenceSummary } from "../services/adherence.js";
 
 export const plansRouter = Router();
 
@@ -54,6 +56,49 @@ plansRouter.post(
     const plan = await Plan.create({
       user: user._id,
       version: (last?.version ?? 0) + 1,
+      ...data,
+    });
+
+    res.status(201).json({ plan: serializePlan(plan) });
+  })
+);
+
+// Reajusta o plano com base na adesão (treinos feitos + cargas). Premium.
+plansRouter.post(
+  "/adjust",
+  requireAuth,
+  generateLimiter,
+  asyncHandler(async (req, res) => {
+    const user = req.user!;
+
+    if (user.tier !== "premium") {
+      throw new HttpError(
+        402,
+        "O reajuste do plano pelo coach é um recurso Premium. Assine para o coach acompanhar sua evolução."
+      );
+    }
+
+    const profileDoc = await Profile.findOne({ user: user._id });
+    const current = await Plan.findOne({ user: user._id }).sort({ version: -1 });
+    if (!profileDoc || !current) {
+      throw new HttpError(409, "Gere um plano inicial antes de pedir um reajuste");
+    }
+
+    const profile = profileDataSchema.parse(profileDoc.toObject());
+    const currentData = {
+      summary: current.summary,
+      workout: current.workout,
+      diet: current.diet,
+      disclaimer: current.disclaimer,
+    } as Parameters<typeof adjustPlan>[1];
+
+    const logs = await WorkoutLog.find({ user: user._id }).sort({ date: -1 }).limit(40);
+    const adherence = buildAdherenceSummary(logs, currentData);
+
+    const data = await adjustPlan(profile, currentData, adherence);
+    const plan = await Plan.create({
+      user: user._id,
+      version: current.version + 1,
       ...data,
     });
 

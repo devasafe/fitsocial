@@ -14,6 +14,7 @@ import { FeedScreen } from "../screens/FeedScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
+import { CheckInScreen } from "../screens/CheckInScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -109,6 +110,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Subscription"
             component={SubscriptionScreen}
             options={{ headerShown: true, title: "Premium", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="CheckIn"
+            component={CheckInScreen}
+            options={{ headerShown: true, title: "Concluir treino", ...headerStyle }}
           />
         </>
       )}

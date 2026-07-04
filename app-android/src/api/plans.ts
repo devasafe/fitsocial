@@ -42,6 +42,11 @@ export function generatePlan(token: string) {
   return apiFetch<{ plan: Plan }>("/plans/generate", { method: "POST", token });
 }
 
+/** Reajuste do plano pela IA com base na adesão (premium). */
+export function adjustPlan(token: string) {
+  return apiFetch<{ plan: Plan }>("/plans/adjust", { method: "POST", token });
+}
+
 /** Busca o plano atual; retorna null se ainda não houver (404). */
 export async function getCurrentPlan(token: string): Promise<Plan | null> {
   try {

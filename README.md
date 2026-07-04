@@ -105,6 +105,18 @@ Para dispositivo físico, defina `EXPO_PUBLIC_API_URL` com o IP da sua máquina.
 - [x] **Fatia 5 — Freemium** (gating 402 + webhook RevenueCat + tela Premium; upgrade de teste)
 - [x] **Fatia 6 — Polimento + guardrails** (rate limit na IA, 404, aviso de saúde, erro de rede)
 
+### v2
+- [x] **v2.1 — Check-in de treino + reajuste** (log carga/reps, streak/progresso, coach reajusta o plano por adesão)
+
+### v2.1 — Check-in de treino + reajuste (requer Bearer token)
+
+| Método | Rota               | Descrição                                             |
+|--------|--------------------|-------------------------------------------------------|
+| POST   | `/checkins`        | Registra treino feito (carga/reps; post opcional)     |
+| GET    | `/checkins/stats`  | Streak, treinos na semana e total                     |
+| GET    | `/checkins`        | Histórico recente de treinos                          |
+| POST   | `/plans/adjust`    | Reajuste do plano pela IA com base na adesão (premium)|
+
 ## Guardrails
 
 - **Rate limiting** nos endpoints de IA (por usuário) para conter custo/abuso.

@@ -1,5 +1,5 @@
 // Tipos das rotas de navegação, compartilhados entre telas e navegadores.
-import type { Workout, Diet } from "../api/plans";
+import type { Workout, Diet, Session } from "../api/plans";
 
 export type AuthStackParams = {
   Login: undefined;
@@ -12,6 +12,7 @@ export type AppStackParams = {
   Tabs: undefined;
   Workout: { workout: Workout };
   Diet: { diet: Diet };
+  CheckIn: { session: Session };
   CreatePost: undefined;
   UserProfile: { userId: string };
   Subscription: undefined;

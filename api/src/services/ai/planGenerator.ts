@@ -73,3 +73,37 @@ export async function generatePlan(
 
   return parseJson(raw, planDataSchema);
 }
+
+/**
+ * Reajusta o plano com base na adesão (treinos feitos + cargas registradas).
+ * Aplica progressão de carga/volume para quem está aderindo e simplifica para
+ * quem está treinando menos que o planejado.
+ */
+export async function adjustPlan(
+  profile: ProfileData,
+  currentPlan: PlanData,
+  adherenceSummary: string,
+  provider: AIProvider = getAIProvider()
+): Promise<PlanData> {
+  const userPrompt = `${buildUserPrompt(profile)}
+
+PLANO ATUAL (resumo):
+- Treino: ${currentPlan.workout.split} (${currentPlan.workout.daysPerWeek}x/semana)
+- Estratégia: ${currentPlan.summary}
+
+${adherenceSummary}
+
+Com base na adesão acima, gere uma NOVA VERSÃO do plano:
+- Se a pessoa está treinando bem e progredindo, aplique progressão (aumente carga/reps/volume onde fizer sentido, respeitando o nível).
+- Se está treinando MENOS que o planejado, simplifique (reduza dias/volume) para caber na rotina real e evitar frustração.
+- Mantenha o mesmo formato JSON de plano. Explique o ajuste no campo "summary".`;
+
+  const raw = await provider.generate({
+    system: buildSystemPrompt(),
+    messages: [{ role: "user", content: userPrompt }],
+    jsonMode: true,
+    temperature: 0.5,
+  });
+
+  return parseJson(raw, planDataSchema);
+}

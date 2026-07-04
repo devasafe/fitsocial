@@ -1,12 +1,12 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParams } from "../navigation/types";
 import { colors, radius, spacing } from "../theme";
 
 type Props = NativeStackScreenProps<AppStackParams, "Workout">;
 
-export function WorkoutScreen({ route }: Props) {
+export function WorkoutScreen({ route, navigation }: Props) {
   const { workout } = route.params;
 
   return (
@@ -33,6 +33,13 @@ export function WorkoutScreen({ route }: Props) {
               {ex.notes ? <Text style={styles.exerciseNotes}>{ex.notes}</Text> : null}
             </View>
           ))}
+
+          <TouchableOpacity
+            style={styles.checkinBtn}
+            onPress={() => navigation.navigate("CheckIn", { session })}
+          >
+            <Text style={styles.checkinText}>✓ Concluí este treino</Text>
+          </TouchableOpacity>
         </View>
       ))}
     </ScrollView>
@@ -69,4 +76,13 @@ const styles = StyleSheet.create({
   exerciseSets: { color: colors.primary, fontWeight: "700" },
   exerciseMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   exerciseNotes: { color: colors.textMuted, fontSize: 12, fontStyle: "italic", marginTop: 2 },
+  checkinBtn: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+  checkinText: { color: colors.primary, fontWeight: "700" },
 });

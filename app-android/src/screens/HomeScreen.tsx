@@ -12,7 +12,8 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { PrimaryButton } from "../components/ui";
-import { getCurrentPlan, generatePlan, type Plan } from "../api/plans";
+import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
+import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { ApiHttpError } from "../api/client";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -21,12 +22,16 @@ export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { user, token, logout } = useAuth();
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [stats, setStats] = useState<CheckInStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setPlan(await getCurrentPlan(token!));
+      const [p, s] = await Promise.all([getCurrentPlan(token!), getCheckInStats(token!)]);
+      setPlan(p);
+      setStats(s.stats);
     } catch (err) {
       Alert.alert("Erro", (err as Error).message);
     } finally {
@@ -63,6 +68,24 @@ export function HomeScreen() {
       handleGenerate();
     } else {
       navigation.navigate("Subscription");
+    }
+  }
+
+  // Reajuste pela IA com base na adesão (premium).
+  async function handleAdjust() {
+    if (user?.tier !== "premium") {
+      navigation.navigate("Subscription");
+      return;
+    }
+    setAdjusting(true);
+    try {
+      const { plan } = await adjustPlan(token!);
+      setPlan(plan);
+      Alert.alert("Plano reajustado! 🔁", "Seu coach atualizou o plano com base na sua evolução.");
+    } catch (err) {
+      Alert.alert("Não foi possível reajustar", (err as Error).message);
+    } finally {
+      setAdjusting(false);
     }
   }
 
@@ -111,6 +134,25 @@ export function HomeScreen() {
         </View>
       ) : (
         <>
+          {stats && (
+            <View style={styles.progressCard}>
+              <View style={styles.progressItem}>
+                <Text style={styles.progressValue}>🔥 {stats.streak}</Text>
+                <Text style={styles.progressLabel}>dias seguidos</Text>
+              </View>
+              <View style={styles.progressDivider} />
+              <View style={styles.progressItem}>
+                <Text style={styles.progressValue}>{stats.week}</Text>
+                <Text style={styles.progressLabel}>na semana</Text>
+              </View>
+              <View style={styles.progressDivider} />
+              <View style={styles.progressItem}>
+                <Text style={styles.progressValue}>{stats.total}</Text>
+                <Text style={styles.progressLabel}>total</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Estratégia do seu coach</Text>
             <Text style={styles.cardText}>{plan.summary}</Text>
@@ -138,6 +180,20 @@ export function HomeScreen() {
               <Text style={styles.navSub}>{plan.diet.dailyCalories} kcal/dia</Text>
             </View>
             <Text style={styles.navArrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.adjustBtn}
+            onPress={handleAdjust}
+            disabled={adjusting}
+          >
+            <Text style={styles.adjustText}>
+              {adjusting
+                ? "Coach reajustando…"
+                : user?.tier === "premium"
+                  ? "🔁 Pedir reajuste ao coach"
+                  : "🔁 Pedir reajuste ao coach 👑 (Premium)"}
+            </Text>
           </TouchableOpacity>
 
           <Text style={styles.disclaimer}>{plan.disclaimer}</Text>
@@ -177,6 +233,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  progressCard: {
+    flexDirection: "row",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+  },
+  progressItem: { flex: 1, alignItems: "center" },
+  progressValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
+  progressLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  progressDivider: { width: 1, height: 32, backgroundColor: colors.border },
+  adjustBtn: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+  },
+  adjustText: { color: colors.primary, fontWeight: "700" },
   cardTitle: { color: colors.primary, fontWeight: "700", marginBottom: spacing.sm, fontSize: 16 },
   cardText: { color: colors.text, lineHeight: 21 },
   generatingBox: { flexDirection: "row", alignItems: "center", gap: spacing.sm },

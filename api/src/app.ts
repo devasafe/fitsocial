@@ -5,6 +5,7 @@ import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
 import { plansRouter } from "./routes/plans.js";
 import { socialRouter } from "./routes/social.js";
+import { checkinsRouter } from "./routes/checkins.js";
 import { billingRouter } from "./routes/billing.js";
 import { errorHandler } from "./middleware/error.js";
 
@@ -21,6 +22,7 @@ export function createApp() {
   app.use("/onboarding", onboardingRouter);
   app.use("/plans", plansRouter);
   app.use("/social", socialRouter);
+  app.use("/checkins", checkinsRouter);
   app.use("/billing", billingRouter);
 
   // Rota não encontrada.
