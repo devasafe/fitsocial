@@ -129,7 +129,15 @@ export function HomeScreen() {
               <Text style={styles.generatingText}>Seu coach está montando seu plano…</Text>
             </View>
           ) : (
-            <PrimaryButton title="Gerar meu plano" onPress={handleGenerate} />
+            <>
+              <PrimaryButton title="Gerar meu plano" onPress={handleGenerate} />
+              <TouchableOpacity
+                style={styles.importLink}
+                onPress={() => navigation.navigate("ImportPlan")}
+              >
+                <Text style={styles.importText}>Já tenho um plano? Importar o meu</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       ) : (
@@ -219,6 +227,13 @@ export function HomeScreen() {
                   : "Gerar novo plano 👑 (Premium)"}
             </Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.importLink}
+            onPress={() => navigation.navigate("ImportPlan")}
+          >
+            <Text style={styles.importText}>Importar outro plano meu</Text>
+          </TouchableOpacity>
         </>
       )}
     </ScrollView>
@@ -256,6 +271,8 @@ const styles = StyleSheet.create({
   progressDivider: { width: 1, height: 32, backgroundColor: colors.border },
   rankingLink: { alignItems: "center", paddingVertical: spacing.sm },
   rankingText: { color: colors.primary, fontWeight: "700" },
+  importLink: { alignItems: "center", paddingVertical: spacing.md },
+  importText: { color: colors.textMuted, fontWeight: "600", textDecorationLine: "underline" },
   adjustBtn: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: radius.md,

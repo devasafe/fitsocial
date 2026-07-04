@@ -135,4 +135,27 @@ describe("Plans", () => {
     expect(res.status).toBe(502);
     mock.next = planJson;
   });
+
+  it("importa o plano pessoal a partir de texto (nova versão)", async () => {
+    const res = await auth(
+      request(app)
+        .post("/plans/import")
+        .send({ text: "Treino ABC: A) supino 4x10; B) agachamento 4x10; C) remada 4x10. Dieta: 2000kcal." })
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.plan.version).toBe(3);
+    expect(res.body.plan.workout.split).toBe("Full body 3x");
+  });
+
+  it("import rejeita texto muito curto (400)", async () => {
+    // Usuário novo para não esbarrar no rate limit do usuário principal.
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Import Test", email: "import@test.com", password: "senha12345" });
+    const res = await request(app)
+      .post("/plans/import")
+      .set("Authorization", `Bearer ${reg.body.token}`)
+      .send({ text: "oi" });
+    expect(res.status).toBe(400);
+  });
 });

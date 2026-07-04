@@ -48,6 +48,7 @@ Fatia 3 (Geração de plano — requer Bearer token):
 | Método | Rota               | Descrição                                         |
 |--------|--------------------|---------------------------------------------------|
 | POST   | `/plans/generate`  | Gera treino+dieta a partir da ficha (nova versão) |
+| POST   | `/plans/import`    | Importa o plano pessoal (texto → IA estrutura)    |
 | GET    | `/plans/current`   | Retorna o plano mais recente                      |
 
 Fatia 4 (Rede social — requer Bearer token):
@@ -111,6 +112,7 @@ Para dispositivo físico, defina `EXPO_PUBLIC_API_URL` com o IP da sua máquina.
 - [x] **v2.3 — Upload real de fotos** (galeria/câmera → upload → post com imagem)
 - [x] **v2.4 — Comentários nos posts** (comentar, listar, contagem; tela de detalhe do post)
 - [x] **v2.5 — Chat com o coach** (conversa contínua contextual: ficha+plano+adesão; pode reajustar o plano pela conversa — premium)
+- [x] **v2.6 — Importar plano pessoal** (cole o plano do seu profissional em texto; a IA estrutura no formato do app)
 
 Endpoints v2.2–v2.4 (Bearer token):
 

@@ -6,8 +6,9 @@ import { HttpError } from "../utils/httpError.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import { Plan } from "../models/Plan.js";
 import { WorkoutLog } from "../models/WorkoutLog.js";
-import { generatePlan, adjustPlan } from "../services/ai/planGenerator.js";
+import { generatePlan, adjustPlan, importPlanFromText } from "../services/ai/planGenerator.js";
 import { buildAdherenceSummary } from "../services/adherence.js";
+import { z } from "zod";
 
 export const plansRouter = Router();
 
@@ -99,6 +100,33 @@ plansRouter.post(
     const plan = await Plan.create({
       user: user._id,
       version: current.version + 1,
+      ...data,
+    });
+
+    res.status(201).json({ plan: serializePlan(plan) });
+  })
+);
+
+// Importa o plano pessoal do usuário (feito por um profissional) a partir de texto.
+const importSchema = z.object({ text: z.string().min(10, "Cole o texto do seu plano").max(8000) });
+
+plansRouter.post(
+  "/import",
+  requireAuth,
+  generateLimiter,
+  asyncHandler(async (req, res) => {
+    const user = req.user!;
+    const { text } = importSchema.parse(req.body);
+
+    const profileDoc = await Profile.findOne({ user: user._id });
+    const profile = profileDoc ? profileDataSchema.parse(profileDoc.toObject()) : null;
+
+    const data = await importPlanFromText(text, profile);
+
+    const last = await Plan.findOne({ user: user._id }).sort({ version: -1 });
+    const plan = await Plan.create({
+      user: user._id,
+      version: (last?.version ?? 0) + 1,
       ...data,
     });
 

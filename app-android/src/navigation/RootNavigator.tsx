@@ -18,6 +18,7 @@ import { CheckInScreen } from "../screens/CheckInScreen";
 import { LeaderboardScreen } from "../screens/LeaderboardScreen";
 import { PostDetailScreen } from "../screens/PostDetailScreen";
 import { CoachScreen } from "../screens/CoachScreen";
+import { ImportPlanScreen } from "../screens/ImportPlanScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -133,6 +134,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="PostDetail"
             component={PostDetailScreen}
             options={{ headerShown: true, title: "Post", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="ImportPlan"
+            component={ImportPlanScreen}
+            options={{ headerShown: true, title: "Importar plano", ...headerStyle }}
           />
         </>
       )}

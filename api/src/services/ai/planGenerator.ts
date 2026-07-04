@@ -7,6 +7,26 @@ import {
 import { planDataSchema, type PlanData } from "../../models/Plan.js";
 import type { ProfileData } from "../../models/Profile.js";
 
+// Formato JSON do plano, reutilizado nos prompts de geração/importação.
+const PLAN_JSON_FORMAT = `{
+  "summary": "string",
+  "workout": {
+    "split": "string",
+    "daysPerWeek": number,
+    "sessions": [
+      { "day": "string", "focus": "string",
+        "exercises": [ { "name": "string", "sets": number, "reps": "string", "restSeconds": number, "notes": "string" } ] }
+    ]
+  },
+  "diet": {
+    "dailyCalories": number,
+    "macros": { "proteinG": number, "carbsG": number, "fatG": number },
+    "meals": [ { "name": "string", "timeHint": "string", "items": [ { "food": "string", "quantity": "string" } ] } ],
+    "notes": "string"
+  },
+  "disclaimer": "string"
+}`;
+
 function buildSystemPrompt(): string {
   return `Você é o coach do FitSocial, que acumula os papéis de personal trainer e nutricionista. Gere um plano de TREINO e DIETA personalizado, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
 
@@ -103,6 +123,41 @@ Com base na adesão acima, gere uma NOVA VERSÃO do plano:
     messages: [{ role: "user", content: userPrompt }],
     jsonMode: true,
     temperature: 0.5,
+  });
+
+  return parseJson(raw, planDataSchema);
+}
+
+/**
+ * Estrutura o plano que o usuário já tem (feito por um profissional) a partir
+ * de texto livre, convertendo-o para o formato do app SEM inventar conteúdo.
+ */
+export async function importPlanFromText(
+  text: string,
+  profile: ProfileData | null,
+  provider: AIProvider = getAIProvider()
+): Promise<PlanData> {
+  const profileLine = profile
+    ? `Perfil (para preencher lacunas com coerência): objetivo=${profile.goal}, nível=${profile.experienceLevel}, ${profile.daysPerWeek}x/sem, restrições=[${profile.dietaryRestrictions.join(", ") || "nenhuma"}], lesões=[${profile.injuriesConditions.join(", ") || "nenhuma"}].`
+    : "";
+
+  const system = `Você é o assistente do FitSocial. O usuário JÁ TEM um plano (feito por um profissional) e quer inseri-lo no app. Sua tarefa é converter o texto do plano dele para o formato JSON estruturado do app.
+
+REGRAS IMPORTANTES:
+- Use FIELMENTE o que o usuário forneceu. NÃO invente exercícios, cargas ou refeições que não estão no texto.
+- Se ele forneceu SÓ treino ou SÓ dieta, crie a parte que falta de forma simples e coerente com o perfil, e deixe CLARO no "summary" que essa parte foi sugerida pelo app (não pelo profissional).
+- No "summary", diga que este é o plano importado do usuário.
+- "disclaimer" deve ser exatamente: "${SAFETY_DISCLAIMER}"
+${profileLine}
+
+Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
+${PLAN_JSON_FORMAT}`;
+
+  const raw = await provider.generate({
+    system,
+    messages: [{ role: "user", content: `TEXTO DO PLANO DO USUÁRIO:\n\n${text}` }],
+    jsonMode: true,
+    temperature: 0.2,
   });
 
   return parseJson(raw, planDataSchema);

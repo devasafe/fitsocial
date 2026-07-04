@@ -47,6 +47,11 @@ export function adjustPlan(token: string) {
   return apiFetch<{ plan: Plan }>("/plans/adjust", { method: "POST", token });
 }
 
+/** Importa o plano pessoal do usuário (texto) — a IA estrutura no formato do app. */
+export function importPlan(token: string, text: string) {
+  return apiFetch<{ plan: Plan }>("/plans/import", { method: "POST", token, body: { text } });
+}
+
 /** Busca o plano atual; retorna null se ainda não houver (404). */
 export async function getCurrentPlan(token: string): Promise<Plan | null> {
   try {
