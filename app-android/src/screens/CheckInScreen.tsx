@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
 import { PrimaryButton } from "../components/ui";
@@ -29,20 +30,56 @@ export function CheckInScreen() {
   const nav = useNavigation();
   const { token } = useAuth();
   const { session } = route.params;
+  const storageKey = `fitsocial.session:${session.day}`;
 
-  const [rows, setRows] = useState<Row[]>(
+  const makeRows = (): Row[] =>
     session.exercises.map((e) => ({
       name: e.name,
       target: `${e.sets} × ${e.reps}`,
       done: false,
       weight: "",
       reps: "",
-    }))
-  );
+    }));
+
+  const [rows, setRows] = useState<Row[]>(makeRows);
   const [share, setShare] = useState(true);
   const [saving, setSaving] = useState(false);
+  const loaded = useRef(false);
 
   const doneCount = useMemo(() => rows.filter((r) => r.done).length, [rows]);
+
+  // Restaura o rascunho salvo ao abrir (se for do mesmo treino).
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(storageKey);
+        if (raw) {
+          const saved = JSON.parse(raw) as { names: string[]; rows: Row[] };
+          const names = session.exercises.map((e) => e.name);
+          const sameSession =
+            saved.names.length === names.length && saved.names.every((n, i) => n === names[i]);
+          if (sameSession) setRows(saved.rows);
+        }
+      } catch {
+        /* rascunho inválido — ignora */
+      }
+      loaded.current = true;
+    })();
+  }, [storageKey]);
+
+  // Auto-salva a cada mudança (depois de carregar o rascunho).
+  useEffect(() => {
+    if (!loaded.current) return;
+    const names = session.exercises.map((e) => e.name);
+    AsyncStorage.setItem(storageKey, JSON.stringify({ names, rows })).catch(() => {});
+  }, [rows, storageKey]);
+
+  function handleReset() {
+    Alert.alert("Recomeçar treino?", "Isso limpa as marcações e cargas deste treino.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Recomeçar", style: "destructive", onPress: () => setRows(makeRows()) },
+    ]);
+  }
 
   function toggleDone(i: number) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, done: !r.done } : r)));
@@ -73,6 +110,7 @@ export function CheckInScreen() {
         shareToFeed: share,
         shareText: share ? `Concluí o treino: ${session.day} 💪` : undefined,
       });
+      await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
       Alert.alert("Treino registrado! 🎉", share ? "E compartilhado no seu feed." : undefined);
       nav.goBack();
     } catch (err) {
@@ -85,12 +123,18 @@ export function CheckInScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.progress}>
-          {doneCount}/{rows.length} feitos
-        </Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.progress}>
+            {doneCount}/{rows.length} feitos
+          </Text>
+          <TouchableOpacity onPress={handleReset}>
+            <Text style={styles.reset}>Recomeçar</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.barTrack}>
           <View style={[styles.barFill, { width: `${(doneCount / rows.length) * 100}%` }]} />
         </View>
+        <Text style={styles.autosave}>💾 Progresso salvo automaticamente — pode fechar e voltar.</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -158,7 +202,10 @@ export function CheckInScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  progress: { color: colors.text, fontWeight: "800", marginBottom: spacing.xs },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.xs },
+  progress: { color: colors.text, fontWeight: "800" },
+  reset: { color: colors.textMuted, fontWeight: "600" },
+  autosave: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
   barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: "hidden" },
   barFill: { height: 8, backgroundColor: colors.primary },
   list: { padding: spacing.md, gap: spacing.md },
