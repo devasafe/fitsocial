@@ -110,6 +110,7 @@ Para dispositivo físico, defina `EXPO_PUBLIC_API_URL` com o IP da sua máquina.
 - [x] **v2.2 — Gamificação** (badges por conquistas no perfil + ranking entre seguidos)
 - [x] **v2.3 — Upload real de fotos** (galeria/câmera → upload → post com imagem)
 - [x] **v2.4 — Comentários nos posts** (comentar, listar, contagem; tela de detalhe do post)
+- [x] **v2.5 — Chat com o coach** (conversa contínua contextual: ficha+plano+adesão; pode reajustar o plano pela conversa — premium)
 
 Endpoints v2.2–v2.4 (Bearer token):
 
@@ -120,6 +121,8 @@ Endpoints v2.2–v2.4 (Bearer token):
 | POST   | `/uploads`                        | Upload de imagem (multipart)       |
 | POST   | `/social/posts/:id/comments`      | Comentar em um post                |
 | GET    | `/social/posts/:id/comments`      | Listar comentários                 |
+| GET    | `/coach/messages`                 | Histórico do chat com o coach      |
+| POST   | `/coach/messages`                 | Conversa com o coach (pode reajustar o plano) |
 
 ### v2.1 — Check-in de treino + reajuste (requer Bearer token)
 

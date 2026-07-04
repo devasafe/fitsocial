@@ -8,6 +8,7 @@ import { plansRouter } from "./routes/plans.js";
 import { socialRouter } from "./routes/social.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
+import { coachRouter } from "./routes/coach.js";
 import { billingRouter } from "./routes/billing.js";
 import { errorHandler } from "./middleware/error.js";
 
@@ -30,6 +31,7 @@ export function createApp() {
   app.use("/social", socialRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
+  app.use("/coach", coachRouter);
   app.use("/billing", billingRouter);
 
   // Rota não encontrada.

@@ -17,6 +17,7 @@ import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
 import { LeaderboardScreen } from "../screens/LeaderboardScreen";
 import { PostDetailScreen } from "../screens/PostDetailScreen";
+import { CoachScreen } from "../screens/CoachScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -56,6 +57,11 @@ function MainTabs() {
         name="HomeTab"
         component={HomeScreen}
         options={{ title: "Início", tabBarIcon: tabIcon("🏠") }}
+      />
+      <Tab.Screen
+        name="CoachTab"
+        component={CoachScreen}
+        options={{ title: "Coach", tabBarIcon: tabIcon("💬") }}
       />
       <Tab.Screen
         name="FeedTab"

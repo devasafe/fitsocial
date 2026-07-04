@@ -24,6 +24,7 @@ export type AppStackParams = {
 // Abas inferiores dentro de "Tabs".
 export type MainTabParams = {
   HomeTab: undefined;
+  CoachTab: undefined;
   FeedTab: undefined;
   ProfileTab: undefined;
 };
