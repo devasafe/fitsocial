@@ -54,7 +54,7 @@ export function buildAdherenceSummary(logs: WorkoutLogDoc[], plan: PlanData): st
   for (const log of logs) {
     for (const e of log.entries) {
       if (!lastByExercise.has(e.exerciseName)) {
-        lastByExercise.set(e.exerciseName, `${e.weightKg}kg x ${e.reps}`);
+        lastByExercise.set(e.exerciseName, `${e.weightKg ?? 0}kg x ${e.reps ?? 0}`);
       }
     }
   }

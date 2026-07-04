@@ -2,8 +2,8 @@ import { apiFetch } from "./client";
 
 export interface CheckInEntry {
   exerciseName: string;
-  weightKg: number;
-  reps: number;
+  weightKg?: number;
+  reps?: number;
 }
 
 export interface CheckInStats {

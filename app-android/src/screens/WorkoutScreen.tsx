@@ -38,7 +38,7 @@ export function WorkoutScreen({ route, navigation }: Props) {
             style={styles.checkinBtn}
             onPress={() => navigation.navigate("CheckIn", { session })}
           >
-            <Text style={styles.checkinText}>✓ Concluí este treino</Text>
+            <Text style={styles.checkinText}>▶ Iniciar este treino</Text>
           </TouchableOpacity>
         </View>
       ))}

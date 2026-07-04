@@ -19,6 +19,7 @@ import { LeaderboardScreen } from "../screens/LeaderboardScreen";
 import { PostDetailScreen } from "../screens/PostDetailScreen";
 import { CoachScreen } from "../screens/CoachScreen";
 import { ImportPlanScreen } from "../screens/ImportPlanScreen";
+import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -58,6 +59,11 @@ function MainTabs() {
         name="HomeTab"
         component={HomeScreen}
         options={{ title: "Início", tabBarIcon: tabIcon("🏠") }}
+      />
+      <Tab.Screen
+        name="WorkoutTab"
+        component={TodayWorkoutScreen}
+        options={{ title: "Treino", tabBarIcon: tabIcon("🏋️") }}
       />
       <Tab.Screen
         name="CoachTab"
@@ -123,7 +129,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="CheckIn"
             component={CheckInScreen}
-            options={{ headerShown: true, title: "Concluir treino", ...headerStyle }}
+            options={{ headerShown: true, title: "Treino de hoje", ...headerStyle }}
           />
           <AppStack.Screen
             name="Leaderboard"

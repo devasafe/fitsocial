@@ -1,11 +1,12 @@
 import mongoose, { Schema, type InferSchemaType, type HydratedDocument } from "mongoose";
 import { z } from "zod";
 
-// Uma entrada por exercício com a carga e reps realmente feitos.
+// Uma entrada por exercício feito. Carga/reps são opcionais: exercícios de
+// cardio (ex.: esteira) são só marcados como feitos, sem peso.
 export const logEntrySchema = z.object({
   exerciseName: z.string().min(1),
-  weightKg: z.number().min(0).max(1000),
-  reps: z.number().int().min(0).max(1000),
+  weightKg: z.number().min(0).max(1000).optional(),
+  reps: z.number().int().min(0).max(1000).optional(),
 });
 
 export const createLogSchema = z.object({
@@ -25,8 +26,8 @@ const workoutLogSchema = new Schema(
     entries: [
       {
         exerciseName: { type: String, required: true },
-        weightKg: { type: Number, required: true },
-        reps: { type: Number, required: true },
+        weightKg: { type: Number, default: 0 },
+        reps: { type: Number, default: 0 },
         _id: false,
       },
     ],

@@ -113,6 +113,7 @@ Para dispositivo físico, defina `EXPO_PUBLIC_API_URL` com o IP da sua máquina.
 - [x] **v2.4 — Comentários nos posts** (comentar, listar, contagem; tela de detalhe do post)
 - [x] **v2.5 — Chat com o coach** (conversa contínua contextual: ficha+plano+adesão; pode reajustar o plano pela conversa — premium)
 - [x] **v2.6 — Importar plano pessoal** (cole o plano do seu profissional em texto; a IA estrutura no formato do app)
+- [x] **v2.7 — Treino de hoje (checklist ao vivo)** (aba Treino: escolhe a sessão e marca exercício por exercício com a carga; cardio só marca ✓)
 
 Endpoints v2.2–v2.4 (Bearer token):
 

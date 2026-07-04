@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
 interface Row {
-  exerciseName: string;
+  name: string;
+  target: string; // ex.: "4 × 8-12"
+  done: boolean;
   weight: string;
   reps: string;
 }
@@ -29,29 +31,37 @@ export function CheckInScreen() {
   const { session } = route.params;
 
   const [rows, setRows] = useState<Row[]>(
-    session.exercises.map((e) => ({ exerciseName: e.name, weight: "", reps: "" }))
+    session.exercises.map((e) => ({
+      name: e.name,
+      target: `${e.sets} × ${e.reps}`,
+      done: false,
+      weight: "",
+      reps: "",
+    }))
   );
-  const [notes, setNotes] = useState("");
   const [share, setShare] = useState(true);
-  const [shareText, setShareText] = useState(`Concluí o treino: ${session.day} 💪`);
   const [saving, setSaving] = useState(false);
 
-  function updateRow(i: number, field: "weight" | "reps", value: string) {
+  const doneCount = useMemo(() => rows.filter((r) => r.done).length, [rows]);
+
+  function toggleDone(i: number) {
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, done: !r.done } : r)));
+  }
+  function updateField(i: number, field: "weight" | "reps", value: string) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
   }
 
-  async function handleSave() {
-    // Considera apenas exercícios com carga OU reps preenchidos.
+  async function handleFinish() {
     const entries: CheckInEntry[] = rows
-      .filter((r) => r.weight !== "" || r.reps !== "")
+      .filter((r) => r.done)
       .map((r) => ({
-        exerciseName: r.exerciseName,
-        weightKg: Number(r.weight) || 0,
-        reps: Number(r.reps) || 0,
+        exerciseName: r.name,
+        ...(r.weight !== "" ? { weightKg: Number(r.weight) || 0 } : {}),
+        ...(r.reps !== "" ? { reps: Number(r.reps) || 0 } : {}),
       }));
 
     if (entries.length === 0) {
-      Alert.alert("Registre ao menos um exercício", "Preencha carga ou reps de pelo menos um exercício.");
+      Alert.alert("Nenhum exercício marcado", "Marque ao menos um exercício como feito.");
       return;
     }
 
@@ -60,9 +70,8 @@ export function CheckInScreen() {
       await createCheckIn(token!, {
         sessionDay: session.day,
         entries,
-        notes: notes.trim() || undefined,
         shareToFeed: share,
-        shareText: share ? shareText.trim() : undefined,
+        shareText: share ? `Concluí o treino: ${session.day} 💪` : undefined,
       });
       Alert.alert("Treino registrado! 🎉", share ? "E compartilhado no seu feed." : undefined);
       nav.goBack();
@@ -74,91 +83,109 @@ export function CheckInScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{session.day}</Text>
-      <Text style={styles.subtitle}>Registre a carga e as reps que você fez.</Text>
-
-      {rows.map((row, i) => (
-        <View key={i} style={styles.exercise}>
-          <Text style={styles.exerciseName}>{row.exerciseName}</Text>
-          <View style={styles.inputsRow}>
-            <View style={styles.inputWrap}>
-              <Text style={styles.inputLabel}>Carga (kg)</Text>
-              <TextInput
-                style={styles.input}
-                value={row.weight}
-                onChangeText={(v) => updateRow(i, "weight", v)}
-                keyboardType="numeric"
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-            <View style={styles.inputWrap}>
-              <Text style={styles.inputLabel}>Reps</Text>
-              <TextInput
-                style={styles.input}
-                value={row.reps}
-                onChangeText={(v) => updateRow(i, "reps", v)}
-                keyboardType="numeric"
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          </View>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.progress}>
+          {doneCount}/{rows.length} feitos
+        </Text>
+        <View style={styles.barTrack}>
+          <View style={[styles.barFill, { width: `${(doneCount / rows.length) * 100}%` }]} />
         </View>
-      ))}
-
-      <Text style={styles.inputLabel}>Observações (opcional)</Text>
-      <TextInput
-        style={[styles.input, styles.notes]}
-        value={notes}
-        onChangeText={setNotes}
-        placeholder="Como foi o treino?"
-        placeholderTextColor={colors.textMuted}
-        multiline
-      />
-
-      <View style={styles.shareRow}>
-        <Text style={styles.shareLabel}>Compartilhar no feed</Text>
-        <Switch
-          value={share}
-          onValueChange={setShare}
-          trackColor={{ true: colors.primary, false: colors.border }}
-          thumbColor={colors.text}
-        />
       </View>
-      {share && (
-        <TextInput
-          style={styles.input}
-          value={shareText}
-          onChangeText={setShareText}
-          placeholder="Texto do post"
-          placeholderTextColor={colors.textMuted}
-        />
-      )}
 
-      <View style={{ height: spacing.lg }} />
-      <PrimaryButton title="Registrar treino" onPress={handleSave} loading={saving} />
-      <View style={{ height: spacing.xl }} />
-    </ScrollView>
+      <ScrollView contentContainerStyle={styles.list}>
+        {rows.map((row, i) => (
+          <View key={i} style={[styles.card, row.done && styles.cardDone]}>
+            <TouchableOpacity style={styles.cardTop} onPress={() => toggleDone(i)} activeOpacity={0.7}>
+              <View style={[styles.check, row.done && styles.checkOn]}>
+                {row.done && <Text style={styles.checkMark}>✓</Text>}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.exName, row.done && styles.exNameDone]}>{row.name}</Text>
+                <Text style={styles.exTarget}>Meta: {row.target}</Text>
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.inputsRow}>
+              <View style={styles.inputWrap}>
+                <Text style={styles.inputLabel}>Carga (kg)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={row.weight}
+                  onChangeText={(v) => updateField(i, "weight", v)}
+                  keyboardType="numeric"
+                  placeholder="—"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+              <View style={styles.inputWrap}>
+                <Text style={styles.inputLabel}>Reps</Text>
+                <TextInput
+                  style={styles.input}
+                  value={row.reps}
+                  onChangeText={(v) => updateField(i, "reps", v)}
+                  keyboardType="numeric"
+                  placeholder="—"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+            </View>
+            <Text style={styles.hint}>Cardio? É só marcar ✓, sem preencher carga.</Text>
+          </View>
+        ))}
+
+        <View style={styles.shareRow}>
+          <Text style={styles.shareLabel}>Compartilhar no feed</Text>
+          <Switch
+            value={share}
+            onValueChange={setShare}
+            trackColor={{ true: colors.primary, false: colors.border }}
+            thumbColor={colors.text}
+          />
+        </View>
+
+        <PrimaryButton
+          title={`Finalizar treino (${doneCount}/${rows.length})`}
+          onPress={handleFinish}
+          loading={saving}
+        />
+        <View style={{ height: spacing.xl }} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  subtitle: { color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.lg },
-  exercise: {
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  progress: { color: colors.text, fontWeight: "800", marginBottom: spacing.xs },
+  barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: "hidden" },
+  barFill: { height: 8, backgroundColor: colors.primary },
+  list: { padding: spacing.md, gap: spacing.md },
+  card: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,
     padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.md,
   },
-  exerciseName: { color: colors.text, fontWeight: "700", marginBottom: spacing.sm },
-  inputsRow: { flexDirection: "row", gap: spacing.md },
+  cardDone: { borderColor: colors.primary },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  check: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.textMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkMark: { color: colors.primaryText, fontWeight: "900" },
+  exName: { color: colors.text, fontWeight: "700", fontSize: 15 },
+  exNameDone: { textDecorationLine: "line-through", color: colors.textMuted },
+  exTarget: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  inputsRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
   inputWrap: { flex: 1 },
   inputLabel: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.xs },
   input: {
@@ -171,12 +198,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
   },
-  notes: { minHeight: 60, textAlignVertical: "top", marginBottom: spacing.md },
-  shareRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginVertical: spacing.md,
-  },
+  hint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs, fontStyle: "italic" },
+  shareRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.sm },
   shareLabel: { color: colors.text, fontWeight: "600" },
 });
