@@ -79,10 +79,27 @@ export async function runCoachTurn(
     temperature: 0.7,
   });
 
-  const turn = parseJson(raw, coachTurnSchema);
-  // A ação vem "crua"; o gating premium é aplicado na rota (para sinalizar
-  // ao app quando o usuário precisa assinar).
-  return { reply: turn.reply, action: turn.action };
+  // Num chat, a IA nunca deve "quebrar": se não vier JSON válido, usamos o
+  // texto como resposta (sem ação). O gating premium é aplicado na rota.
+  try {
+    const turn = parseJson(raw, coachTurnSchema);
+    return { reply: turn.reply, action: turn.action };
+  } catch {
+    return { reply: extractReplyFallback(raw), action: "none" };
+  }
+}
+
+/** Recupera uma resposta legível quando a IA não devolve JSON válido. */
+function extractReplyFallback(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  // Se for um JSON quase-válido, tenta puxar o campo "reply".
+  const match = cleaned.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (match) return match[1].replace(/\\"/g, '"').replace(/\\n/g, "\n");
+  return cleaned || "Desculpa, não entendi bem. Pode repetir?";
 }
 
 export const COACH_GREETING =

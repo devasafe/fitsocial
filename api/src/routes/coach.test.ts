@@ -71,6 +71,14 @@ describe("Coach chat", () => {
     expect(hist.body.messages[0].content).toBe("tô desanimado");
   });
 
+  it("resposta em texto puro (não-JSON) não quebra — vira reply", async () => {
+    mock.queue = ["Claro! Você pode sim, é só me contar seu plano."];
+    const res = await auth(request(app).post("/coach/messages").send({ content: "consigo inserir meu plano?" }));
+    expect(res.status).toBe(200);
+    expect(res.body.reply).toContain("plano");
+    expect(res.body.planAdjusted).toBe(false);
+  });
+
   it("ação de reajuste em conta grátis sinaliza premiumRequired", async () => {
     mock.queue = [JSON.stringify({ reply: "Posso reajustar, mas é Premium.", action: "adjust_plan" })];
     const res = await auth(request(app).post("/coach/messages").send({ content: "muda meu plano" }));
