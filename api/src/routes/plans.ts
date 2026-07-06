@@ -14,9 +14,15 @@ import { z } from "zod";
 export const plansRouter = Router();
 
 function serializePlan(plan: InstanceType<typeof Plan>) {
-  const workout = backfillWorkoutKinds(
-    plan.workout as { sessions: { exercises: { name: string; reps: string; kind?: "strength" | "cardio" }[] }[] }
-  );
+  const raw = plan.workout as {
+    sessions: { exercises: { name: string; reps: string; kind?: "strength" | "cardio" }[] }[];
+  };
+  // Clona antes de repassar para backfillWorkoutKinds (que muta in place), para nunca
+  // escrever "kind" de volta no documento Mongoose (Mixed) hidratado.
+  const workout = backfillWorkoutKinds({
+    ...raw,
+    sessions: raw.sessions.map((s) => ({ ...s, exercises: s.exercises.map((e) => ({ ...e })) })),
+  });
   return {
     id: plan._id.toString(),
     version: plan.version,

@@ -96,12 +96,12 @@ export function CheckInScreen() {
           if (sameSession) {
             setRows(
               saved.rows.map(
-                (r) =>
+                (r, i) =>
                   ({
                     duration: "",
                     distance: "",
                     ...r,
-                    kind: r.kind ?? "strength",
+                    kind: session.exercises[i]?.kind === "cardio" ? "cardio" : "strength",
                   }) as Row
               )
             );
@@ -193,7 +193,9 @@ export function CheckInScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
-        {rows.map((row, i) => (
+        {rows.map((row, i) => {
+          const pace = paceLabel(row);
+          return (
           <View key={i} style={[styles.card, row.done && styles.cardDone]}>
             <TouchableOpacity style={styles.cardTop} onPress={() => toggleDone(i)} activeOpacity={0.7}>
               <View style={[styles.check, row.done && styles.checkOn]}>
@@ -238,7 +240,7 @@ export function CheckInScreen() {
                     />
                   </View>
                 </View>
-                {paceLabel(row) ? <Text style={styles.hint}>Pace médio: {paceLabel(row)}</Text> : null}
+                {pace ? <Text style={styles.hint}>Pace médio: {pace}</Text> : null}
               </>
             ) : (
               <View style={styles.inputsRow}>
@@ -267,7 +269,8 @@ export function CheckInScreen() {
               </View>
             )}
           </View>
-        ))}
+          );
+        })}
 
         <View style={styles.shareRow}>
           <Text style={styles.shareLabel}>Compartilhar no feed</Text>
