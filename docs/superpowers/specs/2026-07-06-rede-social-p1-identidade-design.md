@@ -33,8 +33,10 @@ bio: { type: String, default: "", maxlength: 160 },
 ### 2. Validação de username (reutilizável)
 `api/src/utils/username.ts` — `usernameSchema` (zod): string, 3–20 chars, regex `^[a-z0-9._]+$`, sem ponto no início/fim e sem dois pontos seguidos. Helper `normalizeUsername(s)` faz `trim().toLowerCase()` antes de validar. Usado no cadastro e no PATCH.
 
-### 3. Cadastro com username
-`api/src/routes/auth.ts` — `registerSchema` ganha `username` (via `usernameSchema`). No handler: normaliza, cria; se o índice único estourar (E11000) OU um `findOne({ username })` prévio achar, responde **409** "Esse nome de usuário já está em uso.". Mensagem PT-BR.
+### 3. Cadastro com username (opcional na API, coletado pelo app)
+`api/src/routes/auth.ts` — `registerSchema` ganha `username` **opcional** (via `usernameSchema.optional()`). Se enviado: normaliza, checa unicidade (`findOne`) → **409** "Esse nome de usuário já está em uso." se tomado; se ausente: cria sem username (o **gate obrigatório** exige antes de usar o app).
+
+**Por que opcional e não obrigatório:** o gate já é o ponto único de enforcement ("todo usuário tem username antes de usar o app"), então exigir no schema do cadastro seria redundante — e quebraria os ~14 registros dos testes existentes (que não enviam username). O app **coleta** o username no `RegisterScreen` (novo usuário já sai com handle, sem passar pelo gate); a opcionalidade só afeta chamadas diretas à API.
 
 ### 4. `PATCH /auth/me`
 `api/src/routes/auth.ts` (protegido por `requireAuth`) — body parcial `{ username?, name?, bio?, avatarUrl? }` (todos opcionais; zod). Atualiza só os campos enviados:
@@ -93,7 +95,7 @@ Busca (P2) → GET /social/search?q= → lista de pessoas (+isFollowing)
 ## Testes
 Backend (Vitest + mongodb-memory-server):
 - `usernameSchema`: aceita válidos, rejeita maiúsculas/espaços/símbolos/curto/longo/ponta-com-ponto.
-- Cadastro: cria com username; segundo cadastro com mesmo username → 409.
+- Cadastro: cria com username; segundo cadastro com mesmo username → 409; cadastro **sem** username também funciona (fica p/ o gate).
 - `PATCH /auth/me`: atualiza bio/nome/avatar; troca username; username tomado por outro → 409; troca para o próprio username atual → ok.
 - `GET /auth/check-username`: disponível vs. tomado vs. o próprio (disponível).
 - `GET /social/search`: casa por username e por nome, case-insensitive, exclui o próprio, respeita limite; `q` vazio → lista vazia; inclui `isFollowing`.
