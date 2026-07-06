@@ -5,7 +5,7 @@ import { colors } from "../theme";
 
 export interface ChartPoint {
   date: string;
-  weightKg: number;
+  value: number;
 }
 
 /**
@@ -13,7 +13,17 @@ export interface ChartPoint {
  * Segue as specs de dataviz: linha fina, pontos com anel na cor do fundo,
  * grade/eixos discretos, rótulo direto só no último ponto (não em todos).
  */
-export function LineChart({ points, width, height = 200 }: { points: ChartPoint[]; width: number; height?: number }) {
+export function LineChart({
+  points,
+  width,
+  height = 200,
+  formatValue = (v: number) => String(Math.round(v)),
+}: {
+  points: ChartPoint[];
+  width: number;
+  height?: number;
+  formatValue?: (v: number) => string;
+}) {
   const padL = 34;
   const padR = 30;
   const padT = 18;
@@ -21,16 +31,16 @@ export function LineChart({ points, width, height = 200 }: { points: ChartPoint[
   const plotW = Math.max(width - padL - padR, 10);
   const plotH = height - padT - padB;
 
-  const weights = points.map((p) => p.weightKg);
-  const min = Math.min(...weights);
-  const max = Math.max(...weights);
+  const values = points.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const span = max - min || 1; // evita divisão por zero se todos iguais
   const n = points.length;
 
   const x = (i: number) => (n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW);
   const y = (v: number) => padT + (1 - (v - min) / span) * plotH;
 
-  const coords = points.map((p, i) => ({ px: x(i), py: y(p.weightKg), w: p.weightKg }));
+  const coords = points.map((p, i) => ({ px: x(i), py: y(p.value), v: p.value }));
   const polyline = coords.map((c) => `${c.px},${c.py}`).join(" ");
 
   const fmtDate = (iso: string) => {
@@ -49,10 +59,10 @@ export function LineChart({ points, width, height = 200 }: { points: ChartPoint[
 
         {/* Rótulos do eixo Y (máx/mín) */}
         <SvgText x={padL - 6} y={y(max) + 4} fontSize={10} fill={colors.textMuted} textAnchor="end">
-          {Math.round(max)}
+          {formatValue(max)}
         </SvgText>
         <SvgText x={padL - 6} y={y(min) + 4} fontSize={10} fill={colors.textMuted} textAnchor="end">
-          {Math.round(min)}
+          {formatValue(min)}
         </SvgText>
 
         {/* A linha (2px) */}
@@ -67,7 +77,7 @@ export function LineChart({ points, width, height = 200 }: { points: ChartPoint[
 
         {/* Rótulo direto só no último valor */}
         <SvgText x={Math.min(last.px + 6, width - 2)} y={last.py + 4} fontSize={11} fontWeight="bold" fill={colors.primary} textAnchor={last.px + 30 > width ? "end" : "start"}>
-          {last.w}kg
+          {formatValue(last.v)}
         </SvgText>
 
         {/* Eixo X: primeira e última data */}

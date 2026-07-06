@@ -107,7 +107,11 @@ export function HistoryScreen() {
               </Text>
 
               {current.points.length > 1 ? (
-                <LineChart points={current.points} width={chartWidth} />
+                <LineChart
+                  points={current.points.map((p) => ({ date: p.date, value: p.weightKg }))}
+                  width={chartWidth}
+                  formatValue={(v) => `${Math.round(v)}kg`}
+                />
               ) : (
                 <Text style={styles.subtle}>Registre este exercício mais vezes para ver a curva.</Text>
               )}
