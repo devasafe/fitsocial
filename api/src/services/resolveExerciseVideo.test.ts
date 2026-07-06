@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { ExerciseVideo } from "../models/ExerciseVideo.js";
 import { resolveExerciseVideo, setYoutubeSearcher } from "./exerciseVideo.js";
+import { env } from "../config/env.js";
 
 let mongod: MongoMemoryServer;
 
@@ -54,5 +55,19 @@ describe("resolveExerciseVideo", () => {
     expect(search).toHaveBeenCalledTimes(1); // segunda chamada veio do cache
     const saved = await ExerciseVideo.findOne({ normalizedName: "exercicio inexistente xyz" });
     expect(saved?.youtubeId).toBeNull();
+  });
+
+  it("sem API key: retorna null e não persiste", async () => {
+    const search = vi.fn(async () => ({ youtubeId: "vidX", title: "t" }));
+    setYoutubeSearcher(search);
+    const saved = env.youtubeApiKey;
+    env.youtubeApiKey = "";
+    try {
+      expect(await resolveExerciseVideo("Agachamento Livre")).toBeNull();
+      expect(search).not.toHaveBeenCalled();
+      expect(await ExerciseVideo.countDocuments()).toBe(0);
+    } finally {
+      env.youtubeApiKey = saved;
+    }
   });
 });
