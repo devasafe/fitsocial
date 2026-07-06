@@ -165,6 +165,29 @@ describe("Check-ins + reajuste", () => {
     expect(entry.distanceKm).toBe(5);
   });
 
+  it("GET /checkins/cardio-progress agrega só entries de cardio, por exercício", async () => {
+    await auth(request(app).post("/checkins")).send({
+      sessionDay: "A",
+      entries: [
+        { exerciseName: "Bicicleta", durationMin: 30, distanceKm: 5 },
+        { exerciseName: "Supino", weightKg: 40, reps: 10 }, // NÃO é cardio
+      ],
+    });
+    await auth(request(app).post("/checkins")).send({
+      sessionDay: "A",
+      entries: [{ exerciseName: "Bicicleta", durationMin: 32, distanceKm: 5.5 }],
+    });
+
+    const res = await auth(request(app).get("/checkins/cardio-progress"));
+    expect(res.status).toBe(200);
+    const names = res.body.exercises.map((e: { name: string }) => e.name);
+    expect(names).toContain("Bicicleta");
+    expect(names).not.toContain("Supino");
+    const bicicleta = res.body.exercises.find((e: { name: string }) => e.name === "Bicicleta");
+    expect(bicicleta.points).toHaveLength(2);
+    expect(bicicleta.points[0]).toMatchObject({ durationMin: 30, distanceKm: 5 });
+  });
+
   it("reajuste é bloqueado para free (402)", async () => {
     const res = await auth(request(app).post("/plans/adjust"));
     expect(res.status).toBe(402);

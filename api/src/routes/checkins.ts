@@ -92,3 +92,29 @@ checkinsRouter.get(
     res.json({ exercises });
   })
 );
+
+// Evolução de cardio: séries de duração/distância por exercício (pace é derivado no app).
+checkinsRouter.get(
+  "/cardio-progress",
+  asyncHandler(async (req, res) => {
+    const logs = await WorkoutLog.find({ user: req.user!._id }).sort({ date: 1 });
+
+    const byExercise = new Map<string, { date: Date; durationMin: number; distanceKm: number }[]>();
+    for (const log of logs) {
+      for (const e of log.entries) {
+        const durationMin = e.durationMin ?? 0;
+        const distanceKm = e.distanceKm ?? 0;
+        if (durationMin <= 0 && distanceKm <= 0) continue; // não é cardio
+        const points = byExercise.get(e.exerciseName) ?? [];
+        points.push({ date: log.date, durationMin, distanceKm });
+        byExercise.set(e.exerciseName, points);
+      }
+    }
+
+    const exercises = [...byExercise.entries()]
+      .map(([name, points]) => ({ name, points }))
+      .sort((a, b) => b.points.length - a.points.length);
+
+    res.json({ exercises });
+  })
+);
