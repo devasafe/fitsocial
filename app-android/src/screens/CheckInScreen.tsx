@@ -21,10 +21,25 @@ import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
 
 interface Row {
   name: string;
+  kind: "strength" | "cardio";
   target: string; // ex.: "4 × 8-12"
   done: boolean;
   weight: string;
   reps: string;
+  duration: string;
+  distance: string;
+}
+
+function paceLabel(row: { duration: string; distance: string }): string | null {
+  const min = Number(row.duration);
+  const km = Number(row.distance);
+  if (!min || !km) return null;
+  const pace = min / km; // min/km
+  const mm = Math.floor(pace);
+  const ss = Math.round((pace - mm) * 60);
+  const ssStr = ss === 60 ? "00" : String(ss).padStart(2, "0");
+  const mmAdj = ss === 60 ? mm + 1 : mm;
+  return `${mmAdj}:${ssStr} /km`;
 }
 
 export function CheckInScreen() {
@@ -37,10 +52,13 @@ export function CheckInScreen() {
   const makeRows = (): Row[] =>
     session.exercises.map((e) => ({
       name: e.name,
+      kind: e.kind === "cardio" ? "cardio" : "strength", // fallback trivial se ausente
       target: `${e.sets} × ${e.reps}`,
       done: false,
       weight: "",
       reps: "",
+      duration: "",
+      distance: "",
     }));
 
   const [rows, setRows] = useState<Row[]>(makeRows);
@@ -71,11 +89,23 @@ export function CheckInScreen() {
       try {
         const raw = await AsyncStorage.getItem(storageKey);
         if (raw) {
-          const saved = JSON.parse(raw) as { names: string[]; rows: Row[] };
+          const saved = JSON.parse(raw) as { names: string[]; rows: Partial<Row>[] };
           const names = session.exercises.map((e) => e.name);
           const sameSession =
             saved.names.length === names.length && saved.names.every((n, i) => n === names[i]);
-          if (sameSession) setRows(saved.rows);
+          if (sameSession) {
+            setRows(
+              saved.rows.map(
+                (r) =>
+                  ({
+                    duration: "",
+                    distance: "",
+                    ...r,
+                    kind: r.kind ?? "strength",
+                  }) as Row
+              )
+            );
+          }
         }
       } catch {
         /* rascunho inválido — ignora */
@@ -101,18 +131,26 @@ export function CheckInScreen() {
   function toggleDone(i: number) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, done: !r.done } : r)));
   }
-  function updateField(i: number, field: "weight" | "reps", value: string) {
+  function updateField(i: number, field: "weight" | "reps" | "duration" | "distance", value: string) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
   }
 
   async function handleFinish() {
     const entries: CheckInEntry[] = rows
       .filter((r) => r.done)
-      .map((r) => ({
-        exerciseName: r.name,
-        ...(r.weight !== "" ? { weightKg: Number(r.weight) || 0 } : {}),
-        ...(r.reps !== "" ? { reps: Number(r.reps) || 0 } : {}),
-      }));
+      .map((r) =>
+        r.kind === "cardio"
+          ? {
+              exerciseName: r.name,
+              ...(r.duration !== "" ? { durationMin: Number(r.duration) || 0 } : {}),
+              ...(r.distance !== "" ? { distanceKm: Number(r.distance) || 0 } : {}),
+            }
+          : {
+              exerciseName: r.name,
+              ...(r.weight !== "" ? { weightKg: Number(r.weight) || 0 } : {}),
+              ...(r.reps !== "" ? { reps: Number(r.reps) || 0 } : {}),
+            }
+      );
 
     if (entries.length === 0) {
       Alert.alert("Nenhum exercício marcado", "Marque ao menos um exercício como feito.");
@@ -174,31 +212,60 @@ export function CheckInScreen() {
               </View>
             </TouchableOpacity>
 
-            <View style={styles.inputsRow}>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>Carga (kg)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={row.weight}
-                  onChangeText={(v) => updateField(i, "weight", v)}
-                  keyboardType="numeric"
-                  placeholder="—"
-                  placeholderTextColor={colors.textMuted}
-                />
+            {row.kind === "cardio" ? (
+              <>
+                <View style={styles.inputsRow}>
+                  <View style={styles.inputWrap}>
+                    <Text style={styles.inputLabel}>Duração (min)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={row.duration}
+                      onChangeText={(v) => updateField(i, "duration", v)}
+                      keyboardType="numeric"
+                      placeholder="—"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                  <View style={styles.inputWrap}>
+                    <Text style={styles.inputLabel}>Distância (km)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={row.distance}
+                      onChangeText={(v) => updateField(i, "distance", v)}
+                      keyboardType="numeric"
+                      placeholder="—"
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                </View>
+                {paceLabel(row) ? <Text style={styles.hint}>Pace médio: {paceLabel(row)}</Text> : null}
+              </>
+            ) : (
+              <View style={styles.inputsRow}>
+                <View style={styles.inputWrap}>
+                  <Text style={styles.inputLabel}>Carga (kg)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={row.weight}
+                    onChangeText={(v) => updateField(i, "weight", v)}
+                    keyboardType="numeric"
+                    placeholder="—"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
+                <View style={styles.inputWrap}>
+                  <Text style={styles.inputLabel}>Reps</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={row.reps}
+                    onChangeText={(v) => updateField(i, "reps", v)}
+                    keyboardType="numeric"
+                    placeholder="—"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
               </View>
-              <View style={styles.inputWrap}>
-                <Text style={styles.inputLabel}>Reps</Text>
-                <TextInput
-                  style={styles.input}
-                  value={row.reps}
-                  onChangeText={(v) => updateField(i, "reps", v)}
-                  keyboardType="numeric"
-                  placeholder="—"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            </View>
-            <Text style={styles.hint}>Cardio? É só marcar ✓, sem preencher carga.</Text>
+            )}
           </View>
         ))}
 
