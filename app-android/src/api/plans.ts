@@ -6,6 +6,7 @@ export interface Exercise {
   reps: string;
   restSeconds: number;
   notes: string;
+  kind?: "strength" | "cardio";
 }
 export interface Session {
   day: string;

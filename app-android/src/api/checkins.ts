@@ -4,6 +4,8 @@ export interface CheckInEntry {
   exerciseName: string;
   weightKg?: number;
   reps?: number;
+  durationMin?: number;
+  distanceKm?: number;
 }
 
 export interface CheckInStats {
@@ -53,4 +55,13 @@ export interface ExerciseProgress {
 
 export function getProgress(token: string) {
   return apiFetch<{ exercises: ExerciseProgress[] }>("/checkins/progress", { token });
+}
+
+export interface CardioProgress {
+  name: string;
+  points: { date: string; durationMin: number; distanceKm: number }[];
+}
+
+export function getCardioProgress(token: string) {
+  return apiFetch<{ exercises: CardioProgress[] }>("/checkins/cardio-progress", { token });
 }
