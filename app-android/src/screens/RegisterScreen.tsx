@@ -20,6 +20,7 @@ export function RegisterScreen({ navigation }: Props) {
   const { register } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,7 +31,7 @@ export function RegisterScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await register(name.trim(), email.trim(), password);
+      await register(name.trim(), email.trim(), password, username || undefined);
     } catch (err) {
       Alert.alert("Não foi possível cadastrar", (err as Error).message);
     } finally {
@@ -48,6 +49,17 @@ export function RegisterScreen({ navigation }: Props) {
         <Text style={styles.subtitle}>Comece hoje sua jornada fit.</Text>
 
         <Field label="Nome" value={name} onChangeText={setName} placeholder="Seu nome" />
+        <View>
+          <Field
+            label="@usuário"
+            value={username}
+            onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="seu_usuario"
+          />
+          <Text style={styles.hint}>3–20 caracteres: letras minúsculas, números, . e _</Text>
+        </View>
         <Field
           label="E-mail"
           value={email}
@@ -84,6 +96,7 @@ const styles = StyleSheet.create({
   inner: { flex: 1, justifyContent: "center", padding: spacing.lg },
   title: { color: colors.text, fontSize: 28, fontWeight: "800" },
   subtitle: { color: colors.textMuted, marginBottom: spacing.xl, marginTop: spacing.xs },
+  hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs, marginBottom: spacing.md },
   link: { marginTop: spacing.lg, alignItems: "center" },
   linkText: { color: colors.textMuted },
   linkStrong: { color: colors.primary, fontWeight: "700" },
