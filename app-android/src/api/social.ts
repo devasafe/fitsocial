@@ -1,5 +1,13 @@
 import { apiFetch } from "./client";
 
+export interface SearchUser {
+  id: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string;
+  isFollowing: boolean;
+}
+
 export interface PostAuthor {
   id: string;
   name: string;
@@ -83,4 +91,8 @@ export function createComment(token: string, postId: string, text: string) {
     token,
     body: { text },
   });
+}
+
+export function searchUsers(token: string, q: string) {
+  return apiFetch<{ users: SearchUser[] }>(`/social/search?q=${encodeURIComponent(q)}`, { token });
 }

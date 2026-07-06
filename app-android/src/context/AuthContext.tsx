@@ -21,7 +21,7 @@ interface AuthState {
   token: string | null;
   loading: boolean; // carregando a sessão salva ao abrir o app
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, username?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -66,8 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (name: string, email: string, password: string) => {
-      const { token, user } = await registerRequest(name, email, password);
+    async (name: string, email: string, password: string, username?: string) => {
+      const { token, user } = await registerRequest(name, email, password, username);
       await persist(token, user);
     },
     [persist]
