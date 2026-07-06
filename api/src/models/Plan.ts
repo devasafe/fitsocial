@@ -9,6 +9,7 @@ const exerciseSchema = z.object({
   reps: z.string(), // "8-12", "até a falha", "30s" etc.
   restSeconds: z.number().int().min(0).max(600),
   notes: z.string().default(""),
+  kind: z.enum(["strength", "cardio"]).optional(),
 });
 
 const sessionSchema = z.object({

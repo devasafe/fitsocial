@@ -8,16 +8,20 @@ import { Plan } from "../models/Plan.js";
 import { WorkoutLog } from "../models/WorkoutLog.js";
 import { generatePlan, adjustPlan, importPlanFromText } from "../services/ai/planGenerator.js";
 import { buildAdherenceSummary } from "../services/adherence.js";
+import { backfillWorkoutKinds } from "../services/exerciseKind.js";
 import { z } from "zod";
 
 export const plansRouter = Router();
 
 function serializePlan(plan: InstanceType<typeof Plan>) {
+  const workout = backfillWorkoutKinds(
+    plan.workout as { sessions: { exercises: { name: string; reps: string; kind?: "strength" | "cardio" }[] }[] }
+  );
   return {
     id: plan._id.toString(),
     version: plan.version,
     summary: plan.summary,
-    workout: plan.workout,
+    workout,
     diet: plan.diet,
     disclaimer: plan.disclaimer,
     createdAt: plan.get("createdAt") as Date,

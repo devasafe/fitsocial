@@ -5,6 +5,7 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { setAIProvider } from "../services/ai/index.js";
 import { Profile } from "../models/Profile.js";
+import { Plan } from "../models/Plan.js";
 import type { AIProvider } from "../services/ai/provider.js";
 
 const app = createApp();
@@ -157,5 +158,44 @@ describe("Plans", () => {
       .set("Authorization", `Bearer ${reg.body.token}`)
       .send({ text: "oi" });
     expect(res.status).toBe(400);
+  });
+
+  it("GET /plans/current preenche kind em planos sem o campo", async () => {
+    // Usuário novo e isolado, com plano legado criado direto no banco (sem `kind`).
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Legacy Plan", email: "legacy-plan@test.com", password: "senha12345" });
+    const legacyToken = reg.body.token;
+    const legacyUserId = reg.body.user.id;
+
+    await Plan.create({
+      user: legacyUserId,
+      version: 1,
+      summary: "s",
+      workout: {
+        split: "A",
+        daysPerWeek: 1,
+        sessions: [
+          {
+            day: "A",
+            focus: "x",
+            exercises: [
+              { name: "Esteira", sets: 1, reps: "20 min", restSeconds: 0, notes: "" },
+              { name: "Supino", sets: 4, reps: "8-12", restSeconds: 60, notes: "" },
+            ],
+          },
+        ],
+      },
+      diet: { dailyCalories: 2000, macros: { proteinG: 1, carbsG: 1, fatG: 1 }, meals: [], notes: "" },
+      disclaimer: "d",
+    });
+
+    const res = await request(app)
+      .get("/plans/current")
+      .set("Authorization", `Bearer ${legacyToken}`);
+    expect(res.status).toBe(200);
+    const ex = res.body.plan.workout.sessions[0].exercises;
+    expect(ex[0].kind).toBe("cardio");
+    expect(ex[1].kind).toBe("strength");
   });
 });

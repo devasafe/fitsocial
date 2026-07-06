@@ -6,6 +6,7 @@ import {
 } from "./knowledgeBase.js";
 import { planDataSchema, type PlanData } from "../../models/Plan.js";
 import type { ProfileData } from "../../models/Profile.js";
+import { backfillWorkoutKinds } from "../exerciseKind.js";
 
 // Formato JSON do plano, reutilizado nos prompts de geração/importação.
 const PLAN_JSON_FORMAT = `{
@@ -15,7 +16,7 @@ const PLAN_JSON_FORMAT = `{
     "daysPerWeek": number,
     "sessions": [
       { "day": "string", "focus": "string",
-        "exercises": [ { "name": "string", "sets": number, "reps": "string", "restSeconds": number, "notes": "string" } ] }
+        "exercises": [ { "name": "string", "sets": number, "reps": "string", "restSeconds": number, "notes": "string", "kind": "strength" | "cardio" } ] }
     ]
   },
   "diet": {
@@ -26,6 +27,12 @@ const PLAN_JSON_FORMAT = `{
   },
   "disclaimer": "string"
 }`;
+
+/** Garante `kind` em todo exercício do plano (fallback quando a IA omite). */
+export function normalizePlanData(plan: PlanData): PlanData {
+  backfillWorkoutKinds(plan.workout);
+  return plan;
+}
 
 function buildSystemPrompt(): string {
   return `Você é o coach do FitSocial, que acumula os papéis de personal trainer e nutricionista. Gere um plano de TREINO e DIETA personalizado, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
@@ -40,6 +47,7 @@ REGRAS:
 - O treino deve caber nos dias e minutos por sessão disponíveis.
 - "summary" deve ser uma mensagem curta e motivadora explicando a estratégia.
 - "disclaimer" deve ser exatamente: "${SAFETY_DISCLAIMER}"
+- Em cada exercício, defina "kind": "cardio" para esteira/corrida/bicicleta/elíptico/remo/pular corda/etc. e "strength" para exercícios de musculação com carga.
 
 Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
 {
@@ -49,7 +57,7 @@ Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
     "daysPerWeek": number,
     "sessions": [
       { "day": "string", "focus": "string",
-        "exercises": [ { "name": "string", "sets": number, "reps": "string", "restSeconds": number, "notes": "string" } ] }
+        "exercises": [ { "name": "string", "sets": number, "reps": "string", "restSeconds": number, "notes": "string", "kind": "strength" | "cardio" } ] }
     ]
   },
   "diet": {
@@ -91,7 +99,7 @@ export async function generatePlan(
     temperature: 0.5,
   });
 
-  return parseJson(raw, planDataSchema);
+  return normalizePlanData(parseJson(raw, planDataSchema));
 }
 
 /**
@@ -125,7 +133,7 @@ Com base na adesão acima, gere uma NOVA VERSÃO do plano:
     temperature: 0.5,
   });
 
-  return parseJson(raw, planDataSchema);
+  return normalizePlanData(parseJson(raw, planDataSchema));
 }
 
 /**
@@ -160,5 +168,5 @@ ${PLAN_JSON_FORMAT}`;
     temperature: 0.2,
   });
 
-  return parseJson(raw, planDataSchema);
+  return normalizePlanData(parseJson(raw, planDataSchema));
 }
