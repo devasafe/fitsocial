@@ -10,6 +10,7 @@ import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
 import { billingRouter } from "./routes/billing.js";
+import { exerciseVideosRouter } from "./routes/exerciseVideos.js";
 import { errorHandler } from "./middleware/error.js";
 
 /** Monta a aplicação Express (sem subir o servidor) — facilita os testes. */
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/gamification", gamificationRouter);
   app.use("/coach", coachRouter);
   app.use("/billing", billingRouter);
+  app.use("/exercise-videos", exerciseVideosRouter);
 
   // Rota não encontrada.
   app.use((_req, res) => res.status(404).json({ error: "Rota não encontrada" }));
