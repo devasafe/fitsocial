@@ -21,6 +21,7 @@ import { CoachScreen } from "../screens/CoachScreen";
 import { ImportPlanScreen } from "../screens/ImportPlanScreen";
 import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
 import { HistoryScreen } from "../screens/HistoryScreen";
+import { ChooseUsernameScreen } from "../screens/ChooseUsernameScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -172,7 +173,13 @@ export function RootNavigator() {
   return (
     <NavigationContainer theme={navTheme}>
       {token ? (
-        <AppFlow needsOnboarding={!user?.onboardingComplete} />
+        !user?.username ? (
+          <AppStack.Navigator screenOptions={{ headerShown: false }}>
+            <AppStack.Screen name="ChooseUsername" component={ChooseUsernameScreen} />
+          </AppStack.Navigator>
+        ) : (
+          <AppFlow needsOnboarding={!user?.onboardingComplete} />
+        )
       ) : (
         <AuthFlow />
       )}
