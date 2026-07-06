@@ -79,7 +79,7 @@ export function getYoutubeSearcher(): YoutubeSearcher {
 
 export type ResolvedVideo = { youtubeId: string; thumbnailUrl: string; title: string } | null;
 
-function toResolved(doc: { youtubeId: string | null; thumbnailUrl?: string; title?: string }): ResolvedVideo {
+function toResolved(doc: { youtubeId?: string | null; thumbnailUrl?: string; title?: string }): ResolvedVideo {
   if (!doc.youtubeId) return null;
   return {
     youtubeId: doc.youtubeId,
