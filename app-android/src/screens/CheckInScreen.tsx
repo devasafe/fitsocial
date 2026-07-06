@@ -16,6 +16,8 @@ import { createCheckIn, type CheckInEntry } from "../api/checkins";
 import { PrimaryButton } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
+import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
 
 interface Row {
   name: string;
@@ -45,8 +47,23 @@ export function CheckInScreen() {
   const [share, setShare] = useState(true);
   const [saving, setSaving] = useState(false);
   const loaded = useRef(false);
+  const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
+  const [loadingVideos, setLoadingVideos] = useState(true);
 
   const doneCount = useMemo(() => rows.filter((r) => r.done).length, [rows]);
+
+  // Resolve as miniaturas de vídeo dos exercícios da sessão (não bloqueia o check-in).
+  useEffect(() => {
+    const names = session.exercises.map((e) => e.name);
+    let alive = true;
+    resolveExerciseVideos(names, token)
+      .then((v) => alive && setVideos(v))
+      .catch(() => alive && setVideos({}))
+      .finally(() => alive && setLoadingVideos(false));
+    return () => {
+      alive = false;
+    };
+  }, [session, token]);
 
   // Restaura o rascunho salvo ao abrir (se for do mesmo treino).
   useEffect(() => {
@@ -145,7 +162,14 @@ export function CheckInScreen() {
                 {row.done && <Text style={styles.checkMark}>✓</Text>}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.exName, row.done && styles.exNameDone]}>{row.name}</Text>
+                <View style={styles.exNameRow}>
+                  <ExerciseVideoThumb
+                    video={videos[row.name] ?? null}
+                    loading={loadingVideos}
+                    exerciseName={row.name}
+                  />
+                  <Text style={[styles.exName, row.done && styles.exNameDone]}>{row.name}</Text>
+                </View>
                 <Text style={styles.exTarget}>Meta: {row.target}</Text>
               </View>
             </TouchableOpacity>
@@ -229,6 +253,7 @@ const styles = StyleSheet.create({
   },
   checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkMark: { color: colors.primaryText, fontWeight: "900" },
+  exNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   exName: { color: colors.text, fontWeight: "700", fontSize: 15 },
   exNameDone: { textDecorationLine: "line-through", color: colors.textMuted },
   exTarget: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
