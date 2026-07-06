@@ -150,6 +150,21 @@ describe("Check-ins + reajuste", () => {
     expect(res.body.exercises.find((e: any) => e.name === "Esteira")).toBeUndefined();
   });
 
+  it("persiste durationMin/distanceKm numa entry de cardio", async () => {
+    const res = await auth(
+      request(app).post("/checkins").send({
+        sessionDay: "A",
+        entries: [{ exerciseName: "Esteira", durationMin: 30, distanceKm: 5 }],
+      })
+    );
+    expect(res.status).toBe(201);
+
+    const hist = await auth(request(app).get("/checkins"));
+    const entry = hist.body.logs[0].entries[0];
+    expect(entry.durationMin).toBe(30);
+    expect(entry.distanceKm).toBe(5);
+  });
+
   it("reajuste é bloqueado para free (402)", async () => {
     const res = await auth(request(app).post("/plans/adjust"));
     expect(res.status).toBe(402);
