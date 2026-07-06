@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { checkUsername, updateMe } from "../api/auth";
 import { PrimaryButton } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
 export function ChooseUsernameScreen() {
-  const { token, refreshUser } = useAuth();
+  const { token, refreshUser, logout } = useAuth();
   const [username, setUsername] = useState("");
   const [available, setAvailable] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
@@ -73,6 +73,9 @@ export function ChooseUsernameScreen() {
       {valid && available === true ? <Text style={styles.ok}>Disponível ✓</Text> : null}
       {error ? <Text style={styles.err}>{error}</Text> : null}
       <PrimaryButton title="Continuar" onPress={handleSave} loading={saving} disabled={!valid || available !== true} />
+      <TouchableOpacity onPress={logout} style={styles.logout}>
+        <Text style={styles.logoutText}>Sair da conta</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -87,4 +90,6 @@ const styles = StyleSheet.create({
   hint: { color: colors.textMuted, fontSize: 12 },
   ok: { color: colors.primary, fontWeight: "700" },
   err: { color: colors.danger, fontWeight: "600" },
+  logout: { alignItems: "center", marginTop: spacing.md },
+  logoutText: { color: colors.textMuted, fontWeight: "600" },
 });

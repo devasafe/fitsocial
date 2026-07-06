@@ -49,7 +49,12 @@ export function EditProfileScreen() {
   async function handleSave() {
     setSaving(true); setError("");
     try {
-      await updateMe(token!, { name, username, bio, avatarUrl });
+      await updateMe(token!, {
+        name,
+        bio,
+        avatarUrl,
+        ...(username.trim() !== "" ? { username } : {}),
+      });
       await refreshUser();
       nav.goBack();
     } catch (e) {
