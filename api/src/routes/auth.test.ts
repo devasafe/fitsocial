@@ -72,4 +72,28 @@ describe("Auth", () => {
     const res = await request(app).get("/auth/me");
     expect(res.status).toBe(401);
   });
+
+  it("cadastra com username e rejeita username duplicado", async () => {
+    const a = await request(app).post("/auth/register").send({ name: "Ana", email: "ana@test.com", password: "senha12345", username: "ana" });
+    expect(a.status).toBe(201);
+    expect(a.body.user.username).toBe("ana");
+
+    const b = await request(app).post("/auth/register").send({ name: "Ana2", email: "ana2@test.com", password: "senha12345", username: "ANA" });
+    expect(b.status).toBe(409);
+  });
+
+  it("cadastra sem username (fica para o gate)", async () => {
+    const res = await request(app).post("/auth/register").send({ name: "Sem", email: "sem@test.com", password: "senha12345" });
+    expect(res.status).toBe(201);
+    expect(res.body.user.username).toBeNull();
+  });
+
+  it("GET /auth/check-username diz se está disponível", async () => {
+    const reg = await request(app).post("/auth/register").send({ name: "Chk", email: "chk@test.com", password: "senha12345", username: "chkuser" });
+    const token = reg.body.token;
+    const taken = await request(app).get("/auth/check-username?username=chkuser").set("Authorization", `Bearer ${token}`);
+    expect(taken.body.available).toBe(false);
+    const free = await request(app).get("/auth/check-username?username=livre123").set("Authorization", `Bearer ${token}`);
+    expect(free.body.available).toBe(true);
+  });
 });
