@@ -19,19 +19,21 @@ export function ChooseUsernameScreen() {
   useEffect(() => {
     setAvailable(null);
     if (timer.current) clearTimeout(timer.current);
-    if (!valid) return;
+    if (!valid) { setChecking(false); return; }
     setChecking(true);
+    let cancelled = false;
     timer.current = setTimeout(async () => {
       try {
         const { available } = await checkUsername(token!, username);
-        setAvailable(available);
+        if (!cancelled) setAvailable(available);
       } catch {
-        setAvailable(null);
+        if (!cancelled) setAvailable(null);
       } finally {
-        setChecking(false);
+        if (!cancelled) setChecking(false);
       }
     }, 400);
     return () => {
+      cancelled = true;
       if (timer.current) clearTimeout(timer.current);
     };
   }, [username, valid, token]);
