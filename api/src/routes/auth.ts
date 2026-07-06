@@ -90,3 +90,35 @@ authRouter.get(
     res.json({ available });
   })
 );
+
+const patchMeSchema = z.object({
+  name: z.string().min(2, "Nome muito curto").max(80).optional(),
+  bio: z.string().max(160, "Bio muito longa").optional(),
+  avatarUrl: z.string().max(500).optional(),
+  username: usernameSchema.optional(),
+});
+
+authRouter.patch(
+  "/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = patchMeSchema.parse(
+      req.body?.username !== undefined
+        ? { ...req.body, username: normalizeUsername(String(req.body.username)) }
+        : req.body
+    );
+    const user = req.user!;
+
+    if (body.username !== undefined && body.username !== user.username) {
+      const taken = await User.findOne({ username: body.username });
+      if (taken) throw new HttpError(409, "Esse nome de usuário já está em uso.");
+      user.username = body.username;
+    }
+    if (body.name !== undefined) user.name = body.name;
+    if (body.bio !== undefined) user.bio = body.bio;
+    if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
+
+    await user.save();
+    res.json({ user: publicUser(user) });
+  })
+);

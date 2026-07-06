@@ -103,4 +103,29 @@ describe("Auth", () => {
     const free = await request(app).get("/auth/check-username?username=livre123").set("Authorization", `Bearer ${token}`);
     expect(free.body.available).toBe(true);
   });
+
+  it("PATCH /auth/me atualiza bio/nome/avatar e troca username", async () => {
+    const reg = await request(app).post("/auth/register").send({ name: "Edt", email: "edt@test.com", password: "senha12345", username: "edt" });
+    const token = reg.body.token;
+    const auth = (r: request.Test) => r.set("Authorization", `Bearer ${token}`);
+
+    const res = await auth(request(app).patch("/auth/me")).send({ name: "Editado", bio: "sou fit", avatarUrl: "http://x/a.jpg", username: "novoedt" });
+    expect(res.status).toBe(200);
+    expect(res.body.user.name).toBe("Editado");
+    expect(res.body.user.bio).toBe("sou fit");
+    expect(res.body.user.avatarUrl).toBe("http://x/a.jpg");
+    expect(res.body.user.username).toBe("novoedt");
+
+    // trocar para o próprio username atual deve ser permitido
+    const same = await auth(request(app).patch("/auth/me")).send({ username: "novoedt" });
+    expect(same.status).toBe(200);
+  });
+
+  it("PATCH /auth/me rejeita username já usado por outro (409)", async () => {
+    await request(app).post("/auth/register").send({ name: "Dono", email: "dono@test.com", password: "senha12345", username: "dono" });
+    const reg = await request(app).post("/auth/register").send({ name: "Outro", email: "outro@test.com", password: "senha12345", username: "outro" });
+    const token = reg.body.token;
+    const res = await request(app).patch("/auth/me").set("Authorization", `Bearer ${token}`).send({ username: "dono" });
+    expect(res.status).toBe(409);
+  });
 });
