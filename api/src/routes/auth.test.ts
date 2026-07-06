@@ -88,11 +88,18 @@ describe("Auth", () => {
     expect(res.body.user.username).toBeNull();
   });
 
-  it("GET /auth/check-username diz se está disponível", async () => {
+  it("GET /auth/check-username: livre, tomado por outro, e o próprio contam certo", async () => {
     const reg = await request(app).post("/auth/register").send({ name: "Chk", email: "chk@test.com", password: "senha12345", username: "chkuser" });
     const token = reg.body.token;
-    const taken = await request(app).get("/auth/check-username?username=chkuser").set("Authorization", `Bearer ${token}`);
-    expect(taken.body.available).toBe(false);
+    // outro usuário ocupa "ocupado"
+    await request(app).post("/auth/register").send({ name: "Occ", email: "occ@test.com", password: "senha12345", username: "ocupado" });
+
+    const own = await request(app).get("/auth/check-username?username=chkuser").set("Authorization", `Bearer ${token}`);
+    expect(own.body.available).toBe(true); // o próprio username conta como disponível
+
+    const taken = await request(app).get("/auth/check-username?username=ocupado").set("Authorization", `Bearer ${token}`);
+    expect(taken.body.available).toBe(false); // tomado por outro
+
     const free = await request(app).get("/auth/check-username?username=livre123").set("Authorization", `Bearer ${token}`);
     expect(free.body.available).toBe(true);
   });

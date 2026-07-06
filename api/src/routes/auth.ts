@@ -86,6 +86,7 @@ authRouter.get(
     const parsed = usernameSchema.safeParse(normalizeUsername(String(req.query.username ?? "")));
     if (!parsed.success) return res.json({ available: false });
     const existing = await User.findOne({ username: parsed.data });
-    res.json({ available: !existing });
+    const available = !existing || existing._id.toString() === req.user!._id.toString();
+    res.json({ available });
   })
 );
