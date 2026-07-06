@@ -16,6 +16,7 @@ export type AppStackParams = {
   Diet: { diet: Diet };
   CheckIn: { session: Session };
   CreatePost: undefined;
+  EditProfile: undefined;
   UserProfile: { userId: string };
   Subscription: undefined;
   Leaderboard: undefined;

@@ -22,6 +22,7 @@ import { ImportPlanScreen } from "../screens/ImportPlanScreen";
 import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
 import { HistoryScreen } from "../screens/HistoryScreen";
 import { ChooseUsernameScreen } from "../screens/ChooseUsernameScreen";
+import { EditProfileScreen } from "../screens/EditProfileScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -117,6 +118,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="CreatePost"
             component={CreatePostScreen}
             options={{ headerShown: true, title: "Novo post", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="EditProfile"
+            component={EditProfileScreen}
+            options={{ headerShown: true, title: "Editar perfil", ...headerStyle }}
           />
           <AppStack.Screen
             name="UserProfile"
