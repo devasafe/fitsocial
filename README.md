@@ -86,6 +86,11 @@ interface + apontar o factory em `src/services/ai/index.ts`. Configure
 Teste as integrações reais com: `npm run try:gemini` (onboarding) e
 `npm run try:plan` (geração de plano).
 
+**Vídeos de exercício (opcional):** Configure `YOUTUBE_API_KEY` no `.env` para carregar
+miniaturas reais dos vídeos de execução e tocar dentro do app. Sem a chave, o app mostra
+um botão de fallback que abre a busca no YouTube em navegador externo. Obtenha a chave em
+https://console.cloud.google.com/apis/library/youtube.googleapis.com (Google Cloud Console → "YouTube Data API v3").
+
 ## App (`app-android/`)
 
 ```bash
