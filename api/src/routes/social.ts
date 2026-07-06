@@ -13,11 +13,47 @@ import { Comment } from "../models/Comment.js";
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
 
+// ---- busca de pessoas ----
+
+socialRouter.get(
+  "/search",
+  asyncHandler(async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) return res.json({ users: [] });
+    const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escapa regex
+    const rx = new RegExp(safe, "i");
+    const me = req.user!._id;
+    const users = await User.find({
+      _id: { $ne: me },
+      $or: [{ username: rx }, { name: rx }],
+    })
+      .select("name username avatarUrl")
+      .limit(20);
+
+    const followingIds = new Set(
+      (await Follow.find({ follower: me, following: { $in: users.map((u) => u._id) } }).select("following"))
+        .map((f) => f.following.toString())
+    );
+
+    res.json({
+      users: users.map((u) => ({
+        id: u._id.toString(),
+        name: u.name,
+        username: u.username ?? null,
+        avatarUrl: u.avatarUrl ?? "",
+        isFollowing: followingIds.has(u._id.toString()),
+      })),
+    });
+  })
+);
+
 // ---- helpers ----
 
 interface PopulatedAuthor {
   _id: mongoose.Types.ObjectId;
   name: string;
+  username?: string;
+  avatarUrl?: string;
 }
 
 function serializePost(
@@ -33,7 +69,12 @@ function serializePost(
     commentCount: post.commentCount,
     likedByMe: likedIds.has(post._id.toString()),
     createdAt: post.get("createdAt") as Date,
-    author: { id: author._id.toString(), name: author.name },
+    author: {
+      id: author._id.toString(),
+      name: author.name,
+      username: author.username ?? null,
+      avatarUrl: author.avatarUrl ?? "",
+    },
   };
 }
 
@@ -59,7 +100,7 @@ socialRouter.post(
   asyncHandler(async (req, res) => {
     const { text, imageUrl } = createPostSchema.parse(req.body);
     const post = await Post.create({ author: req.user!._id, text, imageUrl: imageUrl ?? "" });
-    await post.populate("author", "name");
+    await post.populate("author", "name username avatarUrl");
     res.status(201).json({ post: serializePost(post, new Set()) });
   })
 );
@@ -77,7 +118,7 @@ socialRouter.get(
     const posts = await Post.find({ author: { $in: authorIds } })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("author", "name");
+      .populate("author", "name username avatarUrl");
 
     const likedIds = await likedSetFor(me, posts.map((p) => p._id));
     res.json({ posts: posts.map((p) => serializePost(p, likedIds)) });
@@ -160,11 +201,11 @@ socialRouter.get(
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
     const me = req.user!._id;
-    const user = await User.findById(req.params.id).select("name");
+    const user = await User.findById(req.params.id).select("name username avatarUrl bio");
     if (!user) throw new HttpError(404, "Usuário não encontrado");
 
     const [posts, followers, following, isFollowing] = await Promise.all([
-      Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name"),
+      Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl"),
       Follow.countDocuments({ following: user._id }),
       Follow.countDocuments({ follower: user._id }),
       Follow.exists({ follower: me, following: user._id }),
@@ -172,7 +213,13 @@ socialRouter.get(
 
     const likedIds = await likedSetFor(me, posts.map((p) => p._id));
     res.json({
-      user: { id: user._id.toString(), name: user.name },
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        username: user.username ?? null,
+        avatarUrl: user.avatarUrl ?? "",
+        bio: user.bio ?? "",
+      },
       counts: { posts: posts.length, followers, following },
       isFollowing: Boolean(isFollowing),
       isMe: user._id.toString() === me.toString(),

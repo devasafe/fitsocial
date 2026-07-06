@@ -11,18 +11,18 @@ let mongod: MongoMemoryServer;
 let ana = { token: "", id: "" };
 let bruno = { token: "", id: "" };
 
-async function registerUser(name: string, email: string) {
+async function registerUser(name: string, email: string, username?: string) {
   const res = await request(app)
     .post("/auth/register")
-    .send({ name, email, password: "senha12345" });
+    .send({ name, email, password: "senha12345", ...(username ? { username } : {}) });
   return { token: res.body.token as string, id: res.body.user.id as string };
 }
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
-  ana = await registerUser("Ana", "ana@test.com");
-  bruno = await registerUser("Bruno", "bruno@test.com");
+  ana = await registerUser("Ana", "ana@test.com", "ana");
+  bruno = await registerUser("Bruno", "bruno@test.com", "bruno");
 });
 
 afterAll(async () => {
@@ -154,5 +154,28 @@ describe("Rede social", () => {
       .set("Authorization", `Bearer ${ana.token}`)
       .send({ text: "" });
     expect(res.status).toBe(400);
+  });
+
+  it("GET /social/search acha por username e por nome, excluindo você", async () => {
+    const byUsername = await request(app)
+      .get("/social/search?q=brun")
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(byUsername.status).toBe(200);
+    expect(byUsername.body.users.some((u: { username: string }) => u.username === "bruno")).toBe(true);
+    expect(byUsername.body.users.every((u: { id: string }) => u.id !== ana.id)).toBe(true); // não inclui você
+
+    // Ana já segue o Bruno (setup anterior), então isFollowing deve ser true.
+    const brunoResult = byUsername.body.users.find((u: { username: string }) => u.username === "bruno");
+    expect(brunoResult.isFollowing).toBe(true);
+
+    const byName = await request(app)
+      .get("/social/search?q=Bruno")
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(byName.body.users.some((u: { username: string }) => u.username === "bruno")).toBe(true);
+
+    const empty = await request(app)
+      .get("/social/search?q=")
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(empty.body.users).toEqual([]);
   });
 });
