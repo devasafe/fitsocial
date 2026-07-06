@@ -30,7 +30,7 @@ export interface Comment {
   author: PostAuthor;
 }
 export interface UserProfile {
-  user: { id: string; name: string };
+  user: { id: string; name: string; username: string | null; avatarUrl: string; bio: string };
   counts: { posts: number; followers: number; following: number };
   isFollowing: boolean;
   isMe: boolean;

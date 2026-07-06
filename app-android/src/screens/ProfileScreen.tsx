@@ -17,6 +17,7 @@ import {
   type UserProfile,
 } from "../api/social";
 import { PostCard } from "../components/PostCard";
+import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
 import { colors, radius, spacing } from "../theme";
@@ -99,10 +100,10 @@ export function ProfileScreen() {
       ListHeaderComponent={
         <>
         <View style={styles.header}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{data.user.name.slice(0, 1).toUpperCase()}</Text>
-          </View>
+          <Avatar uri={data.user.avatarUrl} name={data.user.name} size={84} />
           <Text style={styles.name}>{data.user.name}</Text>
+          {data.user.username ? <Text style={styles.handle}>@{data.user.username}</Text> : null}
+          {data.user.bio ? <Text style={styles.bio}>{data.user.bio}</Text> : null}
 
           <View style={styles.stats}>
             <Stat label="Posts" value={data.counts.posts} />
@@ -111,9 +112,14 @@ export function ProfileScreen() {
           </View>
 
           {data.isMe ? (
-            <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-              <Text style={styles.logoutText}>Sair da conta</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.editBtn} onPress={() => nav.navigate("EditProfile")}>
+                <Text style={styles.editText}>Editar perfil</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+                <Text style={styles.logoutText}>Sair da conta</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <TouchableOpacity
               style={[styles.followBtn, data.isFollowing && styles.followingBtn]}
@@ -142,16 +148,15 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
   list: { padding: spacing.md, gap: spacing.md },
   header: { alignItems: "center", paddingVertical: spacing.lg },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { color: colors.primaryText, fontSize: 34, fontWeight: "800" },
   name: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: spacing.sm },
+  handle: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
+  bio: {
+    color: colors.text,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
   stats: { flexDirection: "row", gap: spacing.xl, marginVertical: spacing.lg },
   stat: { alignItems: "center" },
   statValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
@@ -165,6 +170,15 @@ const styles = StyleSheet.create({
   followingBtn: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   followText: { color: colors.primaryText, fontWeight: "700" },
   followingText: { color: colors.text },
+  editBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  editText: { color: colors.text, fontWeight: "700" },
   logoutBtn: {
     borderWidth: 1,
     borderColor: colors.border,
