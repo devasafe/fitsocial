@@ -69,3 +69,49 @@ export function setYoutubeSearcher(fn: YoutubeSearcher | null): void {
 export function getYoutubeSearcher(): YoutubeSearcher {
   return searcher ?? defaultSearcher;
 }
+
+import { ExerciseVideo } from "../models/ExerciseVideo.js";
+
+export type ResolvedVideo = { youtubeId: string; thumbnailUrl: string; title: string } | null;
+
+function toResolved(doc: { youtubeId: string | null; thumbnailUrl?: string; title?: string }): ResolvedVideo {
+  if (!doc.youtubeId) return null;
+  return {
+    youtubeId: doc.youtubeId,
+    thumbnailUrl: doc.thumbnailUrl || thumbnailFor(doc.youtubeId),
+    title: doc.title ?? "",
+  };
+}
+
+/**
+ * Resolve um nome de exercício para um vídeo do YouTube, cache-first.
+ * - Cache hit (inclusive "miss" persistido): retorna sem tocar na rede.
+ * - Miss: busca no YouTube; se achar, persiste vídeo; se não, persiste "miss" (youtubeId: null).
+ * - Falha de rede/quota (searcher retorna null): NÃO persiste miss aqui — deixa re-tentar depois.
+ *   Diferenciamos "sem API key" olhando env: sem key nunca persiste nada.
+ */
+export async function resolveExerciseVideo(name: string): Promise<ResolvedVideo> {
+  const normalizedName = normalizeExerciseName(name);
+  if (!normalizedName) return null;
+
+  const cached = await ExerciseVideo.findOne({ normalizedName });
+  if (cached) return toResolved(cached);
+
+  // Sem chave configurada: não persiste nada (feature degradada).
+  if (!env.youtubeApiKey) return null;
+
+  const hit = await getYoutubeSearcher()(`${name} execução correta`);
+
+  // Persiste o resultado (vídeo achado OU "miss" definitivo). Upsert protege de corrida.
+  const update = hit
+    ? { youtubeId: hit.youtubeId, thumbnailUrl: thumbnailFor(hit.youtubeId), title: hit.title, source: "youtube" as const }
+    : { youtubeId: null, thumbnailUrl: "", title: "", source: "youtube" as const };
+
+  await ExerciseVideo.updateOne(
+    { normalizedName },
+    { $setOnInsert: { normalizedName, displayName: name, pinned: false }, $set: update },
+    { upsert: true }
+  );
+
+  return hit ? toResolved({ youtubeId: hit.youtubeId, thumbnailUrl: thumbnailFor(hit.youtubeId), title: hit.title }) : null;
+}
