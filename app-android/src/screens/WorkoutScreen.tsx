@@ -1,13 +1,31 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParams } from "../navigation/types";
 import { colors, radius, spacing } from "../theme";
+import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
+import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
+import { useAuth } from "../context/AuthContext";
 
 type Props = NativeStackScreenProps<AppStackParams, "Workout">;
 
 export function WorkoutScreen({ route, navigation }: Props) {
   const { workout } = route.params;
+  const { token } = useAuth();
+  const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
+  const [loadingVideos, setLoadingVideos] = useState(true);
+
+  useEffect(() => {
+    const names = workout.sessions.flatMap((s) => s.exercises.map((e) => e.name));
+    let alive = true;
+    resolveExerciseVideos(names, token)
+      .then((v) => alive && setVideos(v))
+      .catch(() => alive && setVideos({})) // não bloqueia o treino
+      .finally(() => alive && setLoadingVideos(false));
+    return () => {
+      alive = false;
+    };
+  }, [workout, token]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -24,6 +42,11 @@ export function WorkoutScreen({ route, navigation }: Props) {
           {session.exercises.map((ex, j) => (
             <View key={j} style={styles.exercise}>
               <View style={styles.exerciseHeader}>
+                <ExerciseVideoThumb
+                  video={videos[ex.name] ?? null}
+                  loading={loadingVideos}
+                  exerciseName={ex.name}
+                />
                 <Text style={styles.exerciseName}>{ex.name}</Text>
                 <Text style={styles.exerciseSets}>
                   {ex.sets} × {ex.reps}
@@ -72,7 +95,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   exerciseHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  exerciseName: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1 },
+  exerciseName: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1, marginHorizontal: spacing.sm },
   exerciseSets: { color: colors.primary, fontWeight: "700" },
   exerciseMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   exerciseNotes: { color: colors.textMuted, fontSize: 12, fontStyle: "italic", marginTop: 2 },
