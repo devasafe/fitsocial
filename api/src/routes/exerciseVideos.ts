@@ -10,7 +10,7 @@ export const exerciseVideosRouter = Router();
 exerciseVideosRouter.use(requireAuth);
 
 const resolveSchema = z.object({
-  names: z.array(z.string().min(1)).min(1).max(30),
+  names: z.array(z.string().min(1)).min(1).max(60),
 });
 
 // Resolve a sessão inteira de uma vez. Deduplica por nome e resolve em paralelo.
@@ -20,7 +20,7 @@ exerciseVideosRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = resolveSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new HttpError(400, "Envie uma lista de nomes de exercícios (1 a 30).");
+      throw new HttpError(400, "Envie uma lista de nomes de exercícios (1 a 60).");
     }
     const { names } = parsed.data;
 

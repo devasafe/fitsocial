@@ -16,7 +16,7 @@ export function WorkoutScreen({ route, navigation }: Props) {
   const [loadingVideos, setLoadingVideos] = useState(true);
 
   useEffect(() => {
-    const names = workout.sessions.flatMap((s) => s.exercises.map((e) => e.name));
+    const names = [...new Set(workout.sessions.flatMap((s) => s.exercises.map((e) => e.name)))];
     let alive = true;
     resolveExerciseVideos(names, token)
       .then((v) => alive && setVideos(v))

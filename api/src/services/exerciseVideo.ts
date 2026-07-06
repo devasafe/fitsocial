@@ -13,6 +13,7 @@ export function normalizeExerciseName(name: string): string {
 }
 
 import { env } from "../config/env.js";
+import { ExerciseVideo } from "../models/ExerciseVideo.js";
 
 const YT_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
 
@@ -46,12 +47,18 @@ const defaultSearcher: YoutubeSearcher = async (query) => {
   let res: Response;
   try {
     res = await fetch(`${YT_SEARCH_URL}?${params.toString()}`);
-  } catch {
-    return null; // falha de rede: não persiste miss, tenta de novo depois
+  } catch (err) {
+    // falha de rede: propaga para o chamador não persistir miss, tenta de novo depois
+    throw new Error(`YouTube search failed: ${err instanceof Error ? err.message : String(err)}`);
   }
-  if (!res.ok) return null; // inclui 403 de quota estourada
 
   const data = (await res.json().catch(() => ({}))) as YoutubeSearchResponse;
+
+  if (!res.ok) {
+    // inclui 403 de quota estourada: falha transitória, não persiste miss
+    throw new Error(`YouTube search failed: ${res.status} ${data.error?.message ?? res.statusText}`);
+  }
+
   const item = data.items?.[0];
   const videoId = item?.id?.videoId;
   if (!videoId) return null;
@@ -70,8 +77,6 @@ export function getYoutubeSearcher(): YoutubeSearcher {
   return searcher ?? defaultSearcher;
 }
 
-import { ExerciseVideo } from "../models/ExerciseVideo.js";
-
 export type ResolvedVideo = { youtubeId: string; thumbnailUrl: string; title: string } | null;
 
 function toResolved(doc: { youtubeId: string | null; thumbnailUrl?: string; title?: string }): ResolvedVideo {
@@ -86,9 +91,11 @@ function toResolved(doc: { youtubeId: string | null; thumbnailUrl?: string; titl
 /**
  * Resolve um nome de exercício para um vídeo do YouTube, cache-first.
  * - Cache hit (inclusive "miss" persistido): retorna sem tocar na rede.
- * - Miss: busca no YouTube; se achar, persiste vídeo; se não, persiste "miss" (youtubeId: null).
- * - Falha de rede/quota (searcher retorna null): NÃO persiste miss aqui — deixa re-tentar depois.
- *   Diferenciamos "sem API key" olhando env: sem key nunca persiste nada.
+ * - Miss: busca no YouTube; se achar, persiste vídeo; se não achar (busca respondeu vazia),
+ *   persiste "miss" definitivo (youtubeId: null).
+ * - Falha transitória (searcher lança: rede fora do ar, timeout, 403 de quota etc.): NÃO
+ *   persiste nada — retorna null e deixa a próxima chamada tentar de novo.
+ *   Diferenciamos "sem API key" olhando env: sem key nunca persiste nada (feature degradada).
  */
 export async function resolveExerciseVideo(name: string): Promise<ResolvedVideo> {
   const normalizedName = normalizeExerciseName(name);
@@ -100,7 +107,13 @@ export async function resolveExerciseVideo(name: string): Promise<ResolvedVideo>
   // Sem chave configurada: não persiste nada (feature degradada).
   if (!env.youtubeApiKey) return null;
 
-  const hit = await getYoutubeSearcher()(`${name} execução correta`);
+  let hit: YoutubeHit;
+  try {
+    hit = await getYoutubeSearcher()(`${name} execução correta`);
+  } catch {
+    // Falha transitória: não persiste, deixa re-tentar na próxima chamada.
+    return null;
+  }
 
   // Persiste o resultado (vídeo achado OU "miss" definitivo). Upsert protege de corrida.
   const update = hit
@@ -113,5 +126,5 @@ export async function resolveExerciseVideo(name: string): Promise<ResolvedVideo>
     { upsert: true }
   );
 
-  return hit ? toResolved({ youtubeId: hit.youtubeId, thumbnailUrl: thumbnailFor(hit.youtubeId), title: hit.title }) : null;
+  return toResolved(update);
 }

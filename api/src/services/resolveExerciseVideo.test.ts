@@ -57,6 +57,17 @@ describe("resolveExerciseVideo", () => {
     expect(saved?.youtubeId).toBeNull();
   });
 
+  it("falha transitória (searcher lança): retorna null e NÃO persiste", async () => {
+    const search = vi.fn(async () => {
+      throw new Error("boom");
+    });
+    setYoutubeSearcher(search);
+
+    expect(await resolveExerciseVideo("Agachamento Livre")).toBeNull();
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(await ExerciseVideo.countDocuments()).toBe(0);
+  });
+
   it("sem API key: retorna null e não persiste", async () => {
     const search = vi.fn(async () => ({ youtubeId: "vidX", title: "t" }));
     setYoutubeSearcher(search);
