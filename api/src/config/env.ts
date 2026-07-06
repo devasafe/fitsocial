@@ -19,6 +19,8 @@ export const env = {
   aiProvider: process.env.AI_PROVIDER ?? "gemini",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+  // Chave da YouTube Data API v3 (opcional). Sem ela, os vídeos de exercício degradam graciosamente.
+  youtubeApiKey: process.env.YOUTUBE_API_KEY ?? "",
   // Segredo esperado no header Authorization do webhook do RevenueCat (opcional).
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
