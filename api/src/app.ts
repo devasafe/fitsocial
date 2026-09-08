@@ -10,6 +10,7 @@ import { socialRouter } from "./routes/social.js";
 import { activitiesRouter } from "./routes/activities.js";
 import { sportsRouter } from "./routes/sports.js";
 import { prsRouter } from "./routes/prs.js";
+import { libraryRouter } from "./routes/library.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
@@ -37,6 +38,7 @@ export function createApp() {
   app.use("/activities", activitiesRouter);
   app.use("/sports", sportsRouter);
   app.use("/prs", prsRouter);
+  app.use("/library", libraryRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
   app.use("/coach", coachRouter);

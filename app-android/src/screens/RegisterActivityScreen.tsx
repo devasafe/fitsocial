@@ -3,7 +3,9 @@ import { View, TextInput, TouchableOpacity, Switch, Alert } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
+import { SuggestField } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
+import { searchExercises } from "../api/library";
 import { newPRMessage } from "../api/prs";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -133,11 +135,17 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
 
       {exercises.map((ex, ei) => (
         <Card key={ei} sport={sportId} style={{ marginBottom: spacing.card }}>
-          <Field
+          <SuggestField
             label={`Exercício ${ei + 1}`}
             value={ex.name}
             onChangeText={(t) => setExercise(ei, { name: t })}
             placeholder="Supino reto, agachamento livre…"
+            fetchSuggestions={(q) =>
+              searchExercises(token!, q).then((list) =>
+                list.map((e) => ({ id: e.id, label: e.name, sub: `${e.muscle} · ${e.equipment}` }))
+              )
+            }
+            onPick={(s) => setExercise(ei, { name: s.label })}
           />
           <Txt variant="label" color={colors.text2} style={{ marginBottom: 6 }}>
             Séries — carga (kg) e repetições

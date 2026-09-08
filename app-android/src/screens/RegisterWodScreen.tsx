@@ -3,7 +3,9 @@ import { View, Switch, Alert } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
+import { SuggestField } from "../components/SuggestField";
 import { createActivity, type CreateActivityInput } from "../api/activities";
+import { searchWods, type WodBenchmark } from "../api/library";
 import { newPRMessage } from "../api/prs";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -34,9 +36,17 @@ export function RegisterWodScreen({ route, navigation }: Props) {
   const [min, setMin] = useState("");
   const [sec, setSec] = useState("");
   const [num, setNum] = useState(""); // rounds / reps / carga
+  const [prescription, setPrescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [share, setShare] = useState(false);
   const [caption, setCaption] = useState("");
+
+  function toScoreType(wodType: string): ScoreType {
+    if (wodType === "amrap") return "amrap";
+    if (wodType === "max_load") return "max_load";
+    if (wodType === "for_reps" || wodType === "tabata" || wodType === "emom") return "for_reps";
+    return "for_time"; // for_time / rft / chipper
+  }
 
   async function save() {
     if (!name.trim()) {
@@ -76,7 +86,33 @@ export function RegisterWodScreen({ route, navigation }: Props) {
       </View>
 
       <Card style={{ marginBottom: spacing.md }}>
-        <Field label="Nome do WOD" value={name} onChangeText={setName} placeholder="Fran, Cindy, WOD do dia…" />
+        <SuggestField
+          label="Nome do WOD"
+          value={name}
+          onChangeText={(t) => {
+            setName(t);
+            if (!t) setPrescription("");
+          }}
+          placeholder="Fran, Cindy, WOD do dia…"
+          fetchSuggestions={(q) =>
+            searchWods(token!, q).then((list) =>
+              list.map((w) => ({ id: w.id, label: w.name, sub: w.prescription, data: w }))
+            )
+          }
+          onPick={(s) => {
+            setName(s.label);
+            const w = s.data as WodBenchmark | undefined;
+            if (w) {
+              setScoreType(toScoreType(w.scoreType));
+              setPrescription(w.prescription);
+            }
+          }}
+        />
+        {prescription ? (
+          <Txt variant="caption" color={colors.text2} style={{ marginTop: -spacing.sm, marginBottom: spacing.md }}>
+            {prescription}
+          </Txt>
+        ) : null}
 
         <Txt variant="label" color={colors.text2} style={{ marginBottom: spacing.sm }}>
           Nível
