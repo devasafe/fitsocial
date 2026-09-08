@@ -21,6 +21,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   const [status, setStatus] = useState<Status>("idle");
   const [points, setPoints] = useState<GeoPoint[]>([]);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [accuracyM, setAccuracyM] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   const subRef = useRef<Location.LocationSubscription | null>(null);
@@ -28,6 +29,19 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   const startTsRef = useRef(0);
   const elapsedBaseRef = useRef(0);
   const resumeMsRef = useRef(0);
+
+  const pushLoc = useCallback((loc: Location.LocationObject) => {
+    setAccuracyM(loc.coords.accuracy ?? null);
+    setPoints((prev) => [
+      ...prev,
+      {
+        lat: loc.coords.latitude,
+        lng: loc.coords.longitude,
+        t: (loc.timestamp - startTsRef.current) / 1000,
+        ele: loc.coords.altitude ?? undefined,
+      },
+    ]);
+  }, []);
 
   const stopTracking = useCallback(() => {
     subRef.current?.remove();
@@ -44,18 +58,8 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       setElapsedSec(elapsedBaseRef.current + (Date.now() - resumeMsRef.current) / 1000);
     }, 500);
     subRef.current = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.High, timeInterval: 2000, distanceInterval: 5 },
-      (loc) => {
-        setPoints((prev) => [
-          ...prev,
-          {
-            lat: loc.coords.latitude,
-            lng: loc.coords.longitude,
-            t: (loc.timestamp - startTsRef.current) / 1000,
-            ele: loc.coords.altitude ?? undefined,
-          },
-        ]);
-      }
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 1 },
+      pushLoc
     );
   }
 
@@ -69,8 +73,19 @@ export function LiveTrackScreen({ route, navigation }: Props) {
     elapsedBaseRef.current = 0;
     setPoints([]);
     setElapsedSec(0);
-    await beginTracking();
     setStatus("recording");
+
+    // Fix imediato — para não ficar preso em "aguardando" quando parado.
+    try {
+      const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      pushLoc(first);
+    } catch {
+      Alert.alert(
+        "Sem sinal de GPS ainda",
+        "Não consegui um sinal agora. Em área aberta funciona melhor — vou continuar tentando."
+      );
+    }
+    await beginTracking();
   }
 
   function pause() {
@@ -108,6 +123,10 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   }
 
   const distanceM = totalDistanceM(points);
+  const statusLine =
+    status === "idle"
+      ? "Toque em iniciar para gravar"
+      : `${points.length} ponto(s)${accuracyM != null ? ` · precisão ~${Math.round(accuracyM)} m` : ""}`;
 
   return (
     <Screen scroll contentStyle={{ gap: spacing.card }}>
@@ -117,6 +136,9 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       </View>
 
       <RouteMap points={points} sportId={sportId} height={220} />
+      <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
+        {statusLine}
+      </Txt>
 
       <Card level={2}>
         <Txt variant="label" color={colors.text2}>

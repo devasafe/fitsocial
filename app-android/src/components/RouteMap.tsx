@@ -32,7 +32,7 @@ export function RouteMap({
         }}
       >
         <Txt variant="label" color={colors.text3}>
-          Aguardando sinal de GPS…
+          O traçado aparece conforme você se move
         </Txt>
       </View>
     );
