@@ -33,6 +33,9 @@ import { LiveTrackScreen } from "../screens/LiveTrackScreen";
 import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import { MinhasAtividadesScreen } from "../screens/MinhasAtividadesScreen";
 import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
+import { DesafiosScreen } from "../screens/DesafiosScreen";
+import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
+import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -232,6 +235,21 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="ActivityDetail"
             component={ActivityDetailScreen}
             options={{ headerShown: true, title: "Atividade", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Desafios"
+            component={DesafiosScreen}
+            options={{ headerShown: true, title: "Desafios", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="CriarDesafio"
+            component={CriarDesafioScreen}
+            options={{ headerShown: true, title: "Criar desafio", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="DesafioDetail"
+            component={DesafioDetailScreen}
+            options={{ headerShown: true, title: "Desafio", ...headerStyle }}
           />
         </>
       )}

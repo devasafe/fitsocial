@@ -1,0 +1,68 @@
+import { apiFetch } from "./client";
+
+export type ScoreMode = "checkins" | "minutes" | "distance";
+
+export interface Challenge {
+  id: string;
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  joinCode: string;
+  scoreMode: ScoreMode;
+  sportIds: string[];
+  visibility: "public" | "code";
+  creator: string;
+  memberCount?: number;
+  isMember?: boolean;
+}
+
+export interface LeaderRow {
+  userId: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string;
+  score: number;
+  isMe: boolean;
+  position: number;
+}
+
+export interface CreateChallengeInput {
+  name: string;
+  description?: string;
+  startAt: string;
+  endAt: string;
+  scoreMode: ScoreMode;
+  sportIds: string[];
+  visibility: "public" | "code";
+}
+
+export async function listMyChallenges(token: string): Promise<Challenge[]> {
+  return (await apiFetch<{ data: Challenge[] }>("/challenges", { token })).data;
+}
+export async function discoverChallenges(token: string): Promise<Challenge[]> {
+  return (await apiFetch<{ data: Challenge[] }>("/challenges/discover", { token })).data;
+}
+export async function getChallenge(token: string, id: string): Promise<Challenge> {
+  return (await apiFetch<{ data: Challenge }>(`/challenges/${id}`, { token })).data;
+}
+export async function createChallenge(token: string, input: CreateChallengeInput): Promise<Challenge> {
+  return (await apiFetch<{ data: Challenge }>("/challenges", { method: "POST", body: input, token })).data;
+}
+export async function joinChallenge(token: string, code: string): Promise<Challenge> {
+  return (await apiFetch<{ data: Challenge }>("/challenges/join", { method: "POST", body: { code }, token })).data;
+}
+export async function challengeLeaderboard(token: string, id: string): Promise<LeaderRow[]> {
+  return (await apiFetch<{ data: LeaderRow[] }>(`/challenges/${id}/leaderboard`, { token })).data;
+}
+
+export function scoreLabel(mode: ScoreMode, value: number): string {
+  if (mode === "distance") return `${value.toFixed(1)} km`;
+  if (mode === "minutes") return `${value} min`;
+  return `${value} treino${value === 1 ? "" : "s"}`;
+}
+export function scoreModeName(mode: ScoreMode): string {
+  if (mode === "distance") return "Distância (km)";
+  if (mode === "minutes") return "Minutos treinados";
+  return "Treinos registrados";
+}

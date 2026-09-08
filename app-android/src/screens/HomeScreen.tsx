@@ -164,6 +164,7 @@ export function HomeScreen() {
 
           {/* Atalhos */}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.card }}>
+            <Button title="Desafios" variant="secondary" onPress={() => navigation.navigate("Desafios")} style={{ flexBasis: "47%", flexGrow: 1 }} />
             <Button title="Atividades" variant="secondary" onPress={() => navigation.navigate("MinhasAtividades")} style={{ flexBasis: "47%", flexGrow: 1 }} />
             <Button title="Recordes" variant="secondary" onPress={() => navigation.navigate("MeusPRs")} style={{ flexBasis: "47%", flexGrow: 1 }} />
             <Button title="Ranking" variant="secondary" onPress={() => navigation.navigate("Leaderboard")} style={{ flexBasis: "47%", flexGrow: 1 }} />
