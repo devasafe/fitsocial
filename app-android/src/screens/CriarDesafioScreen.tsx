@@ -59,7 +59,7 @@ export function CriarDesafioScreen({ navigation }: Props) {
   }
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       <Card>
         <Field label="Nome do desafio" value={name} onChangeText={setName} placeholder="Corrida do mês" />
 

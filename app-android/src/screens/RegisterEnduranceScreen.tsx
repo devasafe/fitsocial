@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity } from "../api/activities";
-import { newPRMessage } from "../api/prs";
+import { usePRCelebration } from "../components/PRCelebration";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -27,6 +27,7 @@ function paceLabel(km: number, min: number): string {
 export function RegisterEnduranceScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const celebratePR = usePRCelebration();
   const label = sportLabel(sportId);
   const [km, setKm] = useState("");
   const [min, setMin] = useState("");
@@ -52,9 +53,8 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
-      else navigation.navigate("Tabs");
+      celebratePR(res.meta.newPRs ?? []);
+      navigation.navigate("Tabs");
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -63,7 +63,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
         <Txt variant="titleScreen">{label}</Txt>

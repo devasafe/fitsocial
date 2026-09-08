@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card } from "../components/ui";
+import { Txt, Screen, Card, ErrorState } from "../components/ui";
 import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
 import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -20,13 +20,22 @@ export function MeusPRsScreen() {
   const { token } = useAuth();
   const [prs, setPRs] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
     listPRs(token!)
-      .then(setPRs)
-      .catch(() => {})
+      .then((r) => {
+        setPRs(r);
+        setError(false);
+      })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const byExercise = useMemo(() => {
     const m = new Map<string, PersonalRecord[]>();
@@ -50,8 +59,10 @@ export function MeusPRsScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
-      {byExercise.length === 0 ? (
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+      {error && byExercise.length === 0 ? (
+        <ErrorState message="Não foi possível carregar seus recordes." onRetry={load} />
+      ) : byExercise.length === 0 ? (
         <Card level={2} style={{ marginTop: spacing.md }}>
           <Txt variant="titleCard">Você ainda não tem recordes</Txt>
           <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>

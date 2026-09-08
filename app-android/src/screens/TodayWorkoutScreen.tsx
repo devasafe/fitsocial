@@ -5,7 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getCurrentPlan, type Plan } from "../api/plans";
 import { colors, radius, spacing } from "../theme";
-import { Txt, Card, Screen } from "../components/ui";
+import { Txt, Card, Screen, ErrorState } from "../components/ui";
 import type { AppStackParams } from "../navigation/types";
 
 export function TodayWorkoutScreen() {
@@ -13,10 +13,14 @@ export function TodayWorkoutScreen() {
   const { token } = useAuth();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setPlan(await getCurrentPlan(token!));
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -36,6 +40,20 @@ export function TodayWorkoutScreen() {
     );
   }
 
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <ErrorState
+          message="Não foi possível carregar seu treino de hoje."
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
+      </View>
+    );
+  }
+
   if (!plan) {
     return (
       <View style={styles.center}>
@@ -50,7 +68,7 @@ export function TodayWorkoutScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <Screen scroll underHeader contentStyle={styles.content}>
       <Txt variant="titleScreen">Treino de hoje</Txt>
       <Txt variant="body" color={colors.text2} style={{ marginBottom: spacing.sm }}>
         Escolha o treino e toque para começar.

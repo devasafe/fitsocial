@@ -59,7 +59,7 @@ export function ActivityDetailScreen({ route }: Props) {
   });
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: stroke }} />
         <View>

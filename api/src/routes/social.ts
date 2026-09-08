@@ -126,6 +126,18 @@ socialRouter.get(
   })
 );
 
+// Post único (usado pelo deep-link das notificações, que só carrega o id).
+socialRouter.get(
+  "/posts/:id",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl");
+    if (!post) throw new HttpError(404, "Post não encontrado");
+    const likedIds = await likedSetFor(req.user!._id, [post._id]);
+    res.json({ post: serializePost(post, likedIds) });
+  })
+);
+
 // ---- curtidas (toggle) ----
 
 socialRouter.post(

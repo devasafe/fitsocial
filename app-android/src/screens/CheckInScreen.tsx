@@ -12,7 +12,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
-import { newPRMessage } from "../api/prs";
+import { usePRCelebration } from "../components/PRCelebration";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -46,6 +46,7 @@ export function CheckInScreen() {
   const route = useRoute<RouteProp<AppStackParams, "CheckIn">>();
   const nav = useNavigation();
   const { token } = useAuth();
+  const celebratePR = usePRCelebration();
   const { session } = route.params;
   const storageKey = `fitsocial.session:${session.day}`;
 
@@ -168,9 +169,13 @@ export function CheckInScreen() {
         shareText: share ? `Concluí o treino: ${session.day}` : undefined,
       });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      const prMsg = newPRMessage(res.newPRs ?? []);
-      if (prMsg) notify(prMsg.title, prMsg.body, () => nav.goBack());
-      else notify("Treino salvo", share ? "Publicado no seu feed." : undefined, () => nav.goBack());
+      const prs = res.newPRs ?? [];
+      if (prs.length) {
+        celebratePR(prs);
+        nav.goBack();
+      } else {
+        notify("Treino salvo", share ? "Publicado no seu feed." : undefined, () => nav.goBack());
+      }
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);
     } finally {

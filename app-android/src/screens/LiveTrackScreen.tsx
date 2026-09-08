@@ -8,7 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button } from "../components/ui";
 import { RouteMap } from "../components/RouteMap";
 import { createActivity } from "../api/activities";
-import { newPRMessage } from "../api/prs";
+import { usePRCelebration } from "../components/PRCelebration";
 import { totalDistanceM, paceLabel, clock, type GeoPoint } from "../lib/geo";
 import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -20,6 +20,7 @@ type Status = "idle" | "recording" | "paused";
 export function LiveTrackScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const celebratePR = usePRCelebration();
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const [status, setStatus] = useState<Status>("idle");
@@ -117,9 +118,8 @@ export function LiveTrackScreen({ route, navigation }: Props) {
         kind: "endurance",
         payload: { distanceM: 0, points: points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ele: p.ele })) },
       });
-      const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
-      else navigation.navigate("Tabs");
+      celebratePR(res.meta.newPRs ?? []);
+      navigation.navigate("Tabs");
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -184,7 +184,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
 
   return (
     <>
-      <Screen scroll contentStyle={{ gap: spacing.card }}>
+      <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.sm }}>
           <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
           <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>

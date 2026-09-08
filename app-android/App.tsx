@@ -10,6 +10,7 @@ import {
 } from "@expo-google-fonts/archivo";
 import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from "@expo-google-fonts/sora";
 import { AuthProvider } from "./src/context/AuthContext";
+import { PRCelebrationProvider } from "./src/components/PRCelebration";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
@@ -33,7 +34,9 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <StatusBar style="light" />
-        <RootNavigator />
+        <PRCelebrationProvider>
+          <RootNavigator />
+        </PRCelebrationProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

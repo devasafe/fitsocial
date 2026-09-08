@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { getLeaderboard, type LeaderRow } from "../api/gamification";
-import { Txt } from "../components/ui";
+import { Txt, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
 const LIME_SOFT = "rgba(200,250,75,0.12)";
@@ -53,11 +53,15 @@ export function LeaderboardScreen() {
   const { token } = useAuth();
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const { leaderboard } = await getLeaderboard(token!);
       setRows(leaderboard);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -92,9 +96,13 @@ export function LeaderboardScreen() {
         </View>
       }
       ListEmptyComponent={
-        <Txt variant="body" color={colors.text2} style={styles.empty}>
-          Siga pessoas para comparar sua evolução. Ninguém fica em último aqui.
-        </Txt>
+        error ? (
+          <ErrorState message="Não foi possível carregar o ranking." onRetry={load} />
+        ) : (
+          <Txt variant="body" color={colors.text2} style={styles.empty}>
+            Siga pessoas para comparar sua evolução. Ninguém fica em último aqui.
+          </Txt>
+        )
       }
       renderItem={({ item, index }) => <LeaderboardRow row={item} position={index + 1} />}
     />

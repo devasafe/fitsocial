@@ -49,6 +49,11 @@ export function getFeed(token: string) {
   return apiFetch<{ posts: Post[] }>("/social/feed", { token });
 }
 
+export async function getPost(token: string, id: string): Promise<Post> {
+  const res = await apiFetch<{ post: Post }>(`/social/posts/${id}`, { token });
+  return res.post;
+}
+
 export function likePost(token: string, id: string) {
   return apiFetch<{ liked: boolean; likeCount: number }>(`/social/posts/${id}/like`, {
     method: "POST",

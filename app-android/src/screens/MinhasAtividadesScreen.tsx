@@ -3,7 +3,7 @@ import { View, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card, Button } from "../components/ui";
+import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
 import { listActivities, type Activity } from "../api/activities";
 import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -36,6 +36,7 @@ export function MinhasAtividadesScreen() {
   const [items, setItems] = useState<Activity[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const loadFirst = useCallback(async () => {
@@ -43,8 +44,9 @@ export function MinhasAtividadesScreen() {
       const res = await listActivities(token!);
       setItems(res.data);
       setCursor(res.meta.nextCursor);
+      setError(false);
     } catch {
-      /* silencioso */
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -77,8 +79,16 @@ export function MinhasAtividadesScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
-      {items.length === 0 ? (
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+      {error && items.length === 0 ? (
+        <ErrorState
+          message="Não foi possível carregar suas atividades."
+          onRetry={() => {
+            setLoading(true);
+            loadFirst();
+          }}
+        />
+      ) : items.length === 0 ? (
         <Card level={2} style={{ marginTop: spacing.md }}>
           <Txt variant="titleCard">Nenhuma atividade ainda</Txt>
           <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>

@@ -7,7 +7,7 @@ import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
 import { SuggestField } from "../components/SuggestField";
 import { createActivity, type CreateActivityInput } from "../api/activities";
 import { searchWods, type WodBenchmark } from "../api/library";
-import { newPRMessage } from "../api/prs";
+import { usePRCelebration } from "../components/PRCelebration";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -31,6 +31,7 @@ const LEVELS: { id: "rx" | "scaled" | "adaptado"; label: string }[] = [
 export function RegisterWodScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const celebratePR = usePRCelebration();
   const [name, setName] = useState("");
   const [level, setLevel] = useState<"rx" | "scaled" | "adaptado">("rx");
   const [scoreType, setScoreType] = useState<ScoreType>("for_time");
@@ -69,9 +70,8 @@ export function RegisterWodScreen({ route, navigation }: Props) {
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
-      else navigation.navigate("Tabs");
+      celebratePR(res.meta.newPRs ?? []);
+      navigation.navigate("Tabs");
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -80,7 +80,7 @@ export function RegisterWodScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
         <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>

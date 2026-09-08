@@ -3,7 +3,7 @@ import { View, TextInput, TouchableOpacity, ActivityIndicator } from "react-nati
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card, Button, Chip } from "../components/ui";
+import { Txt, Screen, Card, Button, Chip, ErrorState } from "../components/ui";
 import { notify } from "../lib/notify";
 import { listMyChallenges, discoverChallenges, joinChallenge, scoreModeName, type Challenge } from "../api/challenges";
 import { colors, spacing, radius } from "../theme";
@@ -22,6 +22,7 @@ export function DesafiosScreen() {
   const [tab, setTab] = useState<"mine" | "discover">("mine");
   const [items, setItems] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
 
@@ -29,8 +30,10 @@ export function DesafiosScreen() {
     setLoading(true);
     try {
       setItems(tab === "mine" ? await listMyChallenges(token!) : await discoverChallenges(token!));
+      setError(false);
     } catch {
       setItems([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -57,7 +60,7 @@ export function DesafiosScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       <Button title="Criar desafio" onPress={() => nav.navigate("CriarDesafio")} size="lg" glow />
 
       {/* Entrar por código */}
@@ -80,6 +83,8 @@ export function DesafiosScreen() {
 
       {loading ? (
         <ActivityIndicator color={colors.lime} style={{ marginTop: spacing.lg }} />
+      ) : error && items.length === 0 ? (
+        <ErrorState message="Não foi possível carregar os desafios." onRetry={load} />
       ) : items.length === 0 ? (
         <Card level={2}>
           <Txt variant="body" color={colors.text2}>

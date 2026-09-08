@@ -17,7 +17,7 @@ import {
   type CardioProgress,
 } from "../api/checkins";
 import { LineChart } from "../components/LineChart";
-import { Txt, Card, Chip, SectionHeader } from "../components/ui";
+import { Txt, Card, Chip, SectionHeader, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
 const METRICS = [
@@ -53,6 +53,7 @@ export function HistoryScreen() {
   const [logs, setLogs] = useState<WorkoutLogItem[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [mode, setMode] = useState<"strength" | "cardio">("strength");
   const [cardio, setCardio] = useState<CardioProgress[]>([]);
   const [cardioSel, setCardioSel] = useState<string | null>(null);
@@ -70,6 +71,9 @@ export function HistoryScreen() {
       setCardio(card.exercises);
       setSelected((cur) => cur ?? prog.exercises[0]?.name ?? null);
       setCardioSel((cur) => cur ?? card.exercises[0]?.name ?? null);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -113,6 +117,16 @@ export function HistoryScreen() {
         <Chip label="Cardio" active={mode === "cardio"} onPress={() => setMode("cardio")} />
       </View>
 
+      {error ? (
+        <ErrorState
+          message="Não foi possível carregar seu histórico."
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
+      ) : (
+        <>
       {mode === "strength" &&
         (exercises.length === 0 ? (
           <Card level={1}>
@@ -286,6 +300,8 @@ export function HistoryScreen() {
             </Txt>
           </Card>
         ))
+      )}
+        </>
       )}
       <View style={{ height: spacing.xl }} />
     </ScrollView>

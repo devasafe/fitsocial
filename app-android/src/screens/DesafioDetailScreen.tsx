@@ -3,7 +3,7 @@ import { View, TextInput, TouchableOpacity, ActivityIndicator } from "react-nati
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card, Button, Chip } from "../components/ui";
+import { Txt, Screen, Card, Button, Chip, ErrorState } from "../components/ui";
 import { Avatar } from "../components/Avatar";
 import { notify } from "../lib/notify";
 import {
@@ -49,6 +49,7 @@ export function DesafioDetailScreen({ route }: Props) {
   const [posts, setPosts] = useState<ChallengePost[]>([]);
   const [tab, setTab] = useState<"ranking" | "mural">("ranking");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [joining, setJoining] = useState(false);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
@@ -66,8 +67,9 @@ export function DesafioDetailScreen({ route }: Props) {
       setChallenge(c);
       setBoard(b);
       setPosts(p);
+      setError(false);
     } catch {
-      /* silencioso */
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -150,7 +152,7 @@ export function DesafioDetailScreen({ route }: Props) {
     }
   }
 
-  if (loading || !challenge) {
+  if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.lime} size="large" />
@@ -158,8 +160,22 @@ export function DesafioDetailScreen({ route }: Props) {
     );
   }
 
+  if (error || !challenge) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", paddingHorizontal: spacing.gutter }}>
+        <ErrorState
+          message="Não foi possível carregar o desafio."
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
+      </View>
+    );
+  }
+
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       <View>
         <Txt variant="titleScreen">{challenge.name}</Txt>
         <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>

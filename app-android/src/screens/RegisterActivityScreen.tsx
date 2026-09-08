@@ -7,7 +7,7 @@ import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { SuggestField } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
 import { searchExercises } from "../api/library";
-import { newPRMessage } from "../api/prs";
+import { usePRCelebration } from "../components/PRCelebration";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -61,6 +61,7 @@ function NumInput({
 export function RegisterActivityScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const celebratePR = usePRCelebration();
   const [exercises, setExercises] = useState<ExerciseForm[]>([
     { name: "", sets: [{ weightKg: "", reps: "" }] },
   ]);
@@ -114,12 +115,8 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) {
-        notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
-      } else {
-        navigation.navigate("Tabs");
-      }
+      celebratePR(res.meta.newPRs ?? []);
+      navigation.navigate("Tabs");
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -128,7 +125,7 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
         <Txt variant="titleScreen">Novo treino</Txt>

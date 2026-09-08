@@ -12,7 +12,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getFeed, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
-import { Txt, Button } from "../components/ui";
+import { Txt, Button, ErrorState } from "../components/ui";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -22,12 +22,16 @@ export function FeedScreen() {
   const { token } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const { posts } = await getFeed(token!);
       setPosts(posts);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -81,19 +85,25 @@ export function FeedScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Txt variant="titleSection" style={styles.emptyTitle}>
-              Seu feed está tranquilo por enquanto
-            </Txt>
-            <Txt variant="body" color={colors.text2} style={styles.emptyText}>
-              Publique seu treino de hoje ou siga outras pessoas para acompanhar a evolução delas por aqui.
-            </Txt>
-            <Button
-              title="Publicar treino"
-              onPress={() => nav.navigate("CreatePost")}
-              style={styles.emptyBtn}
-            />
-          </View>
+          error ? (
+            <View style={styles.empty}>
+              <ErrorState message="Não foi possível carregar o feed." onRetry={load} />
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Txt variant="titleSection" style={styles.emptyTitle}>
+                Seu feed está tranquilo por enquanto
+              </Txt>
+              <Txt variant="body" color={colors.text2} style={styles.emptyText}>
+                Publique seu treino de hoje ou siga outras pessoas para acompanhar a evolução delas por aqui.
+              </Txt>
+              <Button
+                title="Publicar treino"
+                onPress={() => nav.navigate("CreatePost")}
+                style={styles.emptyBtn}
+              />
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <PostCard

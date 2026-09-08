@@ -18,7 +18,8 @@ import { PostCard } from "../components/PostCard";
 import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
-import { MetricTile, Button, Txt } from "../components/ui";
+import { MetricTile, Button, Txt, ErrorState } from "../components/ui";
+import { notify } from "../lib/notify";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -32,6 +33,7 @@ export function ProfileScreen() {
   const [data, setData] = useState<UserProfile | null>(null);
   const [badges, setBadges] = useState<Badge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -42,6 +44,9 @@ export function ProfileScreen() {
       ]);
       setData(profile);
       setBadges(b.badges);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -68,15 +73,31 @@ export function ProfileScreen() {
           followers: data.counts.followers + (wasFollowing ? -1 : 1),
         },
       });
+    } catch (err) {
+      notify("Não foi possível atualizar", (err as Error).message);
     } finally {
       setBusy(false);
     }
   }
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.lime} size="large" />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={[styles.center, { paddingHorizontal: spacing.gutter }]}>
+        <ErrorState
+          message="Não foi possível carregar o perfil."
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
       </View>
     );
   }

@@ -156,6 +156,24 @@ describe("Rede social", () => {
     expect(res.status).toBe(400);
   });
 
+  it("GET /social/posts/:id retorna o post único (deep-link de notificação)", async () => {
+    const res = await request(app)
+      .get(`/social/posts/${brunoPostId}`)
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.post.id).toBe(brunoPostId);
+    expect(res.body.post.author.name).toBe("Bruno");
+    expect(typeof res.body.post.likedByMe).toBe("boolean");
+  });
+
+  it("GET /social/posts/:id de id inexistente retorna 404", async () => {
+    const missing = new mongoose.Types.ObjectId().toString();
+    const res = await request(app)
+      .get(`/social/posts/${missing}`)
+      .set("Authorization", `Bearer ${ana.token}`);
+    expect(res.status).toBe(404);
+  });
+
   it("GET /social/search acha por username e por nome, excluindo você", async () => {
     const byUsername = await request(app)
       .get("/social/search?q=brun")

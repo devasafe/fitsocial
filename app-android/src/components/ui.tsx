@@ -193,22 +193,27 @@ export function Card({
 export function Screen({
   children,
   scroll,
+  underHeader,
   style,
   contentStyle,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
+  /** Quando a tela tem header nativo do stack, o header já consome o safe-area
+   *  top — passe true para não somar insets.top de novo (evita espaço dobrado). */
+  underHeader?: boolean;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
-  const pad = { paddingTop: insets.top, paddingBottom: insets.bottom };
+  const topInset = underHeader ? 0 : insets.top;
+  const pad = { paddingTop: topInset, paddingBottom: insets.bottom };
   if (scroll) {
     return (
       <ScrollView
         style={[{ flex: 1, backgroundColor: colors.bg }, style]}
         contentContainerStyle={[
-          { paddingHorizontal: spacing.gutter, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.xl },
+          { paddingHorizontal: spacing.gutter, paddingTop: topInset + spacing.md, paddingBottom: insets.bottom + spacing.xl },
           contentStyle,
         ]}
         keyboardShouldPersistTaps="handled"
@@ -218,6 +223,28 @@ export function Screen({
     );
   }
   return <View style={[{ flex: 1, backgroundColor: colors.bg }, pad, style]}>{children}</View>;
+}
+
+// ---- Estado de erro (load falhou) ----
+
+export function ErrorState({
+  message = "Não foi possível carregar.",
+  onRetry,
+  style,
+}: {
+  message?: string;
+  onRetry?: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <Card level={2} style={[{ marginTop: spacing.md }, style]}>
+      <Txt variant="titleCard">Deu ruim aqui</Txt>
+      <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm, marginBottom: onRetry ? spacing.md : 0 }}>
+        {message}
+      </Txt>
+      {onRetry ? <Button title="Tentar de novo" variant="secondary" onPress={onRetry} /> : null}
+    </Card>
+  );
 }
 
 // ---- Dados ----

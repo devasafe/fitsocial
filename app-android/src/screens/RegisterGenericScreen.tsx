@@ -57,7 +57,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
         <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>

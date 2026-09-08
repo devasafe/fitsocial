@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { getCoachMessages, sendCoachMessage } from "../api/coach";
 import type { ChatMessage } from "../api/onboarding";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
-import { Txt } from "../components/ui";
+import { Txt, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -27,6 +27,7 @@ export function CoachScreen() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   const load = useCallback(async () => {
@@ -34,6 +35,9 @@ export function CoachScreen() {
       const { greeting, messages } = await getCoachMessages(token!);
       // Saudação sempre no topo, seguida do histórico salvo.
       setMessages([{ role: "assistant", content: greeting }, ...messages]);
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -79,6 +83,20 @@ export function CoachScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.lime} size="large" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.center, { paddingHorizontal: spacing.gutter }]}>
+        <ErrorState
+          message="Não foi possível falar com o coach agora."
+          onRetry={() => {
+            setLoading(true);
+            load();
+          }}
+        />
       </View>
     );
   }

@@ -111,7 +111,7 @@ export function DiarioScreen() {
   );
 
   return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       {/* Navegação de data */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <TouchableOpacity onPress={() => setDate((d) => shift(d, -1))} hitSlop={10}>
@@ -166,6 +166,13 @@ export function DiarioScreen() {
       {/* Refeições */}
       {loading ? (
         <ActivityIndicator color={colors.lime} />
+      ) : (day?.logs ?? []).length === 0 ? (
+        <Card>
+          <Txt variant="titleCard">Nada registrado nesse dia</Txt>
+          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
+            Use o campo acima para adicionar o que você comeu.
+          </Txt>
+        </Card>
       ) : (
         MEALS.map((m) => {
           const items = (day?.logs ?? []).filter((l) => l.meal === m);
