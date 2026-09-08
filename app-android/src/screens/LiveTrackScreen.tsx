@@ -226,7 +226,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
             </Txt>
           </TouchableOpacity>
 
-          <View style={{ position: "absolute", left: spacing.gutter, right: spacing.gutter, bottom: insets.bottom + spacing.md, gap: spacing.sm }}>
+          <View style={{ position: "absolute", left: spacing.gutter, right: spacing.gutter, bottom: insets.bottom + spacing.md, gap: spacing.sm, zIndex: 1100, elevation: 12 }}>
             <Card level={3}>{stats(true)}</Card>
             {controls()}
           </View>
@@ -245,5 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     paddingVertical: 8,
     paddingHorizontal: 14,
+    zIndex: 1100,
+    elevation: 12,
   },
 });
