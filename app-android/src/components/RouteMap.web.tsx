@@ -1,87 +1,54 @@
 import React, { useEffect, useRef } from "react";
-import * as maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
-import { RouteSvg } from "./RouteSvg";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { radius, sportColor } from "../theme";
 import type { GeoPoint } from "../lib/geo";
 
-const KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY;
-
+// Web: mapa raster escuro (CARTO dark, sem chave e sem web worker — empacota liso
+// no Expo/Metro). No native, RouteMap.tsx usa o traçado SVG (mapa nativo é enhancement).
 interface Props {
   points: GeoPoint[];
   sportId?: string;
   height?: number;
 }
 
-function lineData(points: GeoPoint[]) {
-  return {
-    type: "Feature" as const,
-    properties: {},
-    geometry: { type: "LineString" as const, coordinates: points.map((p) => [p.lng, p.lat]) },
-  };
-}
-
-function MapLibreRoute({ points, sportId, height = 200 }: Props) {
+export function RouteMap({ points, sportId, height = 200 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const lineRef = useRef<L.Polyline | null>(null);
   const stroke = sportColor(sportId);
 
-  // Cria o mapa uma vez.
   useEffect(() => {
-    if (!containerRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: `https://api.maptiler.com/maps/dataviz-dark/style.json?key=${KEY}`,
-      center: [-43.18, -22.97],
-      zoom: 12,
-      attributionControl: false,
-    });
+    if (!containerRef.current || mapRef.current) return;
+    const map = L.map(containerRef.current, { zoomControl: false, attributionControl: false }).setView(
+      [-22.97, -43.18],
+      13
+    );
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(map);
     mapRef.current = map;
-    map.on("load", () => {
-      map.addSource("route", { type: "geojson", data: lineData([]) });
-      map.addLayer({
-        id: "route",
-        type: "line",
-        source: "route",
-        paint: { "line-color": stroke, "line-width": 4 },
-        layout: { "line-cap": "round", "line-join": "round" },
-      });
-    });
+    // Garante o tamanho correto após o layout do react-native-web.
+    setTimeout(() => map.invalidateSize(), 0);
     return () => {
       map.remove();
       mapRef.current = null;
+      lineRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Atualiza a rota conforme os pontos chegam.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || points.length === 0) return;
-    const apply = () => {
-      const src = map.getSource("route") as maplibregl.GeoJSONSource | undefined;
-      if (!src) return;
-      src.setData(lineData(points));
-      const lngs = points.map((p) => p.lng);
-      const lats = points.map((p) => p.lat);
-      map.fitBounds(
-        [
-          [Math.min(...lngs), Math.min(...lats)],
-          [Math.max(...lngs), Math.max(...lats)],
-        ],
-        { padding: 40, maxZoom: 16, duration: 400 }
-      );
-    };
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
-  }, [points]);
+    const latlngs = points.map((p) => [p.lat, p.lng] as [number, number]);
+    if (lineRef.current) lineRef.current.setLatLngs(latlngs);
+    else lineRef.current = L.polyline(latlngs, { color: stroke, weight: 4 }).addTo(map);
+    if (latlngs.length >= 2) map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 16 });
+    else map.setView(latlngs[0], 15);
+  }, [points, stroke]);
 
   return (
-    <div style={{ height, width: "100%", borderRadius: radius.card, overflow: "hidden" }} ref={containerRef} />
+    <div ref={containerRef} style={{ height, width: "100%", borderRadius: radius.card, overflow: "hidden" }} />
   );
-}
-
-export function RouteMap(props: Props) {
-  if (!KEY) return <RouteSvg {...props} />;
-  return <MapLibreRoute {...props} />;
 }
