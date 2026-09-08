@@ -36,6 +36,12 @@ export function prTypeLabel(type: string, repRange: string | null): string {
       return "Aulas";
     case "horas":
       return "Horas de treino";
+    case "wod_time":
+      return `Tempo · ${repRange}`;
+    case "wod_score":
+      return `Score · ${repRange}`;
+    case "wod_load":
+      return `Carga · ${repRange}`;
     default:
       return type;
   }
@@ -53,6 +59,7 @@ export function prValueLabel(type: string, value: number, unit: string): string 
     case "best_dist":
       return `${Math.round((value / 1000) * 100) / 100} km`;
     case "best_time":
+    case "wod_time":
       return mmss(value);
     case "aulas":
       return `${value} aulas`;
@@ -63,15 +70,19 @@ export function prValueLabel(type: string, value: number, unit: string): string 
   }
 }
 
-const STRENGTH_TYPES = new Set(["carga_max", "rm_estimado", "carga_faixa"]);
+const NAMED_TYPES = new Set(["carga_max", "rm_estimado", "carga_faixa", "wod_time", "wod_score", "wod_load"]);
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 /** Monta o texto do aviso de recorde ao salvar um treino. */
 export function newPRMessage(prs: NewPR[]): { title: string; body: string } | null {
   if (!prs.length) return null;
   const lines = prs.map((p) => {
     if (p.milestone) return `${prTypeLabel(p.type, p.repRange)}: ${p.milestone} — marco!`;
-    const label = STRENGTH_TYPES.has(p.type)
-      ? `${p.exerciseName} (${prTypeLabel(p.type, p.repRange)})`
+    const label = NAMED_TYPES.has(p.type)
+      ? `${capitalize(p.exerciseName)} (${prTypeLabel(p.type, p.repRange)})`
       : prTypeLabel(p.type, p.repRange);
     const now = prValueLabel(p.type, p.value, p.unit);
     const prev = p.previousValue != null ? ` (antes ${prValueLabel(p.type, p.previousValue, p.unit)})` : "";

@@ -31,6 +31,7 @@ export type AppStackParams = {
   RegisterEndurance: { sportId: string };
   RegisterClass: { sportId: string };
   RegisterGeneric: { sportId: string };
+  RegisterWod: { sportId: string };
 };
 
 // Abas inferiores dentro de "Tabs": Hoje · Feed · (+) · Coach · Perfil.

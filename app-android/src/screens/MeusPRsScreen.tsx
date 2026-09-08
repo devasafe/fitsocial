@@ -60,7 +60,7 @@ export function MeusPRsScreen() {
         </Card>
       ) : (
         byExercise.map(([exercise, records]) => {
-          const header = exercise === records[0].sportId ? sportLabel(exercise) : exercise;
+          const header = sportLabel(exercise);
           return (
             <Card key={exercise} sport={records[0].sportId}>
               <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>

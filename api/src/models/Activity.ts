@@ -89,6 +89,29 @@ export const genericPayloadSchema = z.object({
 });
 export type GenericPayload = z.infer<typeof genericPayloadSchema>;
 
+export const wodPayloadSchema = z.object({
+  name: z.string().min(1).max(80),
+  scoreType: z.enum([
+    "for_time",
+    "amrap",
+    "emom",
+    "rft",
+    "max_load",
+    "for_reps",
+    "tabata",
+    "chipper",
+  ]),
+  level: z.enum(["rx", "scaled", "adaptado"]).default("rx"),
+  resultTimeSec: z.number().int().min(0).max(36_000).nullish(),
+  resultRounds: z.number().min(0).max(1000).nullish(),
+  resultReps: z.number().int().min(0).max(100_000).nullish(),
+  resultLoadKg: z.number().min(0).max(1000).nullish(),
+  description: z.string().max(2000).nullish(),
+  // Bloco de força opcional — mesma forma do strength; de onde saem os 1RM (§6.1).
+  strengthBlock: strengthPayloadSchema.optional(),
+});
+export type WodPayload = z.infer<typeof wodPayloadSchema>;
+
 // ---- Entrada de criação (união discriminada por kind) ----
 
 const baseCreateFields = {
@@ -113,6 +136,7 @@ export const activityCreateSchema = z.discriminatedUnion("kind", [
   z.object({ ...baseCreateFields, kind: z.literal("endurance"), payload: endurancePayloadSchema }),
   z.object({ ...baseCreateFields, kind: z.literal("class"), payload: classPayloadSchema }),
   z.object({ ...baseCreateFields, kind: z.literal("generic"), payload: genericPayloadSchema }),
+  z.object({ ...baseCreateFields, kind: z.literal("wod"), payload: wodPayloadSchema }),
 ]);
 
 export type ActivityCreateInput = z.infer<typeof activityCreateSchema>;

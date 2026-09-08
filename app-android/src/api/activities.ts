@@ -38,6 +38,20 @@ export type CreateActivityInput =
         description?: string | null;
         customMetrics?: { label: string; value: string; unit?: string | null }[];
       };
+    })
+  | (CommonInput & {
+      kind: "wod";
+      payload: {
+        name: string;
+        scoreType: "for_time" | "amrap" | "emom" | "rft" | "max_load" | "for_reps" | "tabata" | "chipper";
+        level?: "rx" | "scaled" | "adaptado";
+        resultTimeSec?: number | null;
+        resultRounds?: number | null;
+        resultReps?: number | null;
+        resultLoadKg?: number | null;
+        description?: string | null;
+        strengthBlock?: { variant?: string; exercises: StrengthExerciseInput[] };
+      };
     });
 
 export interface Activity {

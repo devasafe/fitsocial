@@ -178,6 +178,19 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     expect(res.status).toBe(201);
     expect(res.body.data.metrics.minutes).toBe(20);
   });
+
+  it("cria WOD (crossfit) for_time", async () => {
+    const res = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({
+        sportId: "crossfit",
+        kind: "wod",
+        payload: { name: "Fran", scoreType: "for_time", level: "rx", resultTimeSec: 252 },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.kind).toBe("wod");
+  });
 });
 
 describe("Recordes de força (PR)", () => {

@@ -31,9 +31,12 @@ type PrType =
   | "best_dist"
   | "best_time"
   | "aulas"
-  | "horas";
+  | "horas"
+  | "wod_time"
+  | "wod_score"
+  | "wod_load";
 
-const MIN_TYPES = new Set<PrType>(["best_time"]); // menor é melhor
+const MIN_TYPES = new Set<PrType>(["best_time", "wod_time"]); // menor é melhor
 const MILESTONES: Partial<Record<PrType, number[]>> = {
   aulas: [50, 100, 250, 500, 1000],
   horas: [50, 100, 250, 500, 1000],
@@ -151,6 +154,43 @@ function enduranceCandidates(activity: ActivityLike): Candidate[] {
   return out;
 }
 
+interface WodPayloadLike {
+  name?: string;
+  scoreType?: string;
+  level?: string;
+  resultTimeSec?: number | null;
+  resultRounds?: number | null;
+  resultReps?: number | null;
+  resultLoadKg?: number | null;
+  strengthBlock?: unknown;
+}
+
+const WOD_TIME_TYPES = new Set(["for_time", "rft", "chipper"]);
+const WOD_REP_TYPES = new Set(["for_reps", "tabata", "emom"]);
+
+function wodCandidates(payload: unknown): Candidate[] {
+  const p = (payload ?? {}) as WodPayloadLike;
+  const out: Candidate[] = [];
+  const name = (p.name ?? "").trim().toLowerCase();
+  const level = p.level ?? "rx";
+
+  if (name && p.scoreType) {
+    if (WOD_TIME_TYPES.has(p.scoreType) && (p.resultTimeSec ?? 0) > 0) {
+      out.push({ exerciseName: name, type: "wod_time", repRange: level, value: p.resultTimeSec as number, unit: "s" });
+    } else if (p.scoreType === "amrap" && p.resultRounds != null) {
+      out.push({ exerciseName: name, type: "wod_score", repRange: level, value: p.resultRounds, unit: "rounds" });
+    } else if (WOD_REP_TYPES.has(p.scoreType) && p.resultReps != null) {
+      out.push({ exerciseName: name, type: "wod_score", repRange: level, value: p.resultReps, unit: "reps" });
+    } else if (p.scoreType === "max_load" && p.resultLoadKg != null) {
+      out.push({ exerciseName: name, type: "wod_load", repRange: level, value: p.resultLoadKg, unit: "kg" });
+    }
+  }
+
+  // 1RM/carga do bloco de força da aula.
+  if (p.strengthBlock) out.push(...strengthCandidates(p.strengthBlock));
+  return out;
+}
+
 async function classCandidates(
   userId: mongoose.Types.ObjectId,
   activity: ActivityLike
@@ -260,6 +300,8 @@ export async function detectPRs(
       return applyAll(userId, activity, enduranceCandidates(activity), celebrate);
     case "class":
       return applyAll(userId, activity, await classCandidates(userId, activity), celebrate);
+    case "wod":
+      return applyAll(userId, activity, wodCandidates(activity.payload), celebrate);
     default:
       return [];
   }
@@ -279,7 +321,7 @@ export async function recomputeUserPRs(userId: mongoose.Types.ObjectId): Promise
   await PersonalRecord.deleteMany({ user: userId });
   const activities = await Activity.find({
     user: userId,
-    kind: { $in: ["strength", "endurance", "class"] },
+    kind: { $in: ["strength", "endurance", "class", "wod"] },
   }).sort({ startedAt: 1 });
   for (const a of activities) {
     await detectPRs(userId, a as unknown as ActivityLike, { celebrate: false });

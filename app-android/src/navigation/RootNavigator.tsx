@@ -28,6 +28,7 @@ import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
 import { RegisterClassScreen } from "../screens/RegisterClassScreen";
 import { RegisterGenericScreen } from "../screens/RegisterGenericScreen";
+import { RegisterWodScreen } from "../screens/RegisterWodScreen";
 import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
@@ -143,6 +144,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="RegisterGeneric"
             component={RegisterGenericScreen}
             options={{ headerShown: true, title: "Nova atividade", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="RegisterWod"
+            component={RegisterWodScreen}
+            options={{ headerShown: true, title: "Novo WOD", ...headerStyle }}
           />
           <AppStack.Screen
             name="TodayWorkout"

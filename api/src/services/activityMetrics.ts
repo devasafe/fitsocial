@@ -24,6 +24,7 @@ export function computeMetrics(input: ActivityCreateInput): Record<string, numbe
     }
     case "class":
     case "generic":
+    case "wod":
       return { minutes: Math.round(durationSec / 60) };
   }
 }

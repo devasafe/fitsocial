@@ -10,7 +10,7 @@ if (process.argv[1]?.includes("recomputePRs")) {
   connectDB()
     .then(async () => {
       const userIds = (await Activity.distinct("user", {
-        kind: { $in: ["strength", "endurance", "class"] },
+        kind: { $in: ["strength", "endurance", "class", "wod"] },
       })) as mongoose.Types.ObjectId[];
       for (const userId of userIds) {
         await recomputeUserPRs(userId);

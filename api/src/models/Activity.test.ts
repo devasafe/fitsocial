@@ -60,6 +60,22 @@ describe("activityCreateSchema — formatos da Fase 2b", () => {
     ).toThrow();
   });
 
+  it("aceita wod com bloco de força opcional", () => {
+    const parsed = activityCreateSchema.parse({
+      sportId: "crossfit",
+      kind: "wod",
+      payload: {
+        name: "Fran",
+        scoreType: "for_time",
+        level: "rx",
+        resultTimeSec: 252,
+        strengthBlock: { exercises: [{ name: "Back Squat", sets: [{ weightKg: 100, reps: 3 }] }] },
+      },
+    });
+    expect(parsed.kind).toBe("wod");
+    if (parsed.kind === "wod") expect(parsed.payload.level).toBe("rx");
+  });
+
   it("aceita generic e exige activityName; limita a 3 métricas custom", () => {
     const parsed = activityCreateSchema.parse({
       sportId: "outro",

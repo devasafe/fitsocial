@@ -116,6 +116,36 @@ describe("detectPRs — endurance (manual)", () => {
   });
 });
 
+async function logWod(over: Record<string, unknown>) {
+  const activity = await Activity.create({
+    user: userId,
+    sportId: "crossfit",
+    kind: "wod",
+    startedAt: new Date(),
+    payload: { name: "Fran", scoreType: "for_time", level: "rx", ...over },
+    metrics: {},
+  });
+  return detectPRs(userId, activity);
+}
+
+describe("detectPRs — wod", () => {
+  it("celebra melhor tempo de benchmark e separa por nível", async () => {
+    await logWod({ resultTimeSec: 300 }); // baseline Rx
+    const faster = await logWod({ resultTimeSec: 270 }); // Rx mais rápido
+    expect(faster.some((p) => p.type === "wod_time" && p.repRange === "rx")).toBe(true);
+
+    // Scaled é recorde SEPARADO — primeiro scaled é linha de base, não celebra.
+    const scaled = await logWod({ level: "scaled", resultTimeSec: 400 });
+    expect(scaled).toHaveLength(0);
+  });
+
+  it("extrai 1RM do bloco de força", async () => {
+    await logWod({ resultTimeSec: 250, strengthBlock: { exercises: [{ name: "Clean", sets: [{ type: "valida", weightKg: 60, reps: 3 }] }] } });
+    const news = await logWod({ resultTimeSec: 260, strengthBlock: { exercises: [{ name: "Clean", sets: [{ type: "valida", weightKg: 80, reps: 2 }] }] } });
+    expect(news.some((p) => p.type === "rm_estimado" && p.exerciseName === "Clean")).toBe(true);
+  });
+});
+
 describe("marcos de aula (class)", () => {
   it("crossedMilestone detecta o limiar cruzado", () => {
     expect(crossedMilestone("aulas", 49, 50)).toBe(50);

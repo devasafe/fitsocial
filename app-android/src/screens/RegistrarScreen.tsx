@@ -35,8 +35,10 @@ export function RegistrarScreen() {
       case "generic":
         nav.navigate("RegisterGeneric", { sportId: s.id });
         break;
+      case "wod":
+        nav.navigate("RegisterWod", { sportId: s.id });
+        break;
       default:
-        // wod ainda não tem tela (Fase 2d)
         Alert.alert("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
     }
   }
