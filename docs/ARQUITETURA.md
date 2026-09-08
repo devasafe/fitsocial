@@ -176,10 +176,36 @@ Entra por necessidade de feature, nunca antecipada:
 
 | Peça | Quando entra | Motivo |
 |---|---|---|
-| **Object storage** (Cloudflare R2 / S3) | Fase 1 (próxima) | Fotos hoje vão para o disco efêmero da Render e **somem** a cada redeploy. Dor real e pré-requisito de qualquer mídia. |
-| **Decisão de deploy** | Fase 1 | Render free dorme (cold start ~50s) e tem disco efêmero. Avaliar Render/Vercel pagos vs consolidar em VPS/Coolify. Decidir com números, não por inércia. |
+| **Object storage** (MinIO na VPS/Coolify) | Fase 1 ✅ código pronto | Fotos hoje vão para o disco efêmero da Render e **somem** a cada redeploy. Ver §6.1. |
+| **Decisão de deploy** | Adiada (fase própria) | Render free dorme (cold start ~50s) e tem disco efêmero. Alvo é VPS/Coolify, mas a migração é uma fase dedicada — não agora. |
 | **Fila + worker** (ex.: BullMQ/Redis) | Quando houver job assíncrono real | Processar rota de GPS, fan-out de push, cron de reajuste semanal. Não antes. |
 | **Índice geoespacial 2dsphere** | Se houver consulta geo | "Atividades/pessoas perto de mim". Só quando a feature existir. |
+
+### 6.1 Storage de imagens (Fase 1 — implementado)
+
+Camada plugável em `api/src/services/storage/`, espelhando o padrão de `services/ai/`:
+interface `StorageProvider`, factory `getStorageProvider()` por env `STORAGE_PROVIDER`,
+`setStorageProvider()` para testes. Duas implementações:
+
+- **`disk`** (default) — salva em `./uploads`; bom para dev. **Prod na Render continua
+  efêmero** enquanto o provider for `disk`.
+- **`s3`** — compatível com S3/R2/**MinIO** via `@aws-sdk/client-s3` (`forcePathStyle`).
+
+O upload (`POST /uploads`) usa `multer.memoryStorage()` → **`processImage`** (sharp:
+reencoda p/ JPEG **removendo EXIF** e reduz p/ ≤1600px) → `storage.save()`. URLs relativas
+do disco viram absolutas pelo host da requisição; URLs do S3 já são absolutas
+(`MEDIA_PUBLIC_BASE_URL`).
+
+**Decisão**: destino de produção = **MinIO self-hosted no Coolify (VPS do Asafe)**. Como o
+MinIO fala a API do S3, o mesmo código serve para R2/S3 depois — só trocar env, sem lock-in.
+
+**Para ligar em produção** (ação manual do Asafe, ainda não feita):
+1. No Coolify, subir o serviço **MinIO** com domínio público + HTTPS (Let's Encrypt).
+2. Criar um bucket (ex.: `fotos`) com leitura pública e gerar Access Key / Secret.
+3. Setar na Render: `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+   `S3_SECRET_ACCESS_KEY`, `MEDIA_PUBLIC_BASE_URL`.
+4. (Opcional) migrar imagens antigas — provavelmente já perdidas no disco efêmero; URLs
+   antigas apontando p/ `onrender.com/uploads/...` podem retornar 404. Pré-lançamento: aceitável.
 
 ## 7. Roadmap (fases)
 

@@ -1,7 +1,8 @@
 import express from "express";
 import cors from "cors";
 import { env } from "./config/env.js";
-import { uploadsRouter, UPLOADS_DIR } from "./routes/uploads.js";
+import { uploadsRouter } from "./routes/uploads.js";
+import { UPLOADS_DIR } from "./services/storage/disk.js";
 import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
 import { plansRouter } from "./routes/plans.js";

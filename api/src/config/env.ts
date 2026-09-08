@@ -21,6 +21,15 @@ export const env = {
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
   // Chave da YouTube Data API v3 (opcional). Sem ela, os vídeos de exercício degradam graciosamente.
   youtubeApiKey: process.env.YOUTUBE_API_KEY ?? "",
+  // Camada de storage plugável: "disk" (local, default) ou "s3" (S3/R2/MinIO).
+  storageProvider: process.env.STORAGE_PROVIDER ?? "disk",
+  s3Endpoint: process.env.S3_ENDPOINT ?? "",
+  s3Region: process.env.S3_REGION ?? "",
+  s3Bucket: process.env.S3_BUCKET ?? "",
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
+  // Base pública de onde as imagens são servidas (ex.: https://cdn.seu-dominio/fotos).
+  mediaPublicBaseUrl: process.env.MEDIA_PUBLIC_BASE_URL ?? "",
   // Segredo esperado no header Authorization do webhook do RevenueCat (opcional).
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
