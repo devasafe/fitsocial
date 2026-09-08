@@ -6,7 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Challenge, challengeCreateSchema, generateJoinCode } from "../models/Challenge.js";
 import { ChallengeMember } from "../models/ChallengeMember.js";
-import { ChallengePost, ChallengePostLike } from "../models/ChallengePost.js";
+import { ChallengePost, ChallengePostLike, ChallengePostComment } from "../models/ChallengePost.js";
 import { User } from "../models/User.js";
 import { computeScores } from "../services/challengeScore.js";
 
@@ -132,6 +132,7 @@ function serializePost(p: InstanceType<typeof ChallengePost>, likedIds: Set<stri
     text: p.text,
     imageUrl: p.imageUrl,
     likeCount: p.likeCount,
+    commentCount: p.commentCount,
     likedByMe: likedIds.has(p._id.toString()),
     createdAt: p.get("createdAt") as Date,
     author: {
@@ -216,6 +217,44 @@ challengesRouter.delete(
       await post.save();
     }
     res.json({ liked: false, likeCount: post.likeCount });
+  })
+);
+
+// Comentar num post do mural (só membros).
+challengesRouter.post(
+  "/:id/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.postId);
+    const post = await ChallengePost.findById(req.params.postId);
+    if (!post) throw new HttpError(404, "Post não encontrado");
+    await assertMember(post.challenge, req.user!._id);
+    const { text } = z.object({ text: z.string().min(1).max(500) }).parse(req.body);
+    const comment = await ChallengePostComment.create({ post: post._id, author: req.user!._id, text });
+    post.commentCount += 1;
+    await post.save();
+    await comment.populate("author", "name");
+    const a = comment.author as unknown as PostAuthor;
+    res.status(201).json({
+      data: { id: comment._id.toString(), text: comment.text, createdAt: comment.get("createdAt") as Date, author: { id: a._id.toString(), name: a.name } },
+    });
+  })
+);
+
+// Listar comentários de um post.
+challengesRouter.get(
+  "/:id/posts/:postId/comments",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.postId);
+    const comments = await ChallengePostComment.find({ post: req.params.postId })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .populate("author", "name");
+    res.json({
+      data: comments.map((c) => {
+        const a = c.author as unknown as PostAuthor;
+        return { id: c._id.toString(), text: c.text, createdAt: c.get("createdAt") as Date, author: { id: a._id.toString(), name: a.name } };
+      }),
+    });
   })
 );
 

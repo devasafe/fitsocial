@@ -124,4 +124,16 @@ describe("Desafios", () => {
     const unlike = await request(app).delete(`/challenges/${challengeId}/posts/${postId}/like`).set("Authorization", `Bearer ${tokenB}`);
     expect(unlike.body).toMatchObject({ liked: false, likeCount: 0 });
   });
+
+  it("comenta num post do mural e o comentário aparece", async () => {
+    const create = await request(app)
+      .post(`/challenges/${challengeId}/posts/${postId}/comments`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ text: "Vamos juntos!" });
+    expect(create.status).toBe(201);
+
+    const list = await request(app).get(`/challenges/${challengeId}/posts/${postId}/comments`).set("Authorization", `Bearer ${tokenA}`);
+    expect(list.status).toBe(200);
+    expect(list.body.data.some((c: { text: string }) => c.text === "Vamos juntos!")).toBe(true);
+  });
 });

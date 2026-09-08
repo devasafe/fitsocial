@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { NewPR } from "./activities";
 
 export interface CheckInEntry {
   exerciseName: string;
@@ -25,7 +26,7 @@ export function createCheckIn(
     shareText?: string;
   }
 ) {
-  return apiFetch<{ log: unknown; post: { id: string } | null }>("/checkins", {
+  return apiFetch<{ log: unknown; post: { id: string } | null; newPRs: NewPR[] }>("/checkins", {
     method: "POST",
     token,
     body: data,

@@ -13,11 +13,14 @@ import {
   listChallengePosts,
   createChallengePost,
   likeChallengePost,
+  listChallengeComments,
+  createChallengeComment,
   scoreLabel,
   scoreModeName,
   type Challenge,
   type LeaderRow,
   type ChallengePost,
+  type ChallengeComment,
 } from "../api/challenges";
 import { colors, spacing, radius } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -49,6 +52,9 @@ export function DesafioDetailScreen({ route }: Props) {
   const [joining, setJoining] = useState(false);
   const [text, setText] = useState("");
   const [posting, setPosting] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [comments, setComments] = useState<Record<string, ChallengeComment[]>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
@@ -112,6 +118,35 @@ export function DesafioDetailScreen({ route }: Props) {
       setPosts((prev) =>
         prev.map((p) => (p.id === post.id ? { ...p, likedByMe: !next, likeCount: p.likeCount + (next ? -1 : 1) } : p))
       );
+    }
+  }
+
+  async function toggleComments(postId: string) {
+    if (expanded === postId) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(postId);
+    if (!comments[postId]) {
+      try {
+        const c = await listChallengeComments(token!, id, postId);
+        setComments((prev) => ({ ...prev, [postId]: c }));
+      } catch {
+        setComments((prev) => ({ ...prev, [postId]: [] }));
+      }
+    }
+  }
+
+  async function sendComment(postId: string) {
+    const draft = (drafts[postId] ?? "").trim();
+    if (!draft) return;
+    try {
+      const c = await createChallengeComment(token!, id, postId, draft);
+      setComments((prev) => ({ ...prev, [postId]: [...(prev[postId] ?? []), c] }));
+      setDrafts((prev) => ({ ...prev, [postId]: "" }));
+      setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, commentCount: p.commentCount + 1 } : p)));
+    } catch (err) {
+      notify("Não deu para comentar", (err as Error).message);
     }
   }
 
@@ -217,19 +252,60 @@ export function DesafioDetailScreen({ route }: Props) {
                   </View>
                 </View>
                 <Txt variant="body">{p.text}</Txt>
-                <TouchableOpacity
-                  onPress={() => toggleLike(p)}
-                  activeOpacity={0.7}
-                  disabled={!challenge.isMember}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}
-                >
-                  <Txt variant="bodyStrong" color={p.likedByMe ? colors.danger : colors.text2}>
-                    {p.likedByMe ? "♥" : "♡"}
-                  </Txt>
-                  <Txt variant="label" tabular color={colors.text2}>
-                    {p.likeCount}
-                  </Txt>
-                </TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: spacing.lg }}>
+                  <TouchableOpacity
+                    onPress={() => toggleLike(p)}
+                    activeOpacity={0.7}
+                    disabled={!challenge.isMember}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}
+                  >
+                    <Txt variant="bodyStrong" color={p.likedByMe ? colors.danger : colors.text2}>
+                      {p.likedByMe ? "♥" : "♡"}
+                    </Txt>
+                    <Txt variant="label" tabular color={colors.text2}>
+                      {p.likeCount}
+                    </Txt>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => toggleComments(p.id)}
+                    activeOpacity={0.7}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}
+                  >
+                    <Txt variant="bodyStrong" color={colors.text2}>
+                      💬
+                    </Txt>
+                    <Txt variant="label" tabular color={colors.text2}>
+                      {p.commentCount}
+                    </Txt>
+                  </TouchableOpacity>
+                </View>
+
+                {expanded === p.id ? (
+                  <View style={{ gap: spacing.sm, marginTop: 2 }}>
+                    {(comments[p.id] ?? []).map((c) => (
+                      <View key={c.id}>
+                        <Txt variant="label" color={colors.text}>
+                          {c.author.name}
+                        </Txt>
+                        <Txt variant="body" color={colors.text2}>
+                          {c.text}
+                        </Txt>
+                      </View>
+                    ))}
+                    {challenge.isMember ? (
+                      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                        <TextInput
+                          value={drafts[p.id] ?? ""}
+                          onChangeText={(t) => setDrafts((prev) => ({ ...prev, [p.id]: t }))}
+                          placeholder="Comentar…"
+                          placeholderTextColor={colors.text3}
+                          style={{ flex: 1, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.chip, paddingHorizontal: spacing.md, paddingVertical: 8, color: colors.text }}
+                        />
+                        <Button title="Enviar" variant="secondary" size="sm" onPress={() => sendComment(p.id)} />
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
               </Card>
             ))
           )}

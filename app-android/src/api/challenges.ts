@@ -61,9 +61,17 @@ export interface ChallengePost {
   text: string;
   imageUrl: string;
   likeCount: number;
+  commentCount: number;
   likedByMe: boolean;
   createdAt: string;
   author: { id: string; name: string; username: string | null; avatarUrl: string };
+}
+
+export interface ChallengeComment {
+  id: string;
+  text: string;
+  createdAt: string;
+  author: { id: string; name: string };
 }
 
 export async function listChallengePosts(token: string, id: string): Promise<ChallengePost[]> {
@@ -79,6 +87,13 @@ export async function likeChallengePost(
   liked: boolean
 ): Promise<{ liked: boolean; likeCount: number }> {
   return apiFetch(`/challenges/${id}/posts/${postId}/like`, { method: liked ? "POST" : "DELETE", token });
+}
+
+export async function listChallengeComments(token: string, id: string, postId: string): Promise<ChallengeComment[]> {
+  return (await apiFetch<{ data: ChallengeComment[] }>(`/challenges/${id}/posts/${postId}/comments`, { token })).data;
+}
+export async function createChallengeComment(token: string, id: string, postId: string, text: string): Promise<ChallengeComment> {
+  return (await apiFetch<{ data: ChallengeComment }>(`/challenges/${id}/posts/${postId}/comments`, { method: "POST", body: { text }, token })).data;
 }
 
 export function scoreLabel(mode: ScoreMode, value: number): string {

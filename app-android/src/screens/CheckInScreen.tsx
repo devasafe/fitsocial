@@ -12,6 +12,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
+import { newPRMessage } from "../api/prs";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -160,15 +161,16 @@ export function CheckInScreen() {
 
     setSaving(true);
     try {
-      await createCheckIn(token!, {
+      const res = await createCheckIn(token!, {
         sessionDay: session.day,
         entries,
         shareToFeed: share,
         shareText: share ? `Concluí o treino: ${session.day}` : undefined,
       });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      notify("Treino salvo", share ? "Publicado no seu feed." : undefined);
-      nav.goBack();
+      const prMsg = newPRMessage(res.newPRs ?? []);
+      if (prMsg) notify(prMsg.title, prMsg.body, () => nav.goBack());
+      else notify("Treino salvo", share ? "Publicado no seu feed." : undefined, () => nav.goBack());
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);
     } finally {
