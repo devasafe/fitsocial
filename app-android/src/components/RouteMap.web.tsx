@@ -10,9 +10,10 @@ interface Props {
   points: GeoPoint[];
   sportId?: string;
   height?: number;
+  interactive?: boolean;
 }
 
-export function RouteMap({ points, sportId, height = 200 }: Props) {
+export function RouteMap({ points, sportId, height = 200, interactive = true }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lineRef = useRef<L.Polyline | null>(null);
@@ -20,10 +21,16 @@ export function RouteMap({ points, sportId, height = 200 }: Props) {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { zoomControl: false, attributionControl: true }).setView(
-      [-22.97, -43.18],
-      13
-    );
+    const map = L.map(containerRef.current, {
+      zoomControl: interactive,
+      attributionControl: true,
+      dragging: interactive,
+      touchZoom: interactive,
+      scrollWheelZoom: interactive,
+      doubleClickZoom: interactive,
+      boxZoom: interactive,
+      keyboard: interactive,
+    }).setView([-22.97, -43.18], 13);
     // Esri "Dark Gray Canvas" — basemap escuro keyless (base + rótulos).
     const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
     L.tileLayer(`${esri}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {

@@ -14,6 +14,7 @@ export function RouteSvg({
   points: GeoPoint[];
   sportId?: string;
   height?: number;
+  interactive?: boolean;
 }) {
   const stroke = sportColor(sportId);
 

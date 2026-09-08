@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Alert } from "react-native";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { View, Alert, TouchableOpacity, StyleSheet, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -8,7 +9,7 @@ import { RouteMap } from "../components/RouteMap";
 import { createActivity } from "../api/activities";
 import { newPRMessage } from "../api/prs";
 import { totalDistanceM, paceLabel, clock, type GeoPoint } from "../lib/geo";
-import { colors, spacing, sportColor } from "../theme";
+import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
 
@@ -18,17 +19,25 @@ type Status = "idle" | "recording" | "paused";
 export function LiveTrackScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const [status, setStatus] = useState<Status>("idle");
   const [points, setPoints] = useState<GeoPoint[]>([]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [accuracyM, setAccuracyM] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const subRef = useRef<Location.LocationSubscription | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTsRef = useRef(0);
   const elapsedBaseRef = useRef(0);
   const resumeMsRef = useRef(0);
+
+  // Em tela cheia, esconde o header nativo para o mapa ocupar tudo.
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: !fullscreen });
+  }, [fullscreen, navigation]);
 
   const pushLoc = useCallback((loc: Location.LocationObject) => {
     setAccuracyM(loc.coords.accuracy ?? null);
@@ -74,16 +83,11 @@ export function LiveTrackScreen({ route, navigation }: Props) {
     setPoints([]);
     setElapsedSec(0);
     setStatus("recording");
-
-    // Fix imediato — para não ficar preso em "aguardando" quando parado.
     try {
       const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       pushLoc(first);
     } catch {
-      Alert.alert(
-        "Sem sinal de GPS ainda",
-        "Não consegui um sinal agora. Em área aberta funciona melhor — vou continuar tentando."
-      );
+      Alert.alert("Sem sinal de GPS ainda", "Em área aberta funciona melhor — vou continuar tentando.");
     }
     await beginTracking();
   }
@@ -128,30 +132,34 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       ? "Toque em iniciar para gravar"
       : `${points.length} ponto(s)${accuracyM != null ? ` · precisão ~${Math.round(accuracyM)} m` : ""}`;
 
-  return (
-    <Screen scroll contentStyle={{ gap: spacing.card }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.sm }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
-        <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>
-      </View>
+  function controls() {
+    if (status === "idle") return <Button title="Iniciar" onPress={start} size="lg" glow />;
+    return (
+      <>
+        {status === "recording" ? (
+          <Button title="Pausar" variant="secondary" onPress={pause} />
+        ) : (
+          <Button title="Retomar" onPress={resume} size="lg" glow />
+        )}
+        <Button title="Finalizar e salvar" onPress={finish} loading={saving} size="lg" glow />
+      </>
+    );
+  }
 
-      <RouteMap points={points} sportId={sportId} height={220} />
-      <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
-        {statusLine}
-      </Txt>
-
-      <Card level={2}>
+  function stats(compact?: boolean) {
+    return (
+      <>
         <Txt variant="label" color={colors.text2}>
           Distância
         </Txt>
-        <Txt variant="metricHero" tabular color={sportColor(sportId)}>
+        <Txt variant={compact ? "metricLg" : "metricHero"} tabular color={sportColor(sportId)}>
           {(distanceM / 1000).toFixed(2)}
           <Txt variant="titleSection" color={colors.text2}>
             {" "}
             km
           </Txt>
         </Txt>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: spacing.md }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: spacing.sm }}>
           <View>
             <Txt variant="label" color={colors.text2}>
               Tempo
@@ -169,20 +177,73 @@ export function LiveTrackScreen({ route, navigation }: Props) {
             </Txt>
           </View>
         </View>
-      </Card>
+      </>
+    );
+  }
 
-      {status === "idle" ? (
-        <Button title="Iniciar" onPress={start} size="lg" glow />
-      ) : (
-        <>
-          {status === "recording" ? (
-            <Button title="Pausar" variant="secondary" onPress={pause} />
-          ) : (
-            <Button title="Retomar" onPress={resume} size="lg" glow />
-          )}
-          <Button title="Finalizar e salvar" onPress={finish} loading={saving} size="lg" glow />
-        </>
-      )}
-    </Screen>
+  return (
+    <>
+      <Screen scroll contentStyle={{ gap: spacing.card }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.sm }}>
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
+          <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>
+        </View>
+
+        {!fullscreen ? (
+          <TouchableOpacity activeOpacity={0.9} onPress={() => setFullscreen(true)}>
+            <View pointerEvents="none">
+              <RouteMap points={points} sportId={sportId} interactive={false} height={220} />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ height: 220, borderRadius: radius.card, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, alignItems: "center", justifyContent: "center" }}>
+            <Txt variant="label" color={colors.text3}>
+              Mapa em tela cheia
+            </Txt>
+          </View>
+        )}
+        <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
+          {statusLine}
+          {status !== "idle" ? " · toque no mapa para ampliar" : ""}
+        </Txt>
+
+        <Card level={2}>{stats()}</Card>
+
+        {controls()}
+      </Screen>
+
+      {fullscreen ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}>
+          <RouteMap key="full" points={points} sportId={sportId} interactive height={winH} />
+
+          <TouchableOpacity
+            onPress={() => setFullscreen(false)}
+            activeOpacity={0.85}
+            style={[styles.pill, { top: insets.top + 8, left: spacing.gutter }]}
+          >
+            <Txt variant="label" color={colors.text}>
+              ▾ Minimizar
+            </Txt>
+          </TouchableOpacity>
+
+          <View style={{ position: "absolute", left: spacing.gutter, right: spacing.gutter, bottom: insets.bottom + spacing.md, gap: spacing.sm }}>
+            <Card level={3}>{stats(true)}</Card>
+            {controls()}
+          </View>
+        </View>
+      ) : null}
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  pill: {
+    position: "absolute",
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.full,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+});
