@@ -6,8 +6,8 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from "react-native";
+import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { importPlan } from "../api/plans";
@@ -34,16 +34,16 @@ export function ImportPlanScreen() {
 
   async function handleImport() {
     if (text.trim().length < 10) {
-      Alert.alert("Texto muito curto", "Cole o texto do seu plano (treino e/ou dieta).");
+      notify("Texto muito curto", "Cole o texto do seu plano (treino e/ou dieta).");
       return;
     }
     setLoading(true);
     try {
       await importPlan(token!, text.trim());
-      Alert.alert("Plano importado", "Organizamos seu plano no app. Confira na tela inicial.");
+      notify("Plano importado", "Organizamos seu plano no app. Confira na tela inicial.");
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não deu para importar", (err as Error).message);
+      notify("Não deu para importar", (err as Error).message);
     } finally {
       setLoading(false);
     }

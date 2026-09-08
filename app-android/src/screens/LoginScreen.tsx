@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from "react-native";
+import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Field, Button, Txt } from "../components/ui";
@@ -19,7 +20,7 @@ export function LoginScreen({ navigation }: Props) {
     try {
       await login(email.trim(), password);
     } catch (err) {
-      Alert.alert("Não deu para entrar", (err as Error).message);
+      notify("Não deu para entrar", (err as Error).message);
     } finally {
       setLoading(false);
     }

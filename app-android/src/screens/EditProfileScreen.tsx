@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from "react-native";
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
@@ -23,7 +24,7 @@ export function EditProfileScreen() {
   async function pickImage() {
     if (Platform.OS !== "web") {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) { Alert.alert("Permissão necessária", "Autorize o acesso às fotos."); return; }
+      if (!perm.granted) { notify("Permissão necessária", "Autorize o acesso às fotos."); return; }
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (result.canceled) return;
@@ -40,7 +41,7 @@ export function EditProfileScreen() {
       const { url } = await uploadImage(token!, form);
       setAvatarUrl(url);
     } catch (e) {
-      Alert.alert("Não foi possível enviar a foto", (e as Error).message);
+      notify("Não foi possível enviar a foto", (e as Error).message);
     } finally {
       setUploading(false);
     }

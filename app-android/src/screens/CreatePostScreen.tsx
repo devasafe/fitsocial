@@ -5,11 +5,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   Image,
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
+import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
@@ -31,7 +31,7 @@ export function CreatePostScreen() {
     if (Platform.OS !== "web") {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Permissão necessária", "Autorize o acesso às fotos para adicionar uma imagem.");
+        notify("Permissão necessária", "Autorize o acesso às fotos para adicionar uma imagem.");
         return;
       }
     }
@@ -60,7 +60,7 @@ export function CreatePostScreen() {
       const { url } = await uploadImage(token!, form);
       setImageUrl(url);
     } catch (err) {
-      Alert.alert("Não foi possível enviar a foto", (err as Error).message);
+      notify("Não foi possível enviar a foto", (err as Error).message);
     } finally {
       setUploading(false);
     }
@@ -74,7 +74,7 @@ export function CreatePostScreen() {
       await createPost(token!, body, imageUrl ?? undefined);
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não foi possível postar", (err as Error).message);
+      notify("Não foi possível postar", (err as Error).message);
     } finally {
       setSaving(false);
     }

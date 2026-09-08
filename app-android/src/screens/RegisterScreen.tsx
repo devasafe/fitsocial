@@ -5,8 +5,8 @@ import {
   Platform,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Field, Button, Txt } from "../components/ui";
@@ -25,14 +25,14 @@ export function RegisterScreen({ navigation }: Props) {
 
   async function handleRegister() {
     if (password.length < 8) {
-      Alert.alert("Senha curta", "A senha precisa ter ao menos 8 caracteres.");
+      notify("Senha curta", "A senha precisa ter ao menos 8 caracteres.");
       return;
     }
     setLoading(true);
     try {
       await register(name.trim(), email.trim(), password, username || undefined);
     } catch (err) {
-      Alert.alert("Não foi possível cadastrar", (err as Error).message);
+      notify("Não foi possível cadastrar", (err as Error).message);
     } finally {
       setLoading(false);
     }

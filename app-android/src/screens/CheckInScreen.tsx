@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
-  Alert,
 } from "react-native";
+import { notify, confirmDialog } from "../lib/notify";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
@@ -121,10 +121,12 @@ export function CheckInScreen() {
   }, [rows, storageKey]);
 
   function handleReset() {
-    Alert.alert("Recomeçar treino?", "Isso limpa as marcações e as cargas deste treino.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Recomeçar", style: "destructive", onPress: () => setRows(makeRows()) },
-    ]);
+    confirmDialog(
+      "Recomeçar treino?",
+      "Isso limpa as marcações e as cargas deste treino.",
+      () => setRows(makeRows()),
+      "Recomeçar"
+    );
   }
 
   function toggleDone(i: number) {
@@ -152,7 +154,7 @@ export function CheckInScreen() {
       );
 
     if (entries.length === 0) {
-      Alert.alert("Nenhum exercício marcado", "Marque ao menos um exercício como feito.");
+      notify("Nenhum exercício marcado", "Marque ao menos um exercício como feito.");
       return;
     }
 
@@ -165,10 +167,10 @@ export function CheckInScreen() {
         shareText: share ? `Concluí o treino: ${session.day}` : undefined,
       });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      Alert.alert("Treino salvo", share ? "Publicado no seu feed." : undefined);
+      notify("Treino salvo", share ? "Publicado no seu feed." : undefined);
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não foi possível salvar", (err as Error).message);
+      notify("Não foi possível salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

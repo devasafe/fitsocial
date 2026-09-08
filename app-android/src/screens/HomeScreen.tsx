@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator } from "react-native";
+import { notify } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -25,7 +26,7 @@ export function HomeScreen() {
       setPlan(p);
       setStats(s.stats);
     } catch (err) {
-      Alert.alert("Erro", (err as Error).message);
+      notify("Erro", (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -46,7 +47,7 @@ export function HomeScreen() {
       if (err instanceof ApiHttpError && err.status === 402) {
         navigation.navigate("Subscription");
       } else {
-        Alert.alert("Não foi possível gerar o plano", (err as Error).message);
+        notify("Não foi possível gerar o plano", (err as Error).message);
       }
     } finally {
       setGenerating(false);
@@ -67,9 +68,9 @@ export function HomeScreen() {
     try {
       const { plan } = await adjustPlan(token!);
       setPlan(plan);
-      Alert.alert("Plano reajustado", "Seu coach atualizou o plano com base na sua evolução.");
+      notify("Plano reajustado", "Seu coach atualizou o plano com base na sua evolução.");
     } catch (err) {
-      Alert.alert("Não foi possível reajustar", (err as Error).message);
+      notify("Não foi possível reajustar", (err as Error).message);
     } finally {
       setAdjusting(false);
     }

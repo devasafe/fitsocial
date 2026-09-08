@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, StyleSheet, ScrollView } from "react-native";
+import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { devUpgrade } from "../api/billing";
@@ -23,7 +24,7 @@ export function SubscriptionScreen() {
     try {
       await devUpgrade(token!);
       await refreshUser();
-      Alert.alert(
+      notify(
         isPremium ? "Acesso Fundador desativado" : "Acesso Fundador ativado",
         isPremium
           ? "Sua conta voltou para o plano grátis."
@@ -31,7 +32,7 @@ export function SubscriptionScreen() {
       );
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não deu para atualizar", (err as Error).message);
+      notify("Não deu para atualizar", (err as Error).message);
     } finally {
       setLoading(false);
     }

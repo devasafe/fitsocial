@@ -8,8 +8,8 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from "react-native";
+import { notify, confirmDialog } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -56,15 +56,13 @@ export function CoachScreen() {
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
 
       if (res.planAdjusted) {
-        Alert.alert("Plano atualizado", "Seu coach ajustou o plano com base na conversa.");
+        notify("Plano atualizado", "Seu coach ajustou o plano com base na conversa.");
       } else if (res.premiumRequired) {
-        Alert.alert(
+        confirmDialog(
           "Recurso do plano Fundador",
           "O reajuste do plano pelo coach faz parte do acesso completo. Quer ver?",
-          [
-            { text: "Agora não", style: "cancel" },
-            { text: "Ver acesso", onPress: () => nav.navigate("Subscription") },
-          ]
+          () => nav.navigate("Subscription"),
+          "Ver acesso"
         );
       }
     } catch (err) {

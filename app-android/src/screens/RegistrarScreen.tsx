@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator, Alert } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator } from "react-native";
+import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -39,7 +40,7 @@ export function RegistrarScreen() {
         nav.navigate("RegisterWod", { sportId: s.id });
         break;
       default:
-        Alert.alert("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
+        notify("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
     }
   }
 
