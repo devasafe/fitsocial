@@ -1,16 +1,8 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  TouchableOpacity,
-  Alert,
-} from "react-native";
+import { View, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Field, PrimaryButton } from "../components/ui";
+import { Field, Button, Txt } from "../components/ui";
 import { colors, spacing } from "../theme";
 import type { AuthStackParams } from "../navigation/types";
 
@@ -27,7 +19,7 @@ export function LoginScreen({ navigation }: Props) {
     try {
       await login(email.trim(), password);
     } catch (err) {
-      Alert.alert("Não foi possível entrar", (err as Error).message);
+      Alert.alert("Não deu para entrar", (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -39,8 +31,12 @@ export function LoginScreen({ navigation }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.inner}>
-        <Text style={styles.logo}>FitSocial</Text>
-        <Text style={styles.subtitle}>Seu coach e sua comunidade fit num só lugar.</Text>
+        <Txt variant="metricLg" color={colors.lime} style={styles.logo}>
+          FitSocial
+        </Txt>
+        <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+          Seu treino, sua evolução e sua comunidade num só lugar.
+        </Txt>
 
         <Field
           label="E-mail"
@@ -58,15 +54,12 @@ export function LoginScreen({ navigation }: Props) {
           placeholder="••••••••"
         />
 
-        <PrimaryButton title="Entrar" onPress={handleLogin} loading={loading} />
+        <Button title="Entrar" onPress={handleLogin} loading={loading} size="lg" glow />
 
-        <TouchableOpacity
-          style={styles.link}
-          onPress={() => navigation.navigate("Register")}
-        >
-          <Text style={styles.linkText}>
-            Ainda não tem conta? <Text style={styles.linkStrong}>Criar conta</Text>
-          </Text>
+        <TouchableOpacity style={styles.link} onPress={() => navigation.navigate("Register")} activeOpacity={0.7}>
+          <Txt variant="body" color={colors.text2}>
+            Ainda não tem conta? <Txt variant="bodyStrong" color={colors.lime}>Criar conta</Txt>
+          </Txt>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -75,15 +68,8 @@ export function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  inner: { flex: 1, justifyContent: "center", padding: spacing.lg },
-  logo: { color: colors.primary, fontSize: 40, fontWeight: "800", textAlign: "center" },
-  subtitle: {
-    color: colors.textMuted,
-    textAlign: "center",
-    marginBottom: spacing.xl,
-    marginTop: spacing.sm,
-  },
+  inner: { flex: 1, justifyContent: "center", padding: spacing.gutter },
+  logo: { textAlign: "center" },
+  subtitle: { textAlign: "center", marginBottom: spacing.xl, marginTop: spacing.sm },
   link: { marginTop: spacing.lg, alignItems: "center" },
-  linkText: { color: colors.textMuted },
-  linkStrong: { color: colors.primary, fontWeight: "700" },
 });
