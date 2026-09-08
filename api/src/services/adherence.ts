@@ -1,4 +1,3 @@
-import type { WorkoutLogDoc } from "../models/WorkoutLog.js";
 import type { PlanData } from "../models/Plan.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -14,7 +13,7 @@ export interface CheckInStats {
   lastCheckIn: Date | null;
 }
 
-/** Calcula total, treinos na semana, streak e último check-in a partir dos logs. */
+/** Calcula total, treinos na semana, streak e último check-in a partir das datas. */
 export function computeStats(logs: { date: Date }[]): CheckInStats {
   if (logs.length === 0) {
     return { total: 0, week: 0, streak: 0, lastCheckIn: null };
@@ -44,18 +43,44 @@ export function computeStats(logs: { date: Date }[]): CheckInStats {
   return { total: logs.length, week, streak, lastCheckIn };
 }
 
-/** Monta um resumo textual de adesão para a IA usar no reajuste do plano. */
-export function buildAdherenceSummary(logs: WorkoutLogDoc[], plan: PlanData): string {
-  const stats = computeStats(logs);
+// ---- Adesão a partir de atividades (Activity) ----
+
+interface StrengthSetLike {
+  weightKg?: number;
+  reps?: number | null;
+  type?: string;
+}
+interface StrengthExerciseLike {
+  name: string;
+  sets: StrengthSetLike[];
+}
+interface StrengthPayloadLike {
+  exercises?: StrengthExerciseLike[];
+}
+export interface AdherenceActivity {
+  startedAt: Date;
+  kind: string;
+  payload: unknown;
+}
+
+/**
+ * Monta um resumo textual de adesão para a IA usar no reajuste do plano.
+ * Recebe as atividades já ordenadas da mais recente para a mais antiga.
+ */
+export function buildAdherenceSummary(activities: AdherenceActivity[], plan: PlanData): string {
+  const stats = computeStats(activities.map((a) => ({ date: a.startedAt })));
   const planned = plan.workout.daysPerWeek;
 
   // Última carga/reps registrada por exercício (progresso).
   const lastByExercise = new Map<string, string>();
-  for (const log of logs) {
-    for (const e of log.entries) {
-      if (!lastByExercise.has(e.exerciseName)) {
-        lastByExercise.set(e.exerciseName, `${e.weightKg ?? 0}kg x ${e.reps ?? 0}`);
-      }
+  for (const a of activities) {
+    if (a.kind !== "strength") continue;
+    const payload = a.payload as StrengthPayloadLike | null;
+    if (!payload?.exercises) continue;
+    for (const ex of payload.exercises) {
+      if (lastByExercise.has(ex.name)) continue;
+      const set = ex.sets.find((s) => s.type === "valida") ?? ex.sets[0];
+      lastByExercise.set(ex.name, `${set?.weightKg ?? 0}kg x ${set?.reps ?? 0}`);
     }
   }
 

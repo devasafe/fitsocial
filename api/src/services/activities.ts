@@ -1,0 +1,47 @@
+import type mongoose from "mongoose";
+import { Activity, type ActivityCreateInput } from "../models/Activity.js";
+import { Post } from "../models/Post.js";
+import { getSport } from "./sports.js";
+import { computeStrengthMetrics } from "./activityMetrics.js";
+
+export interface CreatedActivity {
+  activity: InstanceType<typeof Activity>;
+  post: InstanceType<typeof Post> | null;
+}
+
+/**
+ * Cria uma atividade (Fase 2a: kind "strength"), calcula as métricas e,
+ * opcionalmente, compartilha no feed criando um Post que a referencia.
+ * Reutilizado pelo cutover do check-in.
+ */
+export async function createActivity(
+  userId: mongoose.Types.ObjectId,
+  input: ActivityCreateInput
+): Promise<CreatedActivity> {
+  const metrics = computeStrengthMetrics(input.payload);
+
+  const activity = await Activity.create({
+    user: userId,
+    sportId: input.sportId,
+    kind: input.kind,
+    title: input.title ?? "",
+    startedAt: input.startedAt ?? new Date(),
+    durationSec: input.durationSec ?? 0,
+    visibility: input.visibility,
+    perceivedEffort: input.perceivedEffort,
+    feeling: input.feeling,
+    notes: input.notes ?? "",
+    planLink: input.planLink,
+    payload: input.payload,
+    metrics,
+  });
+
+  let post: InstanceType<typeof Post> | null = null;
+  if (input.shareToFeed) {
+    const sport = getSport(input.sportId);
+    const text = input.caption?.trim() || `Treino de ${sport?.label ?? input.sportId} concluído 💪`;
+    post = await Post.create({ author: userId, text, activity: activity._id });
+  }
+
+  return { activity, post };
+}

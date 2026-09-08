@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "try:gemini": "tsx src/scripts/tryGemini.ts",
-    "try:plan": "tsx src/scripts/tryPlan.ts"
+    "try:plan": "tsx src/scripts/tryPlan.ts",
+    "migrate:activities": "tsx src/scripts/migrateWorkoutLogsToActivities.ts",
+    "migrate:activities:rollback": "tsx src/scripts/migrateWorkoutLogsToActivities.ts --rollback"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

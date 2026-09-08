@@ -5,7 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import { Plan } from "../models/Plan.js";
-import { WorkoutLog } from "../models/WorkoutLog.js";
+import { Activity } from "../models/Activity.js";
 import { generatePlan, adjustPlan, importPlanFromText } from "../services/ai/planGenerator.js";
 import { buildAdherenceSummary } from "../services/adherence.js";
 import { backfillWorkoutKinds } from "../services/exerciseKind.js";
@@ -103,8 +103,8 @@ plansRouter.post(
       disclaimer: current.disclaimer,
     } as Parameters<typeof adjustPlan>[1];
 
-    const logs = await WorkoutLog.find({ user: user._id }).sort({ date: -1 }).limit(40);
-    const adherence = buildAdherenceSummary(logs, currentData);
+    const activities = await Activity.find({ user: user._id }).sort({ startedAt: -1 }).limit(40);
+    const adherence = buildAdherenceSummary(activities, currentData);
 
     const data = await adjustPlan(profile, currentData, adherence);
     const plan = await Plan.create({

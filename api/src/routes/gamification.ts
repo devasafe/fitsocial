@@ -6,7 +6,7 @@ import { HttpError } from "../utils/httpError.js";
 import { User } from "../models/User.js";
 import { Post } from "../models/Post.js";
 import { Follow } from "../models/Follow.js";
-import { WorkoutLog } from "../models/WorkoutLog.js";
+import { Activity } from "../models/Activity.js";
 import { computeStats } from "../services/adherence.js";
 import { computeBadges } from "../services/badges.js";
 
@@ -17,12 +17,12 @@ const DAY = 24 * 60 * 60 * 1000;
 
 /** Junta as estatísticas de um usuário e devolve suas badges. */
 async function badgesFor(userId: mongoose.Types.ObjectId | string) {
-  const [logs, posts, followers] = await Promise.all([
-    WorkoutLog.find({ user: userId }).select("date"),
+  const [acts, posts, followers] = await Promise.all([
+    Activity.find({ user: userId }).select("startedAt"),
     Post.countDocuments({ author: userId }),
     Follow.countDocuments({ following: userId }),
   ]);
-  const stats = computeStats(logs);
+  const stats = computeStats(acts.map((a) => ({ date: a.startedAt })));
   return computeBadges({
     totalCheckIns: stats.total,
     streak: stats.streak,
@@ -50,8 +50,8 @@ gamificationRouter.get(
     const ids = [...following.map((f) => f.following), me];
 
     const weekAgo = new Date(Date.now() - 7 * DAY);
-    const agg = await WorkoutLog.aggregate<{ _id: mongoose.Types.ObjectId; week: number }>([
-      { $match: { user: { $in: ids }, date: { $gte: weekAgo } } },
+    const agg = await Activity.aggregate<{ _id: mongoose.Types.ObjectId; week: number }>([
+      { $match: { user: { $in: ids }, startedAt: { $gte: weekAgo } } },
       { $group: { _id: "$user", week: { $sum: 1 } } },
     ]);
     const weekMap = new Map(agg.map((a) => [a._id.toString(), a.week]));

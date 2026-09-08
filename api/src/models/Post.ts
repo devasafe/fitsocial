@@ -6,6 +6,8 @@ const postSchema = new Schema(
     text: { type: String, required: true, trim: true, maxlength: 2000 },
     // MVP: URL da imagem (upload real de arquivo fica para uma etapa posterior).
     imageUrl: { type: String, default: "" },
+    // Quando o post é o compartilhamento de uma atividade registrada (opcional).
+    activity: { type: Schema.Types.ObjectId, ref: "Activity", default: undefined },
     // Denormalizados para o feed não precisar contar a cada leitura.
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },

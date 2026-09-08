@@ -1,21 +1,51 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { WorkoutLog, createLogSchema } from "../models/WorkoutLog.js";
+import { createLogSchema } from "../models/WorkoutLog.js";
+import { Activity, activityCreateSchema } from "../models/Activity.js";
 import { Plan } from "../models/Plan.js";
-import { Post } from "../models/Post.js";
+import { createActivity } from "../services/activities.js";
 import { computeStats } from "../services/adherence.js";
 
 export const checkinsRouter = Router();
 checkinsRouter.use(requireAuth);
 
-function serializeLog(log: InstanceType<typeof WorkoutLog>) {
+// ---- Adaptação entre o contrato legado do check-in e o Activity(strength) ----
+// O app continua enviando/recebendo o formato de "entries"; por baixo persistimos
+// uma Activity de força. durationMin/distanceKm de cardio são preservados no set
+// (legado de transição até o formato endurance da Fase 2b).
+
+interface ReadSet {
+  weightKg?: number;
+  reps?: number | null;
+  durationMin?: number | null;
+  distanceKm?: number | null;
+}
+interface ReadExercise {
+  name: string;
+  sets?: ReadSet[];
+}
+function exercisesOf(a: InstanceType<typeof Activity>): ReadExercise[] {
+  return ((a.payload as { exercises?: ReadExercise[] } | null)?.exercises ?? []);
+}
+
+function serializeLog(a: InstanceType<typeof Activity>) {
+  const planLink = a.planLink as { sessionDay?: string } | undefined;
   return {
-    id: log._id.toString(),
-    sessionDay: log.sessionDay,
-    date: log.date,
-    entries: log.entries,
-    notes: log.notes,
+    id: a._id.toString(),
+    sessionDay: planLink?.sessionDay ?? "",
+    date: a.startedAt,
+    entries: exercisesOf(a).map((ex) => {
+      const s = ex.sets?.[0] ?? {};
+      return {
+        exerciseName: ex.name,
+        weightKg: s.weightKg ?? 0,
+        reps: s.reps ?? 0,
+        durationMin: s.durationMin ?? 0,
+        distanceKm: s.distanceKm ?? 0,
+      };
+    }),
+    notes: a.notes,
   };
 }
 
@@ -28,31 +58,46 @@ checkinsRouter.post(
 
     const currentPlan = await Plan.findOne({ user: user._id }).sort({ version: -1 });
 
-    const log = await WorkoutLog.create({
-      user: user._id,
-      planVersion: currentPlan?.version ?? 0,
-      sessionDay: body.sessionDay,
-      entries: body.entries,
+    const input = activityCreateSchema.parse({
+      sportId: "musculacao",
+      kind: "strength",
+      planLink: { planVersion: currentPlan?.version ?? 0, sessionDay: body.sessionDay },
+      payload: {
+        variant: "musculacao",
+        exercises: body.entries.map((e, i) => ({
+          name: e.exerciseName,
+          order: i,
+          sets: [
+            {
+              weightKg: e.weightKg ?? 0,
+              reps: e.reps ?? null,
+              durationMin: e.durationMin ?? null,
+              distanceKm: e.distanceKm ?? null,
+            },
+          ],
+        })),
+      },
       notes: body.notes ?? "",
+      shareToFeed: body.shareToFeed,
+      caption: body.shareToFeed
+        ? body.shareText?.trim() || `Concluí o treino: ${body.sessionDay} 💪`
+        : undefined,
     });
 
-    let post = null;
-    if (body.shareToFeed) {
-      const text = body.shareText?.trim() || `Concluí o treino: ${body.sessionDay} 💪`;
-      const created = await Post.create({ author: user._id, text });
-      post = { id: created._id.toString() };
-    }
-
-    res.status(201).json({ log: serializeLog(log), post });
+    const { activity, post } = await createActivity(user._id, input);
+    res.status(201).json({
+      log: serializeLog(activity),
+      post: post ? { id: post._id.toString() } : null,
+    });
   })
 );
 
-// Estatísticas de acompanhamento (streak, semana, total).
+// Estatísticas de acompanhamento (streak, semana, total) — qualquer treino conta.
 checkinsRouter.get(
   "/stats",
   asyncHandler(async (req, res) => {
-    const logs = await WorkoutLog.find({ user: req.user!._id }).select("date");
-    res.json({ stats: computeStats(logs) });
+    const acts = await Activity.find({ user: req.user!._id }).select("startedAt");
+    res.json({ stats: computeStats(acts.map((a) => ({ date: a.startedAt }))) });
   })
 );
 
@@ -60,10 +105,8 @@ checkinsRouter.get(
 checkinsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const logs = await WorkoutLog.find({ user: req.user!._id })
-      .sort({ date: -1 })
-      .limit(30);
-    res.json({ logs: logs.map(serializeLog) });
+    const acts = await Activity.find({ user: req.user!._id }).sort({ startedAt: -1 }).limit(30);
+    res.json({ logs: acts.map(serializeLog) });
   })
 );
 
@@ -71,20 +114,19 @@ checkinsRouter.get(
 checkinsRouter.get(
   "/progress",
   asyncHandler(async (req, res) => {
-    const logs = await WorkoutLog.find({ user: req.user!._id }).sort({ date: 1 });
+    const acts = await Activity.find({ user: req.user!._id }).sort({ startedAt: 1 });
 
     const byExercise = new Map<string, { date: Date; weightKg: number }[]>();
-    for (const log of logs) {
-      const day = log.date;
-      for (const e of log.entries) {
-        if (!e.weightKg || e.weightKg <= 0) continue; // pula cardio/sem peso
-        const points = byExercise.get(e.exerciseName) ?? [];
-        points.push({ date: day, weightKg: e.weightKg });
-        byExercise.set(e.exerciseName, points);
+    for (const a of acts) {
+      for (const ex of exercisesOf(a)) {
+        const weights = (ex.sets ?? []).map((s) => s.weightKg ?? 0).filter((w) => w > 0);
+        if (weights.length === 0) continue; // pula cardio/sem peso
+        const points = byExercise.get(ex.name) ?? [];
+        points.push({ date: a.startedAt, weightKg: Math.max(...weights) });
+        byExercise.set(ex.name, points);
       }
     }
 
-    // Mais treinados primeiro.
     const exercises = [...byExercise.entries()]
       .map(([name, points]) => ({ name, points }))
       .sort((a, b) => b.points.length - a.points.length);
@@ -97,17 +139,18 @@ checkinsRouter.get(
 checkinsRouter.get(
   "/cardio-progress",
   asyncHandler(async (req, res) => {
-    const logs = await WorkoutLog.find({ user: req.user!._id }).sort({ date: 1 });
+    const acts = await Activity.find({ user: req.user!._id }).sort({ startedAt: 1 });
 
     const byExercise = new Map<string, { date: Date; durationMin: number; distanceKm: number }[]>();
-    for (const log of logs) {
-      for (const e of log.entries) {
-        const durationMin = e.durationMin ?? 0;
-        const distanceKm = e.distanceKm ?? 0;
+    for (const a of acts) {
+      for (const ex of exercisesOf(a)) {
+        const s = ex.sets?.[0] ?? {};
+        const durationMin = s.durationMin ?? 0;
+        const distanceKm = s.distanceKm ?? 0;
         if (durationMin <= 0 && distanceKm <= 0) continue; // não é cardio
-        const points = byExercise.get(e.exerciseName) ?? [];
-        points.push({ date: log.date, durationMin, distanceKm });
-        byExercise.set(e.exerciseName, points);
+        const points = byExercise.get(ex.name) ?? [];
+        points.push({ date: a.startedAt, durationMin, distanceKm });
+        byExercise.set(ex.name, points);
       }
     }
 

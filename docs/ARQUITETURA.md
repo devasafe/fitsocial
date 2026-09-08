@@ -32,9 +32,9 @@ FitSocial/
 - **Banco** → MongoDB Atlas (cluster0), Network Access `0.0.0.0/0`.
 - **IA** → Google Gemini free tier (`gemini-2.5-flash` é o modelo que funciona no free tier).
 
-> ⚠️ **Não é** VPS/Coolify, e **não** tem containers `api`+`worker`. A decisão de deploy para
-> produto real (Render pago vs Vercel pago vs consolidar em VPS/Coolify) está em aberto —
-> ver §6.
+> **Decisão (set/2026):** o alvo de produção é a **VPS do Asafe via Coolify** — a API e o web
+> saem da Render/Vercel e passam a rodar na VPS, junto do MinIO. A **migração em si é tarefa
+> de ops, ainda não executada**; até lá o que está no ar segue na Render/Vercel. Ver §6.
 
 ## 2. Estrutura do backend (real)
 
@@ -177,7 +177,7 @@ Entra por necessidade de feature, nunca antecipada:
 | Peça | Quando entra | Motivo |
 |---|---|---|
 | **Object storage** (MinIO na VPS/Coolify) | Fase 1 ✅ código pronto | Fotos hoje vão para o disco efêmero da Render e **somem** a cada redeploy. Ver §6.1. |
-| **Decisão de deploy** | Adiada (fase própria) | Render free dorme (cold start ~50s) e tem disco efêmero. Alvo é VPS/Coolify, mas a migração é uma fase dedicada — não agora. |
+| **Migração de deploy p/ VPS** | Decidida; execução = fase de ops | Alvo: API + web + MinIO na VPS/Coolify, aposentando Render+Vercel. Migração ainda não executada. |
 | **Fila + worker** (ex.: BullMQ/Redis) | Quando houver job assíncrono real | Processar rota de GPS, fan-out de push, cron de reajuste semanal. Não antes. |
 | **Índice geoespacial 2dsphere** | Se houver consulta geo | "Atividades/pessoas perto de mim". Só quando a feature existir. |
 
@@ -198,14 +198,17 @@ do disco viram absolutas pelo host da requisição; URLs do S3 já são absoluta
 
 **Decisão**: destino de produção = **MinIO self-hosted no Coolify (VPS do Asafe)**. Como o
 MinIO fala a API do S3, o mesmo código serve para R2/S3 depois — só trocar env, sem lock-in.
+Com a API rodando na **mesma VPS** (decisão VPS-only, §1), o `S3_ENDPOINT` pode ser o endereço
+**interno** do MinIO na rede Docker do Coolify; só o `MEDIA_PUBLIC_BASE_URL` (leitura das fotos)
+precisa de domínio público + HTTPS.
 
 **Para ligar em produção** (ação manual do Asafe, ainda não feita):
-1. No Coolify, subir o serviço **MinIO** com domínio público + HTTPS (Let's Encrypt).
+1. No Coolify, subir o serviço **MinIO**; expor uma rota pública HTTPS só para leitura dos objetos.
 2. Criar um bucket (ex.: `fotos`) com leitura pública e gerar Access Key / Secret.
-3. Setar na Render: `STORAGE_PROVIDER=s3`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
-   `S3_SECRET_ACCESS_KEY`, `MEDIA_PUBLIC_BASE_URL`.
-4. (Opcional) migrar imagens antigas — provavelmente já perdidas no disco efêmero; URLs
-   antigas apontando p/ `onrender.com/uploads/...` podem retornar 404. Pré-lançamento: aceitável.
+3. Setar as env da API: `STORAGE_PROVIDER=s3`, `S3_ENDPOINT` (interno), `S3_BUCKET`,
+   `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `MEDIA_PUBLIC_BASE_URL` (público).
+4. (Opcional) imagens antigas provavelmente já se perderam no disco efêmero; URLs antigas
+   `onrender.com/uploads/...` podem dar 404. Pré-lançamento: aceitável.
 
 ## 7. Roadmap (fases)
 
@@ -215,13 +218,26 @@ implementação → verificação.
 | Fase | Tema |
 |---|---|
 | 0 | Fundação: estes documentos + `CLAUDE.md` + higiene de segredos ✅ |
-| 1 | Object storage (fotos persistentes) + decisão de deploy |
-| 2 | Domínio `Activity` (multiesporte) + migração reversível do WorkoutLog |
+| 1 | Object storage (fotos persistentes) — código ✅ (ligar = ops) |
+| 2 | Domínio `Activity` (multiesporte) — decomposto abaixo |
 | 3 | GPS / rota (captura no app, geo no banco, resumo, mapa) |
 | 4 | Desafios em grupo |
 | 5 | Engajamento & monetização (push, RevenueCat real, gamificação expandida) |
 
-Dependências: Fase 3 e 4 dependem da Fase 2.
+**Decomposição da Fase 2** (a spec completa dos esportes/payloads é `docs/ESPORTES.md`):
+
+| Fatia | Escopo | Estado |
+|---|---|---|
+| 2a | Modelo `Activity` + **strength** + seed dos 21 `sportId` + migração reversível do WorkoutLog + share no feed + adesão (qualquer treino conta) + CRUD `/activities` | ✅ feito |
+| 2b | Formatos `endurance` (manual), `class`, `generic` (nível rápido) | pendente |
+| 2c | Motor de detecção de PR + métricas | pendente |
+| 2d | Formato `wod` + seed de movimentos/benchmarks | pendente |
+| 2e | Bibliotecas de seed (exercícios, calistenia, LPO, swim drills, gradings) | pendente |
+| 2.1 | `climb` + `match` | pendente |
+
+Dependências: 2b–2e e as Fases 3/4 dependem da 2a. A 2a fez o **cutover do check-in**: `/checkins`
+mantém o contrato, mas persiste `Activity(strength)`; `WorkoutLog` fica só como fonte da
+migração (`npm run migrate:activities` / `:rollback`) até ser aposentado numa limpeza futura.
 
 ## 8. Protocolo de trabalho
 

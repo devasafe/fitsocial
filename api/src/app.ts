@@ -7,6 +7,8 @@ import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
 import { plansRouter } from "./routes/plans.js";
 import { socialRouter } from "./routes/social.js";
+import { activitiesRouter } from "./routes/activities.js";
+import { sportsRouter } from "./routes/sports.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
@@ -31,6 +33,8 @@ export function createApp() {
   app.use("/onboarding", onboardingRouter);
   app.use("/plans", plansRouter);
   app.use("/social", socialRouter);
+  app.use("/activities", activitiesRouter);
+  app.use("/sports", sportsRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
   app.use("/coach", coachRouter);

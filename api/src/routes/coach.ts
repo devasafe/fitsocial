@@ -6,7 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { CoachMessage } from "../models/CoachMessage.js";
 import { Profile, profileDataSchema, type ProfileData } from "../models/Profile.js";
 import { Plan, type PlanData } from "../models/Plan.js";
-import { WorkoutLog } from "../models/WorkoutLog.js";
+import { Activity } from "../models/Activity.js";
 import { computeStats, buildAdherenceSummary } from "../services/adherence.js";
 import { runCoachTurn, COACH_GREETING, type CoachContext } from "../services/ai/coach.js";
 import { adjustPlan } from "../services/ai/planGenerator.js";
@@ -43,10 +43,10 @@ coachRouter.post(
     await CoachMessage.create({ user: user._id, role: "user", content });
 
     // Monta o contexto do coach (ficha + plano + adesão + tier).
-    const [profileDoc, planDoc, logs, history] = await Promise.all([
+    const [profileDoc, planDoc, activities, history] = await Promise.all([
       Profile.findOne({ user: user._id }),
       Plan.findOne({ user: user._id }).sort({ version: -1 }),
-      WorkoutLog.find({ user: user._id }).sort({ date: -1 }).limit(40),
+      Activity.find({ user: user._id }).sort({ startedAt: -1 }).limit(40),
       CoachMessage.find({ user: user._id }).sort({ createdAt: 1 }).limit(20),
     ]);
 
@@ -65,7 +65,7 @@ coachRouter.post(
     const ctx: CoachContext = {
       profile,
       plan,
-      stats: computeStats(logs),
+      stats: computeStats(activities.map((a) => ({ date: a.startedAt }))),
       tier: user.tier === "premium" ? "premium" : "free",
     };
 
@@ -81,7 +81,7 @@ coachRouter.post(
     let premiumRequired = false;
     if (turn.action === "adjust_plan") {
       if (user.tier === "premium" && profile && planDoc) {
-        const adherence = buildAdherenceSummary(logs, plan!);
+        const adherence = buildAdherenceSummary(activities, plan!);
         const data = await adjustPlan(profile, plan!, adherence);
         await Plan.create({ user: user._id, version: planDoc.version + 1, ...data });
         planAdjusted = true;
