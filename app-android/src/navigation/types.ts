@@ -31,6 +31,7 @@ export type AppStackParams = {
   Desafios: undefined;
   CriarDesafio: undefined;
   DesafioDetail: { id: string };
+  Diario: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
   RegisterActivity: { sportId: string };

@@ -36,6 +36,7 @@ import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
 import { DesafiosScreen } from "../screens/DesafiosScreen";
 import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
 import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
+import { DiarioScreen } from "../screens/DiarioScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -250,6 +251,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="DesafioDetail"
             component={DesafioDetailScreen}
             options={{ headerShown: true, title: "Desafio", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Diario"
+            component={DiarioScreen}
+            options={{ headerShown: true, title: "Diário alimentar", ...headerStyle }}
           />
         </>
       )}
