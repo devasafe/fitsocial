@@ -22,10 +22,22 @@ export function RegistrarScreen() {
   }, [token]);
 
   function pick(s: Sport) {
-    if (s.kind === "strength") {
-      nav.navigate("RegisterActivity", { sportId: s.id });
-    } else {
-      Alert.alert("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
+    switch (s.kind) {
+      case "strength":
+        nav.navigate("RegisterActivity", { sportId: s.id });
+        break;
+      case "endurance":
+        nav.navigate("RegisterEndurance", { sportId: s.id });
+        break;
+      case "class":
+        nav.navigate("RegisterClass", { sportId: s.id });
+        break;
+      case "generic":
+        nav.navigate("RegisterGeneric", { sportId: s.id });
+        break;
+      default:
+        // wod ainda não tem tela (Fase 2d)
+        Alert.alert("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
     }
   }
 

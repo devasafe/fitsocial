@@ -82,11 +82,11 @@ describe("Activities", () => {
     expect(post?.text).toBe("PR hoje!");
   });
 
-  it("rejeita kind não suportado na 2a (400)", async () => {
+  it("rejeita kind desconhecido (400)", async () => {
     const res = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ kind: "endurance" }));
+      .send(strengthBody({ kind: "xadrez" }));
     expect(res.status).toBe(400);
   });
 
@@ -146,5 +146,36 @@ describe("Activities", () => {
 
     const asB = await request(app).get(`/activities/${id}`).set("Authorization", `Bearer ${tokenB}`);
     expect(asB.status).toBe(200);
+  });
+});
+
+describe("Activities — formatos 2b (endurance/class/generic)", () => {
+  it("cria corrida (endurance) com métricas de pace", async () => {
+    const res = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 1800, payload: { distanceM: 5000 } });
+    expect(res.status).toBe(201);
+    expect(res.body.data.kind).toBe("endurance");
+    expect(res.body.data.metrics.distanceKm).toBe(5);
+    expect(res.body.data.metrics.avgPaceSecPerKm).toBe(360);
+  });
+
+  it("cria aula (class)", async () => {
+    const res = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ sportId: "jiu_jitsu", kind: "class", durationSec: 3600, payload: { modality: "jiu_jitsu" } });
+    expect(res.status).toBe(201);
+    expect(res.body.data.metrics.minutes).toBe(60);
+  });
+
+  it("cria atividade genérica", async () => {
+    const res = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ sportId: "outro", kind: "generic", durationSec: 1200, payload: { activityName: "Surf" } });
+    expect(res.status).toBe(201);
+    expect(res.body.data.metrics.minutes).toBe(20);
   });
 });

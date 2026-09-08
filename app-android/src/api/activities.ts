@@ -10,17 +10,35 @@ export interface StrengthExerciseInput {
   name: string;
   sets: StrengthSetInput[];
 }
-export interface CreateActivityInput {
+
+interface CommonInput {
   sportId: string;
-  kind: "strength";
   title?: string;
   durationSec?: number;
   visibility?: "private" | "followers" | "public";
   notes?: string;
-  payload: { variant?: string; exercises: StrengthExerciseInput[] };
   shareToFeed?: boolean;
   caption?: string;
 }
+
+export type CreateActivityInput =
+  | (CommonInput & { kind: "strength"; payload: { variant?: string; exercises: StrengthExerciseInput[] } })
+  | (CommonInput & {
+      kind: "endurance";
+      payload: { subType?: string; distanceM: number; elevationGainM?: number | null };
+    })
+  | (CommonInput & {
+      kind: "class";
+      payload: { modality: string; sessionType?: string; gi?: boolean | null; rounds?: number | null };
+    })
+  | (CommonInput & {
+      kind: "generic";
+      payload: {
+        activityName: string;
+        description?: string | null;
+        customMetrics?: { label: string; value: string; unit?: string | null }[];
+      };
+    });
 
 export interface Activity {
   id: string;
@@ -31,7 +49,7 @@ export interface Activity {
   durationSec: number;
   visibility: "private" | "followers" | "public";
   notes: string;
-  metrics: { volumeTotalKg?: number; seriesValidas?: number };
+  metrics: Record<string, number>;
 }
 
 export async function createActivity(

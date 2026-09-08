@@ -24,9 +24,12 @@ export type AppStackParams = {
   PostDetail: { post: Post };
   ImportPlan: undefined;
   History: undefined;
-  // Registro de atividade multiesporte (Fase 2a).
+  // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
   RegisterActivity: { sportId: string };
+  RegisterEndurance: { sportId: string };
+  RegisterClass: { sportId: string };
+  RegisterGeneric: { sportId: string };
 };
 
 // Abas inferiores dentro de "Tabs": Hoje · Feed · (+) · Coach · Perfil.

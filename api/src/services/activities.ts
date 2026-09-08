@@ -2,7 +2,7 @@ import type mongoose from "mongoose";
 import { Activity, type ActivityCreateInput } from "../models/Activity.js";
 import { Post } from "../models/Post.js";
 import { getSport } from "./sports.js";
-import { computeStrengthMetrics } from "./activityMetrics.js";
+import { computeMetrics } from "./activityMetrics.js";
 
 export interface CreatedActivity {
   activity: InstanceType<typeof Activity>;
@@ -18,7 +18,7 @@ export async function createActivity(
   userId: mongoose.Types.ObjectId,
   input: ActivityCreateInput
 ): Promise<CreatedActivity> {
-  const metrics = computeStrengthMetrics(input.payload);
+  const metrics = computeMetrics(input);
 
   const activity = await Activity.create({
     user: userId,

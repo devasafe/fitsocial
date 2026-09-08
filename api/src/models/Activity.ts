@@ -41,11 +41,58 @@ export const strengthPayloadSchema = z.object({
 
 export type StrengthPayload = z.infer<typeof strengthPayloadSchema>;
 
-// ---- Entrada de criação (Fase 2a: só kind "strength") ----
+// ---- Payloads dos demais formatos (Fase 2b, caminho rápido) ----
+// Nível mínimo do docs/ESPORTES.md §5/§7/§8. GPS/rota (Fase 3), intervalos,
+// SWOLF, submissions, etc. ficam para fatias posteriores.
 
-export const activityCreateSchema = z.object({
+export const endurancePayloadSchema = z.object({
+  subType: z
+    .enum(["rua", "trilha", "esteira", "indoor", "piscina", "aguas_abertas", "ergometro", "escada"])
+    .optional(),
+  distanceM: z.number().min(0).max(1_000_000).default(0),
+  elevationGainM: z.number().min(0).max(30_000).nullish(),
+});
+export type EndurancePayload = z.infer<typeof endurancePayloadSchema>;
+
+export const classPayloadSchema = z.object({
+  modality: z.string().min(1).max(60),
+  sessionType: z
+    .enum([
+      "tecnica",
+      "drill",
+      "sparring",
+      "aula_completa",
+      "condicionamento",
+      "competicao",
+      "seminario",
+      "open_mat",
+    ])
+    .optional(),
+  gi: z.boolean().nullish(),
+  rounds: z.number().int().min(0).max(100).nullish(),
+});
+export type ClassPayload = z.infer<typeof classPayloadSchema>;
+
+export const genericPayloadSchema = z.object({
+  activityName: z.string().min(1).max(80),
+  description: z.string().max(2000).nullish(),
+  customMetrics: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(40),
+        value: z.string().min(1).max(40),
+        unit: z.string().max(20).nullish(),
+      })
+    )
+    .max(3)
+    .optional(),
+});
+export type GenericPayload = z.infer<typeof genericPayloadSchema>;
+
+// ---- Entrada de criação (união discriminada por kind) ----
+
+const baseCreateFields = {
   sportId: z.string().refine(isValidSport, "Esporte inválido"),
-  kind: z.literal("strength"),
   title: z.string().max(120).optional(),
   startedAt: z.coerce.date().optional(),
   durationSec: z.number().int().min(0).max(86_400).optional(),
@@ -56,11 +103,17 @@ export const activityCreateSchema = z.object({
   planLink: z
     .object({ planVersion: z.number().int().min(0), sessionDay: z.string().min(1) })
     .optional(),
-  payload: strengthPayloadSchema,
   // Compartilhamento no feed (cria um Post referenciando a atividade).
   shareToFeed: z.boolean().optional(),
   caption: z.string().max(2000).optional(),
-});
+};
+
+export const activityCreateSchema = z.discriminatedUnion("kind", [
+  z.object({ ...baseCreateFields, kind: z.literal("strength"), payload: strengthPayloadSchema }),
+  z.object({ ...baseCreateFields, kind: z.literal("endurance"), payload: endurancePayloadSchema }),
+  z.object({ ...baseCreateFields, kind: z.literal("class"), payload: classPayloadSchema }),
+  z.object({ ...baseCreateFields, kind: z.literal("generic"), payload: genericPayloadSchema }),
+]);
 
 export type ActivityCreateInput = z.infer<typeof activityCreateSchema>;
 

@@ -1,8 +1,31 @@
-import type { StrengthPayload } from "../models/Activity.js";
+import type { StrengthPayload, ActivityCreateInput } from "../models/Activity.js";
 
 export interface StrengthMetrics {
   volumeTotalKg: number;
   seriesValidas: number;
+}
+
+/**
+ * Métricas desnormalizadas por formato (Fase 2b). Motor de PR (1RM, melhor-5k,
+ * DOTS…) é de uma fatia posterior.
+ */
+export function computeMetrics(input: ActivityCreateInput): Record<string, number> {
+  const durationSec = input.durationSec ?? 0;
+  switch (input.kind) {
+    case "strength": {
+      const m = computeStrengthMetrics(input.payload);
+      return { volumeTotalKg: m.volumeTotalKg, seriesValidas: m.seriesValidas };
+    }
+    case "endurance": {
+      const distanceKm = input.payload.distanceM / 1000;
+      const avgPaceSecPerKm = distanceKm > 0 && durationSec > 0 ? durationSec / distanceKm : 0;
+      const speedKmh = durationSec > 0 ? distanceKm / (durationSec / 3600) : 0;
+      return { distanceKm, avgPaceSecPerKm, speedKmh };
+    }
+    case "class":
+    case "generic":
+      return { minutes: Math.round(durationSec / 60) };
+  }
 }
 
 /**
