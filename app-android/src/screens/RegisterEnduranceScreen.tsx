@@ -11,6 +11,9 @@ import type { AppStackParams } from "../navigation/types";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterEndurance">;
 
+// Esportes onde faz sentido gravar com GPS.
+const GPS_SPORTS = new Set(["corrida", "trail", "caminhada", "ciclismo", "natacao"]);
+
 // Ritmo em mm:ss por km a partir de km e minutos (só exibição).
 function paceLabel(km: number, min: number): string {
   if (km <= 0 || min <= 0) return "—";
@@ -64,6 +67,21 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
         <Txt variant="titleScreen">{label}</Txt>
       </View>
+
+      {GPS_SPORTS.has(sportId) ? (
+        <>
+          <Button
+            title="Gravar com GPS"
+            onPress={() => navigation.navigate("LiveTrack", { sportId })}
+            size="lg"
+            glow
+            style={{ marginBottom: spacing.md }}
+          />
+          <Txt variant="label" color={colors.text3} style={{ marginBottom: spacing.md, textAlign: "center" }}>
+            ou registre manualmente
+          </Txt>
+        </>
+      ) : null}
 
       <Card style={{ marginBottom: spacing.section }}>
         <View style={{ flexDirection: "row", gap: spacing.card }}>

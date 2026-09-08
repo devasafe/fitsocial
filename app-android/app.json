@@ -20,6 +20,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O FitSocial usa sua localização para gravar o percurso do seu treino."
+        }
+      ]
+    ]
   }
 }

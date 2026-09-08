@@ -25,7 +25,12 @@ export type CreateActivityInput =
   | (CommonInput & { kind: "strength"; payload: { variant?: string; exercises: StrengthExerciseInput[] } })
   | (CommonInput & {
       kind: "endurance";
-      payload: { subType?: string; distanceM: number; elevationGainM?: number | null };
+      payload: {
+        subType?: string;
+        distanceM: number;
+        elevationGainM?: number | null;
+        points?: { lat: number; lng: number; t?: number; ele?: number }[];
+      };
     })
   | (CommonInput & {
       kind: "class";
