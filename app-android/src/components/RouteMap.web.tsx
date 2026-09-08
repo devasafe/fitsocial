@@ -17,6 +17,7 @@ export function RouteMap({ points, sportId, height = 200, interactive = true }: 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const lineRef = useRef<L.Polyline | null>(null);
+  const markerRef = useRef<L.CircleMarker | null>(null);
   const stroke = sportColor(sportId);
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export function RouteMap({ points, sportId, height = 200, interactive = true }: 
       map.remove();
       mapRef.current = null;
       lineRef.current = null;
+      markerRef.current = null;
     };
   }, []);
 
@@ -54,8 +56,21 @@ export function RouteMap({ points, sportId, height = 200, interactive = true }: 
     const latlngs = points.map((p) => [p.lat, p.lng] as [number, number]);
     if (lineRef.current) lineRef.current.setLatLngs(latlngs);
     else lineRef.current = L.polyline(latlngs, { color: stroke, weight: 4 }).addTo(map);
+
+    // Marcador "você está aqui" no último ponto.
+    const here = latlngs[latlngs.length - 1];
+    if (markerRef.current) markerRef.current.setLatLng(here);
+    else
+      markerRef.current = L.circleMarker(here, {
+        radius: 7,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: stroke,
+        fillOpacity: 1,
+      }).addTo(map);
+
     if (latlngs.length >= 2) map.fitBounds(latlngs, { padding: [30, 30], maxZoom: 16 });
-    else map.setView(latlngs[0], 15);
+    else map.setView(here, 15);
   }, [points, stroke]);
 
   return (
