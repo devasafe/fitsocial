@@ -20,14 +20,17 @@ export function RouteMap({ points, sportId, height = 200 }: Props) {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, { zoomControl: false, attributionControl: false }).setView(
+    const map = L.map(containerRef.current, { zoomControl: false, attributionControl: true }).setView(
       [-22.97, -43.18],
       13
     );
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
-      subdomains: "abcd",
-      maxZoom: 19,
+    // Esri "Dark Gray Canvas" — basemap escuro keyless (base + rótulos).
+    const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas";
+    L.tileLayer(`${esri}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
+      maxZoom: 16,
+      attribution: "© Esri",
     }).addTo(map);
+    L.tileLayer(`${esri}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16 }).addTo(map);
     mapRef.current = map;
     // Garante o tamanho correto após o layout do react-native-web.
     setTimeout(() => map.invalidateSize(), 0);
