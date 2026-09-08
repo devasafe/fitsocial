@@ -138,13 +138,24 @@ function distLabel(m: number): string {
 }
 
 function enduranceCandidates(activity: ActivityLike): Candidate[] {
-  const distanceM = (activity.payload as { distanceM?: number } | null)?.distanceM ?? 0;
+  const payload = activity.payload as
+    | { distanceM?: number; bestEfforts?: { distanceM: number; timeSec: number }[] }
+    | null;
+  const distanceM = payload?.distanceM ?? 0;
   const durationSec = activity.durationSec ?? 0;
   const out: Candidate[] = [];
+
   if (distanceM > 0) {
     out.push({ exerciseName: activity.sportId, type: "best_dist", repRange: null, value: distanceM, unit: "m" });
   }
-  if (distanceM > 0 && durationSec > 0) {
+
+  if (payload?.bestEfforts && payload.bestEfforts.length > 0) {
+    // Track de GPS: melhor trecho real por janela deslizante (§5.3).
+    for (const e of payload.bestEfforts) {
+      out.push({ exerciseName: activity.sportId, type: "best_time", repRange: distLabel(e.distanceM), value: e.timeSec, unit: "s" });
+    }
+  } else if (distanceM > 0 && durationSec > 0) {
+    // Registro manual: tempo estimado pelo pace médio.
     for (const target of ENDURANCE_TARGETS[activity.sportId] ?? []) {
       if (target > distanceM) continue;
       const impliedTime = Math.round(durationSec * (target / distanceM));

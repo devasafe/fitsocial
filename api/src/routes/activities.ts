@@ -8,6 +8,7 @@ import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models
 import { Follow } from "../models/Follow.js";
 import { createActivity } from "../services/activities.js";
 import { computeStrengthMetrics } from "../services/activityMetrics.js";
+import { parseGpx } from "../services/gpx.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 
 export const activitiesRouter = Router();
@@ -47,6 +48,20 @@ activitiesRouter.post(
       data: serializeActivity(activity),
       meta: { sharedPostId: post?._id.toString() ?? null, newPRs },
     });
+  })
+);
+
+// Importa um arquivo GPX como atividade de endurance (o servidor deriva o track).
+const importGpxSchema = z.object({ sportId: z.string(), gpx: z.string().min(1) });
+activitiesRouter.post(
+  "/import-gpx",
+  asyncHandler(async (req, res) => {
+    const { sportId, gpx } = importGpxSchema.parse(req.body);
+    const points = parseGpx(gpx);
+    if (points.length < 2) throw new HttpError(400, "GPX sem pontos de trajeto suficientes");
+    const input = activityCreateSchema.parse({ sportId, kind: "endurance", payload: { points } });
+    const { activity, newPRs } = await createActivity(req.user!._id, input);
+    res.status(201).json({ data: serializeActivity(activity), meta: { newPRs } });
   })
 );
 

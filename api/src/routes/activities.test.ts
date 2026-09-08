@@ -221,3 +221,41 @@ describe("Recordes de força (PR)", () => {
     expect(res.body.data.some((p: { exerciseName: string }) => p.exerciseName === "Agachamento")).toBe(true);
   });
 });
+
+describe("Track de GPS (endurance, Fase 3a)", () => {
+  function track(secPerSeg: number) {
+    const points = [];
+    for (let i = 0; i <= 15; i++) points.push({ lat: 0, lng: i * 0.001, t: i * secPerSeg });
+    return points;
+  }
+
+  it("cria endurance com track: deriva distância, polyline e melhores trechos", async () => {
+    const first = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ sportId: "corrida", kind: "endurance", payload: { points: track(10) } });
+    expect(first.status).toBe(201);
+    expect(first.body.data.metrics.distanceKm).toBeGreaterThan(1);
+    expect(typeof first.body.data.payload.polyline).toBe("string");
+    expect(first.body.meta.newPRs).toHaveLength(0); // linha de base
+
+    const faster = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ sportId: "corrida", kind: "endurance", payload: { points: track(7) } });
+    expect(faster.body.meta.newPRs.some((p: { type: string }) => p.type === "best_time")).toBe(true);
+  });
+
+  it("importa um GPX como atividade", async () => {
+    const gpx = `<gpx><trkseg>
+      <trkpt lat="0" lon="0"><time>2026-01-10T10:00:00Z</time></trkpt>
+      <trkpt lat="0" lon="0.01"><time>2026-01-10T10:02:00Z</time></trkpt>
+    </trkseg></gpx>`;
+    const res = await request(app)
+      .post("/activities/import-gpx")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ sportId: "corrida", gpx });
+    expect(res.status).toBe(201);
+    expect(res.body.data.metrics.distanceKm).toBeGreaterThan(0);
+  });
+});

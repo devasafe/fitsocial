@@ -51,6 +51,19 @@ export const endurancePayloadSchema = z.object({
     .optional(),
   distanceM: z.number().min(0).max(1_000_000).default(0),
   elevationGainM: z.number().min(0).max(30_000).nullish(),
+  // Track de GPS (Fase 3a): quando presente, distância/tempo/melhores trechos
+  // são derivados dele no servidor.
+  points: z
+    .array(
+      z.object({
+        lat: z.number(),
+        lng: z.number(),
+        t: z.number().optional(),
+        ele: z.number().optional(),
+      })
+    )
+    .max(100_000)
+    .optional(),
 });
 export type EndurancePayload = z.infer<typeof endurancePayloadSchema>;
 

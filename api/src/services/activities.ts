@@ -4,6 +4,7 @@ import { Post } from "../models/Post.js";
 import { getSport } from "./sports.js";
 import { computeMetrics } from "./activityMetrics.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
+import { processTrack } from "./trackProcessing.js";
 
 export interface CreatedActivity {
   activity: InstanceType<typeof Activity>;
@@ -20,7 +21,31 @@ export async function createActivity(
   userId: mongoose.Types.ObjectId,
   input: ActivityCreateInput
 ): Promise<CreatedActivity> {
-  const metrics = computeMetrics(input);
+  let storedPayload: unknown = input.payload;
+  let durationSec = input.durationSec ?? 0;
+  let metrics = computeMetrics(input);
+
+  // Fase 3a: endurance com track de GPS — distância/tempo/melhores trechos
+  // derivados do percurso no servidor.
+  if (input.kind === "endurance" && input.payload.points && input.payload.points.length >= 2) {
+    const track = processTrack(input.payload.points);
+    durationSec = track.elapsedTimeSec || durationSec;
+    storedPayload = {
+      ...input.payload,
+      distanceM: track.distanceM,
+      elevationGainM: track.elevationGainM,
+      polyline: track.polyline,
+      splits: track.splits,
+      bestEfforts: track.bestEfforts,
+    };
+    const distanceKm = track.distanceM / 1000;
+    metrics = {
+      distanceKm,
+      avgPaceSecPerKm: distanceKm > 0 && durationSec > 0 ? durationSec / distanceKm : 0,
+      speedKmh: durationSec > 0 ? distanceKm / (durationSec / 3600) : 0,
+      elevationGainM: track.elevationGainM,
+    };
+  }
 
   const activity = await Activity.create({
     user: userId,
@@ -28,13 +53,13 @@ export async function createActivity(
     kind: input.kind,
     title: input.title ?? "",
     startedAt: input.startedAt ?? new Date(),
-    durationSec: input.durationSec ?? 0,
+    durationSec,
     visibility: input.visibility,
     perceivedEffort: input.perceivedEffort,
     feeling: input.feeling,
     notes: input.notes ?? "",
     planLink: input.planLink,
-    payload: input.payload,
+    payload: storedPayload,
     metrics,
   });
 
