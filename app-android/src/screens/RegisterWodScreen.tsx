@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Switch, Alert } from "react-native";
+import { View, Switch } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
@@ -50,7 +51,7 @@ export function RegisterWodScreen({ route, navigation }: Props) {
 
   async function save() {
     if (!name.trim()) {
-      Alert.alert("Nome do WOD", "Diga qual foi o WOD (ex.: Fran) ou 'WOD do dia'.");
+      notify("Nome do WOD", "Diga qual foi o WOD (ex.: Fran) ou 'WOD do dia'.");
       return;
     }
     const payload: WodPayload = { name: name.trim(), scoreType, level };
@@ -69,10 +70,10 @@ export function RegisterWodScreen({ route, navigation }: Props) {
         caption: share ? caption.trim() || undefined : undefined,
       });
       const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
       else navigation.navigate("Tabs");
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

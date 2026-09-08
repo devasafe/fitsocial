@@ -162,10 +162,11 @@ export function HomeScreen() {
           )}
 
           {/* Atalhos */}
-          <View style={{ flexDirection: "row", gap: spacing.card }}>
-            <Button title="Ranking" variant="secondary" onPress={() => navigation.navigate("Leaderboard")} style={{ flex: 1 }} />
-            <Button title="Evolução" variant="secondary" onPress={() => navigation.navigate("History")} style={{ flex: 1 }} />
-            <Button title="Recordes" variant="secondary" onPress={() => navigation.navigate("MeusPRs")} style={{ flex: 1 }} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.card }}>
+            <Button title="Atividades" variant="secondary" onPress={() => navigation.navigate("MinhasAtividades")} style={{ flexBasis: "47%", flexGrow: 1 }} />
+            <Button title="Recordes" variant="secondary" onPress={() => navigation.navigate("MeusPRs")} style={{ flexBasis: "47%", flexGrow: 1 }} />
+            <Button title="Ranking" variant="secondary" onPress={() => navigation.navigate("Leaderboard")} style={{ flexBasis: "47%", flexGrow: 1 }} />
+            <Button title="Evolução" variant="secondary" onPress={() => navigation.navigate("History")} style={{ flexBasis: "47%", flexGrow: 1 }} />
           </View>
 
           {/* Estratégia do coach */}

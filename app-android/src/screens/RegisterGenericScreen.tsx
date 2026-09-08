@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Switch, Alert } from "react-native";
+import { View, Switch } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
@@ -24,7 +25,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
 
   async function save() {
     if (!name.trim()) {
-      Alert.alert("Dê um nome à atividade", "Ex.: surf, skate, escalada…");
+      notify("Dê um nome à atividade", "Ex.: surf, skate, escalada…");
       return;
     }
     const minN = Number(min.replace(",", ".")) || 0;
@@ -49,7 +50,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
       });
       navigation.navigate("Tabs");
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

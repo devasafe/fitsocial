@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { View, Alert, TouchableOpacity, StyleSheet, useWindowDimensions } from "react-native";
+import { View, TouchableOpacity, StyleSheet, useWindowDimensions } from "react-native";
+import { notify } from "../lib/notify";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -75,7 +76,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   async function start() {
     const { status: perm } = await Location.requestForegroundPermissionsAsync();
     if (perm !== "granted") {
-      Alert.alert("Localização necessária", "Libere o acesso à localização para gravar o percurso.");
+      notify("Localização necessária", "Libere o acesso à localização para gravar o percurso.");
       return;
     }
     startTsRef.current = Date.now();
@@ -87,7 +88,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       const first = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       pushLoc(first);
     } catch {
-      Alert.alert("Sem sinal de GPS ainda", "Em área aberta funciona melhor — vou continuar tentando.");
+      notify("Sem sinal de GPS ainda", "Em área aberta funciona melhor — vou continuar tentando.");
     }
     await beginTracking();
   }
@@ -106,7 +107,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   async function finish() {
     if (status === "recording") pause();
     if (points.length < 2) {
-      Alert.alert("Percurso muito curto", "Ainda não deu para captar o trajeto. Continue ou tente de novo.");
+      notify("Percurso muito curto", "Ainda não deu para captar o trajeto. Continue ou tente de novo.");
       return;
     }
     setSaving(true);
@@ -117,10 +118,10 @@ export function LiveTrackScreen({ route, navigation }: Props) {
         payload: { distanceM: 0, points: points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ele: p.ele })) },
       });
       const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
       else navigation.navigate("Tabs");
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

@@ -31,6 +31,8 @@ import { RegisterGenericScreen } from "../screens/RegisterGenericScreen";
 import { RegisterWodScreen } from "../screens/RegisterWodScreen";
 import { LiveTrackScreen } from "../screens/LiveTrackScreen";
 import { MeusPRsScreen } from "../screens/MeusPRsScreen";
+import { MinhasAtividadesScreen } from "../screens/MinhasAtividadesScreen";
+import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -220,6 +222,16 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="MeusPRs"
             component={MeusPRsScreen}
             options={{ headerShown: true, title: "Meus recordes", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="MinhasAtividades"
+            component={MinhasAtividadesScreen}
+            options={{ headerShown: true, title: "Minhas atividades", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="ActivityDetail"
+            component={ActivityDetailScreen}
+            options={{ headerShown: true, title: "Atividade", ...headerStyle }}
           />
         </>
       )}

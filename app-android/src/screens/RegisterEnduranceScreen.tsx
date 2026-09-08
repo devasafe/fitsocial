@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Switch, Alert } from "react-native";
+import { View, Switch } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
@@ -38,7 +39,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
 
   async function save() {
     if (kmN <= 0 && minN <= 0) {
-      Alert.alert("Preencha o treino", "Informe a distância e/ou o tempo.");
+      notify("Preencha o treino", "Informe a distância e/ou o tempo.");
       return;
     }
     setSaving(true);
@@ -52,10 +53,10 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         caption: share ? caption.trim() || undefined : undefined,
       });
       const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
       else navigation.navigate("Tabs");
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

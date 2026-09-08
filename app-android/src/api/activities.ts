@@ -69,6 +69,12 @@ export interface Activity {
   visibility: "private" | "followers" | "public";
   notes: string;
   metrics: Record<string, number>;
+  payload?: unknown;
+}
+
+export async function getActivity(token: string, id: string): Promise<Activity> {
+  const res = await apiFetch<{ data: Activity }>(`/activities/${id}`, { token });
+  return res.data;
 }
 
 export interface NewPR {

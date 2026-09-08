@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, Switch, Alert } from "react-native";
+import { View, Switch } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
@@ -33,7 +34,7 @@ export function RegisterClassScreen({ route, navigation }: Props) {
   async function save() {
     const minN = Number(min.replace(",", ".")) || 0;
     if (minN <= 0) {
-      Alert.alert("Informe a duração", "Quantos minutos durou a aula/treino?");
+      notify("Informe a duração", "Quantos minutos durou a aula/treino?");
       return;
     }
     setSaving(true);
@@ -47,10 +48,10 @@ export function RegisterClassScreen({ route, navigation }: Props) {
         caption: share ? caption.trim() || undefined : undefined,
       });
       const msg = newPRMessage(res.meta.newPRs ?? []);
-      if (msg) Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      if (msg) notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
       else navigation.navigate("Tabs");
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }

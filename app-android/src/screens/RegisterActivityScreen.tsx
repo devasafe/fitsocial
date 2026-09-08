@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { View, TextInput, TouchableOpacity, Switch, Alert } from "react-native";
+import { View, TextInput, TouchableOpacity, Switch } from "react-native";
+import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
@@ -99,7 +100,7 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
       }));
 
     if (payloadExercises.length === 0) {
-      Alert.alert("Adicione um exercício", "Dê um nome a pelo menos um exercício para salvar.");
+      notify("Adicione um exercício", "Dê um nome a pelo menos um exercício para salvar.");
       return;
     }
 
@@ -115,12 +116,12 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
       });
       const msg = newPRMessage(res.meta.newPRs ?? []);
       if (msg) {
-        Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+        notify(msg.title, msg.body, () => navigation.navigate("Tabs"));
       } else {
         navigation.navigate("Tabs");
       }
     } catch (err) {
-      Alert.alert("Não deu para salvar", (err as Error).message);
+      notify("Não deu para salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }
