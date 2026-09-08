@@ -37,6 +37,7 @@ import { DesafiosScreen } from "../screens/DesafiosScreen";
 import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
 import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
 import { DiarioScreen } from "../screens/DiarioScreen";
+import { NotificacoesScreen } from "../screens/NotificacoesScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -256,6 +257,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Diario"
             component={DiarioScreen}
             options={{ headerShown: true, title: "Diário alimentar", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Notificacoes"
+            component={NotificacoesScreen}
+            options={{ headerShown: true, title: "Notificações", ...headerStyle }}
           />
         </>
       )}

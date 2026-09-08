@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
+import { listNotifications } from "../api/notifications";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -16,6 +17,7 @@ export function HomeScreen() {
   const { user, token, logout } = useAuth();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
+  const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -30,6 +32,10 @@ export function HomeScreen() {
     } finally {
       setLoading(false);
     }
+    // Contador do sino — best-effort, nunca quebra o carregamento da Home.
+    listNotifications(token!)
+      .then((res) => setUnread(res.unread))
+      .catch(() => {});
   }, [token]);
 
   useFocusEffect(
@@ -102,11 +108,36 @@ export function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity onPress={logout} activeOpacity={0.7}>
-          <Txt variant="label" color={colors.text3}>
-            Sair
-          </Txt>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+          <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} style={{ paddingHorizontal: 2 }}>
+            <Txt variant="titleCard">🔔</Txt>
+            {unread > 0 && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -4,
+                  right: -6,
+                  minWidth: 16,
+                  height: 16,
+                  borderRadius: 8,
+                  paddingHorizontal: 4,
+                  backgroundColor: colors.lime,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Txt variant="caption" color={colors.onLime} style={{ fontSize: 10, lineHeight: 14 }}>
+                  {unread > 9 ? "9+" : unread}
+                </Txt>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={logout} activeOpacity={0.7}>
+            <Txt variant="label" color={colors.text3}>
+              Sair
+            </Txt>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {!plan ? (

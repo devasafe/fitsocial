@@ -9,6 +9,7 @@ import { ChallengeMember } from "../models/ChallengeMember.js";
 import { ChallengePost, ChallengePostLike, ChallengePostComment } from "../models/ChallengePost.js";
 import { User } from "../models/User.js";
 import { computeScores } from "../services/challengeScore.js";
+import { createNotification } from "../services/notifications.js";
 
 export const challengesRouter = Router();
 challengesRouter.use(requireAuth);
@@ -56,11 +57,21 @@ challengesRouter.post(
     const { code } = z.object({ code: z.string().min(1) }).parse(req.body);
     const c = await Challenge.findOne({ joinCode: code.trim().toUpperCase() });
     if (!c) throw new HttpError(404, "Desafio não encontrado");
-    await ChallengeMember.updateOne(
+    const joinResult = await ChallengeMember.updateOne(
       { challenge: c._id, user: req.user!._id },
       { $setOnInsert: { challenge: c._id, user: req.user!._id, joinedAt: new Date() } },
       { upsert: true }
     );
+    if (joinResult.upsertedCount) {
+      await createNotification({
+        userId: c.creator,
+        actorId: req.user!._id,
+        type: "challenge_join",
+        text: `${req.user!.name} entrou no seu desafio "${c.name}"`,
+        targetKind: "challenge",
+        targetId: c._id,
+      });
+    }
     res.status(201).json({ data: await withCount(c) });
   })
 );

@@ -19,3 +19,5 @@ app-android/web-build/
 *.p12
 *.key
 *.mobileprovision
+
+.vercel

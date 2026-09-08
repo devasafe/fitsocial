@@ -9,6 +9,7 @@ import { Post } from "../models/Post.js";
 import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
 import { Comment } from "../models/Comment.js";
+import { createNotification } from "../services/notifications.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -142,6 +143,14 @@ socialRouter.post(
     if (result.upsertedCount) {
       post.likeCount += 1;
       await post.save();
+      await createNotification({
+        userId: post.author,
+        actorId: req.user!._id,
+        type: "like",
+        text: `${req.user!.name} curtiu seu post`,
+        targetKind: "post",
+        targetId: post._id,
+      });
     }
     res.json({ liked: true, likeCount: post.likeCount });
   })
@@ -176,11 +185,21 @@ socialRouter.post(
     const target = await User.findById(targetId);
     if (!target) throw new HttpError(404, "Usuário não encontrado");
 
-    await Follow.updateOne(
+    const followResult = await Follow.updateOne(
       { follower: req.user!._id, following: target._id },
       { $setOnInsert: { follower: req.user!._id, following: target._id } },
       { upsert: true }
     );
+    if (followResult.upsertedCount) {
+      await createNotification({
+        userId: target._id,
+        actorId: req.user!._id,
+        type: "follow",
+        text: `${req.user!.name} começou a te seguir`,
+        targetKind: "profile",
+        targetId: req.user!._id,
+      });
+    }
     res.json({ following: true });
   })
 );
@@ -254,6 +273,14 @@ socialRouter.post(
     const comment = await Comment.create({ post: post._id, author: req.user!._id, text });
     post.commentCount += 1;
     await post.save();
+    await createNotification({
+      userId: post.author,
+      actorId: req.user!._id,
+      type: "comment",
+      text: `${req.user!.name} comentou no seu post`,
+      targetKind: "post",
+      targetId: post._id,
+    });
 
     await comment.populate("author", "name");
     res.status(201).json({ comment: serializeComment(comment) });
