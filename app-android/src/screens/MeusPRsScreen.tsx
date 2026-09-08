@@ -2,10 +2,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card } from "../components/ui";
-import { listPRs, prTypeLabel, type PersonalRecord } from "../api/prs";
+import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
 import { colors, spacing } from "../theme";
+import { sportLabel } from "../lib/sportLabel";
 
-const TYPE_ORDER: Record<string, number> = { carga_max: 0, rm_estimado: 1, carga_faixa: 2 };
+const TYPE_ORDER: Record<string, number> = {
+  carga_max: 0,
+  rm_estimado: 1,
+  carga_faixa: 2,
+  best_dist: 0,
+  best_time: 1,
+  aulas: 0,
+  horas: 1,
+};
 
 export function MeusPRsScreen() {
   const { token } = useAuth();
@@ -50,31 +59,29 @@ export function MeusPRsScreen() {
           </Txt>
         </Card>
       ) : (
-        byExercise.map(([exercise, records]) => (
-          <Card key={exercise} sport="musculacao">
-            <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
-              {exercise}
-            </Txt>
-            {records.map((r) => (
-              <View
-                key={r.id}
-                style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingVertical: 6 }}
-              >
-                <Txt variant="label" color={colors.text2}>
-                  {prTypeLabel(r.type, r.repRange)}
-                </Txt>
-                <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-                  <Txt variant="metricMd" tabular>
-                    {Math.round(r.value * 10) / 10}
-                  </Txt>
+        byExercise.map(([exercise, records]) => {
+          const header = exercise === records[0].sportId ? sportLabel(exercise) : exercise;
+          return (
+            <Card key={exercise} sport={records[0].sportId}>
+              <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
+                {header}
+              </Txt>
+              {records.map((r) => (
+                <View
+                  key={r.id}
+                  style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingVertical: 6 }}
+                >
                   <Txt variant="label" color={colors.text2}>
-                    {r.unit}
+                    {prTypeLabel(r.type, r.repRange)}
+                  </Txt>
+                  <Txt variant="metricMd" tabular>
+                    {prValueLabel(r.type, r.value, r.unit)}
                   </Txt>
                 </View>
-              </View>
-            ))}
-          </Card>
-        ))
+              ))}
+            </Card>
+          );
+        })
       )}
     </Screen>
   );

@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity } from "../api/activities";
+import { newPRMessage } from "../api/prs";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -110,13 +111,9 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      const prs = res.meta.newPRs ?? [];
-      if (prs.length > 0) {
-        const lines = prs.map((p) => {
-          const delta = p.previousValue ? ` (antes ${p.previousValue} kg)` : "";
-          return `${p.exerciseName}: ${p.value} kg${delta}`;
-        });
-        Alert.alert("Novo recorde", lines.join("\n"), [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      const msg = newPRMessage(res.meta.newPRs ?? []);
+      if (msg) {
+        Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
       } else {
         navigation.navigate("Tabs");
       }

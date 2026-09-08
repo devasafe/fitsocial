@@ -8,7 +8,11 @@ const prSchema = new Schema(
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     sportId: { type: String, default: "" },
     exerciseName: { type: String, required: true },
-    type: { type: String, enum: ["carga_max", "rm_estimado", "carga_faixa"], required: true },
+    type: {
+      type: String,
+      enum: ["carga_max", "rm_estimado", "carga_faixa", "best_dist", "best_time", "aulas", "horas"],
+      required: true,
+    },
     repRange: { type: String, default: null },
     value: { type: Number, required: true },
     unit: { type: String, default: "kg" },

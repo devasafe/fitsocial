@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { Activity } from "../models/Activity.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
-import { estimate1RM, repRangeFor, detectStrengthPRs } from "./prEngine.js";
+import { estimate1RM, repRangeFor, detectStrengthPRs, detectPRs, crossedMilestone } from "./prEngine.js";
 
 let mongod: MongoMemoryServer;
 const userId = new mongoose.Types.ObjectId();
@@ -85,5 +85,59 @@ describe("detectStrengthPRs", () => {
     await logSupino(60, 8); // baseline 1RM ~76
     const news = await logSupino(80, 5); // 1RM ~93.3 > baseline
     expect(news.find((p) => p.type === "rm_estimado")).toBeTruthy();
+  });
+});
+
+async function logCorrida(distanceM: number, durationSec: number) {
+  const activity = await Activity.create({
+    user: userId,
+    sportId: "corrida",
+    kind: "endurance",
+    startedAt: new Date(),
+    durationSec,
+    payload: { distanceM },
+    metrics: {},
+  });
+  return detectPRs(userId, activity);
+}
+
+describe("detectPRs — endurance (manual)", () => {
+  it("celebra melhor tempo por alvo quando fica mais rápido", async () => {
+    const first = await logCorrida(5000, 1500); // 5k em 25:00 — linha de base
+    expect(first).toHaveLength(0);
+    const faster = await logCorrida(5000, 1400); // 5k em 23:20
+    expect(faster.some((p) => p.type === "best_time" && p.repRange === "5k")).toBe(true);
+  });
+
+  it("celebra maior distância", async () => {
+    await logCorrida(5000, 1500); // linha de base
+    const longer = await logCorrida(9000, 2700);
+    expect(longer.some((p) => p.type === "best_dist")).toBe(true);
+  });
+});
+
+describe("marcos de aula (class)", () => {
+  it("crossedMilestone detecta o limiar cruzado", () => {
+    expect(crossedMilestone("aulas", 49, 50)).toBe(50);
+    expect(crossedMilestone("aulas", 50, 51)).toBeNull();
+    expect(crossedMilestone("aulas", 98, 260)).toBe(250); // pega o maior cruzado
+  });
+
+  it("acumula aulas e horas sem celebrar abaixo do primeiro marco", async () => {
+    for (let i = 0; i < 3; i++) {
+      await Activity.create({
+        user: userId,
+        sportId: "jiu_jitsu",
+        kind: "class",
+        startedAt: new Date(),
+        durationSec: 3600,
+        payload: { modality: "jiu_jitsu" },
+        metrics: {},
+      }).then((a) => detectPRs(userId, a));
+    }
+    const aulas = await PersonalRecord.findOne({ exerciseName: "jiu_jitsu", type: "aulas" });
+    expect(aulas?.value).toBe(3);
+    const horas = await PersonalRecord.findOne({ exerciseName: "jiu_jitsu", type: "horas" });
+    expect(horas?.value).toBe(3); // 3 x 3600s = 3h
   });
 });

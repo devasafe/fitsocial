@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
 import { createActivity } from "../api/activities";
+import { newPRMessage } from "../api/prs";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -37,7 +38,7 @@ export function RegisterClassScreen({ route, navigation }: Props) {
     }
     setSaving(true);
     try {
-      await createActivity(token!, {
+      const res = await createActivity(token!, {
         sportId,
         kind: "class",
         durationSec: Math.round(minN * 60),
@@ -45,7 +46,9 @@ export function RegisterClassScreen({ route, navigation }: Props) {
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      navigation.navigate("Tabs");
+      const msg = newPRMessage(res.meta.newPRs ?? []);
+      if (msg) Alert.alert(msg.title, msg.body, [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      else navigation.navigate("Tabs");
     } catch (err) {
       Alert.alert("Não deu para salvar", (err as Error).message);
     } finally {

@@ -53,12 +53,13 @@ export interface Activity {
 }
 
 export interface NewPR {
-  type: "carga_max" | "rm_estimado" | "carga_faixa";
+  type: "carga_max" | "rm_estimado" | "carga_faixa" | "best_dist" | "best_time" | "aulas" | "horas";
   exerciseName: string;
   repRange: string | null;
   value: number;
   previousValue: number | null;
   unit: string;
+  milestone?: number;
 }
 
 export async function createActivity(
