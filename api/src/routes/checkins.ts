@@ -84,10 +84,11 @@ checkinsRouter.post(
         : undefined,
     });
 
-    const { activity, post } = await createActivity(user._id, input);
+    const { activity, post, newPRs } = await createActivity(user._id, input);
     res.status(201).json({
       log: serializeLog(activity),
       post: post ? { id: post._id.toString() } : null,
+      newPRs,
     });
   })
 );

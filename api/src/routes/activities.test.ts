@@ -179,3 +179,32 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     expect(res.body.data.metrics.minutes).toBe(20);
   });
 });
+
+describe("Recordes de força (PR)", () => {
+  function bench(weightKg: number) {
+    return {
+      sportId: "musculacao",
+      kind: "strength",
+      payload: { exercises: [{ name: "Agachamento", sets: [{ type: "valida", weightKg, reps: 5 }] }] },
+    };
+  }
+
+  it("primeiro treino não celebra; superar depois celebra com valor anterior", async () => {
+    const first = await request(app).post("/activities").set("Authorization", `Bearer ${tokenB}`).send(bench(100));
+    expect(first.body.meta.newPRs).toHaveLength(0);
+
+    const second = await request(app).post("/activities").set("Authorization", `Bearer ${tokenB}`).send(bench(110));
+    const cargaMax = second.body.meta.newPRs.find(
+      (p: { type: string }) => p.type === "carga_max"
+    );
+    expect(cargaMax).toBeTruthy();
+    expect(cargaMax.value).toBe(110);
+    expect(cargaMax.previousValue).toBe(100);
+  });
+
+  it("GET /prs lista os recordes do usuário", async () => {
+    const res = await request(app).get("/prs").set("Authorization", `Bearer ${tokenB}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.some((p: { exerciseName: string }) => p.exerciseName === "Agachamento")).toBe(true);
+  });
+});

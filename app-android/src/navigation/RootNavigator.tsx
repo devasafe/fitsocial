@@ -28,6 +28,7 @@ import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
 import { RegisterClassScreen } from "../screens/RegisterClassScreen";
 import { RegisterGenericScreen } from "../screens/RegisterGenericScreen";
+import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -202,6 +203,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="History"
             component={HistoryScreen}
             options={{ headerShown: true, title: "Histórico", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="MeusPRs"
+            component={MeusPRsScreen}
+            options={{ headerShown: true, title: "Meus recordes", ...headerStyle }}
           />
         </>
       )}

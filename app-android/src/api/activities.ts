@@ -52,10 +52,19 @@ export interface Activity {
   metrics: Record<string, number>;
 }
 
+export interface NewPR {
+  type: "carga_max" | "rm_estimado" | "carga_faixa";
+  exerciseName: string;
+  repRange: string | null;
+  value: number;
+  previousValue: number | null;
+  unit: string;
+}
+
 export async function createActivity(
   token: string,
   input: CreateActivityInput
-): Promise<{ data: Activity; meta: { sharedPostId: string | null } }> {
+): Promise<{ data: Activity; meta: { sharedPostId: string | null; newPRs: NewPR[] } }> {
   return apiFetch("/activities", { method: "POST", body: input, token });
 }
 

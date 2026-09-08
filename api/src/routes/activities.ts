@@ -42,10 +42,11 @@ activitiesRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const input = activityCreateSchema.parse(req.body);
-    const { activity, post } = await createActivity(req.user!._id, input);
-    res
-      .status(201)
-      .json({ data: serializeActivity(activity), meta: { sharedPostId: post?._id.toString() ?? null } });
+    const { activity, post, newPRs } = await createActivity(req.user!._id, input);
+    res.status(201).json({
+      data: serializeActivity(activity),
+      meta: { sharedPostId: post?._id.toString() ?? null, newPRs },
+    });
   })
 );
 

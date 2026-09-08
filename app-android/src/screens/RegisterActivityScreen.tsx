@@ -103,14 +103,23 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
     setSaving(true);
     try {
       const variant = STRENGTH_VARIANTS.includes(sportId) ? sportId : "musculacao";
-      await createActivity(token!, {
+      const res = await createActivity(token!, {
         sportId,
         kind: "strength",
         payload: { variant, exercises: payloadExercises },
         shareToFeed: share,
         caption: share ? caption.trim() || undefined : undefined,
       });
-      navigation.navigate("Tabs");
+      const prs = res.meta.newPRs ?? [];
+      if (prs.length > 0) {
+        const lines = prs.map((p) => {
+          const delta = p.previousValue ? ` (antes ${p.previousValue} kg)` : "";
+          return `${p.exerciseName}: ${p.value} kg${delta}`;
+        });
+        Alert.alert("Novo recorde", lines.join("\n"), [{ text: "Boa!", onPress: () => navigation.navigate("Tabs") }]);
+      } else {
+        navigation.navigate("Tabs");
+      }
     } catch (err) {
       Alert.alert("Não deu para salvar", (err as Error).message);
     } finally {

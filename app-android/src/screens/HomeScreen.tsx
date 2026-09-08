@@ -165,6 +165,7 @@ export function HomeScreen() {
           <View style={{ flexDirection: "row", gap: spacing.card }}>
             <Button title="Ranking" variant="secondary" onPress={() => navigation.navigate("Leaderboard")} style={{ flex: 1 }} />
             <Button title="Evolução" variant="secondary" onPress={() => navigation.navigate("History")} style={{ flex: 1 }} />
+            <Button title="Recordes" variant="secondary" onPress={() => navigation.navigate("MeusPRs")} style={{ flex: 1 }} />
           </View>
 
           {/* Estratégia do coach */}

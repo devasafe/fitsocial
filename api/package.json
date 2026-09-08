@@ -13,7 +13,8 @@
     "try:gemini": "tsx src/scripts/tryGemini.ts",
     "try:plan": "tsx src/scripts/tryPlan.ts",
     "migrate:activities": "tsx src/scripts/migrateWorkoutLogsToActivities.ts",
-    "migrate:activities:rollback": "tsx src/scripts/migrateWorkoutLogsToActivities.ts --rollback"
+    "migrate:activities:rollback": "tsx src/scripts/migrateWorkoutLogsToActivities.ts --rollback",
+    "pr:recompute": "tsx src/scripts/recomputePRs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

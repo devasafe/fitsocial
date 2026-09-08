@@ -3,10 +3,12 @@ import { Activity, type ActivityCreateInput } from "../models/Activity.js";
 import { Post } from "../models/Post.js";
 import { getSport } from "./sports.js";
 import { computeMetrics } from "./activityMetrics.js";
+import { detectStrengthPRs, type NewPR } from "./prEngine.js";
 
 export interface CreatedActivity {
   activity: InstanceType<typeof Activity>;
   post: InstanceType<typeof Post> | null;
+  newPRs: NewPR[];
 }
 
 /**
@@ -36,6 +38,17 @@ export async function createActivity(
     metrics,
   });
 
+  // Detecção de PR (Fase 2c) — só força, síncrona.
+  const newPRs =
+    input.kind === "strength"
+      ? await detectStrengthPRs(userId, {
+          _id: activity._id,
+          sportId: activity.sportId,
+          startedAt: activity.startedAt,
+          payload: activity.payload,
+        })
+      : [];
+
   let post: InstanceType<typeof Post> | null = null;
   if (input.shareToFeed) {
     const sport = getSport(input.sportId);
@@ -43,5 +56,5 @@ export async function createActivity(
     post = await Post.create({ author: userId, text, activity: activity._id });
   }
 
-  return { activity, post };
+  return { activity, post, newPRs };
 }
