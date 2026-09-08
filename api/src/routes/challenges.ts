@@ -6,6 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Challenge, challengeCreateSchema, generateJoinCode } from "../models/Challenge.js";
 import { ChallengeMember } from "../models/ChallengeMember.js";
+import { ChallengePost, ChallengePostLike } from "../models/ChallengePost.js";
 import { User } from "../models/User.js";
 import { computeScores } from "../services/challengeScore.js";
 
@@ -113,6 +114,108 @@ challengesRouter.get(
       .map((r, i) => ({ ...r, position: i + 1 }));
 
     res.json({ data: board });
+  })
+);
+
+// ---- Mural do desafio (Fase 4b) ----
+
+interface PostAuthor {
+  _id: mongoose.Types.ObjectId;
+  name: string;
+  username?: string;
+  avatarUrl?: string;
+}
+function serializePost(p: InstanceType<typeof ChallengePost>, likedIds: Set<string>) {
+  const author = p.author as unknown as PostAuthor;
+  return {
+    id: p._id.toString(),
+    text: p.text,
+    imageUrl: p.imageUrl,
+    likeCount: p.likeCount,
+    likedByMe: likedIds.has(p._id.toString()),
+    createdAt: p.get("createdAt") as Date,
+    author: {
+      id: author._id.toString(),
+      name: author.name,
+      username: author.username ?? null,
+      avatarUrl: author.avatarUrl ?? "",
+    },
+  };
+}
+
+async function assertMember(challengeId: mongoose.Types.ObjectId, userId: mongoose.Types.ObjectId) {
+  if (!(await ChallengeMember.exists({ challenge: challengeId, user: userId }))) {
+    throw new HttpError(403, "Entre no desafio para participar do mural");
+  }
+}
+
+// Publicar no mural (só membros).
+challengesRouter.post(
+  "/:id/posts",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.id);
+    const c = await Challenge.findById(req.params.id);
+    if (!c) throw new HttpError(404, "Desafio não encontrado");
+    await assertMember(c._id, req.user!._id);
+    const { text, imageUrl } = z
+      .object({ text: z.string().min(1).max(1000), imageUrl: z.string().url().optional() })
+      .parse(req.body);
+    const post = await ChallengePost.create({ challenge: c._id, author: req.user!._id, text, imageUrl: imageUrl ?? "" });
+    await post.populate("author", "name username avatarUrl");
+    res.status(201).json({ data: serializePost(post, new Set()) });
+  })
+);
+
+// Ler o mural (qualquer autenticado).
+challengesRouter.get(
+  "/:id/posts",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.id);
+    const posts = await ChallengePost.find({ challenge: req.params.id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .populate("author", "name username avatarUrl");
+    const liked = await ChallengePostLike.find({
+      user: req.user!._id,
+      post: { $in: posts.map((p) => p._id) },
+    }).select("post");
+    const likedIds = new Set(liked.map((l) => l.post.toString()));
+    res.json({ data: posts.map((p) => serializePost(p, likedIds)) });
+  })
+);
+
+// Curtir / descurtir (toggle, só membros).
+challengesRouter.post(
+  "/:id/posts/:postId/like",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.postId);
+    const post = await ChallengePost.findById(req.params.postId);
+    if (!post) throw new HttpError(404, "Post não encontrado");
+    await assertMember(post.challenge, req.user!._id);
+    const r = await ChallengePostLike.updateOne(
+      { post: post._id, user: req.user!._id },
+      { $setOnInsert: { post: post._id, user: req.user!._id } },
+      { upsert: true }
+    );
+    if (r.upsertedCount) {
+      post.likeCount += 1;
+      await post.save();
+    }
+    res.json({ liked: true, likeCount: post.likeCount });
+  })
+);
+challengesRouter.delete(
+  "/:id/posts/:postId/like",
+  asyncHandler(async (req, res) => {
+    assertId(req.params.postId);
+    const post = await ChallengePost.findById(req.params.postId);
+    if (!post) throw new HttpError(404, "Post não encontrado");
+    const r = await ChallengePostLike.deleteOne({ post: post._id, user: req.user!._id });
+    if (r.deletedCount && post.likeCount > 0) {
+      post.likeCount -= 1;
+      await post.save();
+    }
+    res.json({ liked: false, likeCount: post.likeCount });
   })
 );
 

@@ -56,6 +56,31 @@ export async function challengeLeaderboard(token: string, id: string): Promise<L
   return (await apiFetch<{ data: LeaderRow[] }>(`/challenges/${id}/leaderboard`, { token })).data;
 }
 
+export interface ChallengePost {
+  id: string;
+  text: string;
+  imageUrl: string;
+  likeCount: number;
+  likedByMe: boolean;
+  createdAt: string;
+  author: { id: string; name: string; username: string | null; avatarUrl: string };
+}
+
+export async function listChallengePosts(token: string, id: string): Promise<ChallengePost[]> {
+  return (await apiFetch<{ data: ChallengePost[] }>(`/challenges/${id}/posts`, { token })).data;
+}
+export async function createChallengePost(token: string, id: string, text: string): Promise<ChallengePost> {
+  return (await apiFetch<{ data: ChallengePost }>(`/challenges/${id}/posts`, { method: "POST", body: { text }, token })).data;
+}
+export async function likeChallengePost(
+  token: string,
+  id: string,
+  postId: string,
+  liked: boolean
+): Promise<{ liked: boolean; likeCount: number }> {
+  return apiFetch(`/challenges/${id}/posts/${postId}/like`, { method: liked ? "POST" : "DELETE", token });
+}
+
 export function scoreLabel(mode: ScoreMode, value: number): string {
   if (mode === "distance") return `${value.toFixed(1)} km`;
   if (mode === "minutes") return `${value} min`;

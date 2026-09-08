@@ -8,6 +8,7 @@ const app = createApp();
 let mongod: MongoMemoryServer;
 let tokenA = "";
 let tokenB = "";
+let tokenC = "";
 
 async function registrar(email: string): Promise<string> {
   const res = await request(app).post("/auth/register").send({ name: email, email, password: "senha12345" });
@@ -26,6 +27,7 @@ beforeAll(async () => {
   await mongoose.connect(mongod.getUri());
   tokenA = await registrar("a@test.com");
   tokenB = await registrar("b@test.com");
+  tokenC = await registrar("c@test.com");
 });
 afterAll(async () => {
   await mongoose.disconnect();
@@ -90,5 +92,36 @@ describe("Desafios", () => {
     const res = await request(app).get("/challenges/discover").set("Authorization", `Bearer ${tokenA}`);
     expect(res.status).toBe(200);
     expect(res.body.data.some((c: { id: string }) => c.id === challengeId)).toBe(true);
+  });
+
+  // ---- Mural (4b) ----
+  let postId = "";
+
+  it("membro publica no mural e o post aparece", async () => {
+    const create = await request(app)
+      .post(`/challenges/${challengeId}/posts`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ text: "Bora subir esse ranking!" });
+    expect(create.status).toBe(201);
+    postId = create.body.data.id;
+
+    const list = await request(app).get(`/challenges/${challengeId}/posts`).set("Authorization", `Bearer ${tokenB}`);
+    expect(list.status).toBe(200);
+    expect(list.body.data.some((p: { id: string }) => p.id === postId)).toBe(true);
+  });
+
+  it("não-membro não pode postar (403)", async () => {
+    const res = await request(app)
+      .post(`/challenges/${challengeId}/posts`)
+      .set("Authorization", `Bearer ${tokenC}`)
+      .send({ text: "posso?" });
+    expect(res.status).toBe(403);
+  });
+
+  it("curtir e descurtir alterna a contagem", async () => {
+    const like = await request(app).post(`/challenges/${challengeId}/posts/${postId}/like`).set("Authorization", `Bearer ${tokenB}`);
+    expect(like.body).toMatchObject({ liked: true, likeCount: 1 });
+    const unlike = await request(app).delete(`/challenges/${challengeId}/posts/${postId}/like`).set("Authorization", `Bearer ${tokenB}`);
+    expect(unlike.body).toMatchObject({ liked: false, likeCount: 0 });
   });
 });
