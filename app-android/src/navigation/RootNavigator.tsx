@@ -1,8 +1,8 @@
 import React from "react";
-import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createBottomTabNavigator, type BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import { useAuth } from "../context/AuthContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
@@ -23,6 +23,8 @@ import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
 import { HistoryScreen } from "../screens/HistoryScreen";
 import { ChooseUsernameScreen } from "../screens/ChooseUsernameScreen";
 import { EditProfileScreen } from "../screens/EditProfileScreen";
+import { RegistrarScreen } from "../screens/RegistrarScreen";
+import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -35,7 +37,6 @@ const navTheme = {
   colors: { ...DefaultTheme.colors, background: colors.bg },
 };
 
-// Header escuro reutilizado nas telas internas (Treino/Dieta/etc.).
 const headerStyle = {
   headerStyle: { backgroundColor: colors.surface },
   headerTintColor: colors.text,
@@ -44,45 +45,55 @@ const headerStyle = {
 
 function tabIcon(emoji: string) {
   return ({ focused }: { focused: boolean }) => (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
+    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>{emoji}</Text>
   );
 }
+
+// Botão central lima elevado — a única peça com brilho (brief §2.7). Não é aba:
+// abre a folha de registrar atividade.
+function CenterTabButton({ onPress }: BottomTabBarButtonProps) {
+  return (
+    <View style={styles.centerWrap}>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel="Registrar treino"
+        activeOpacity={0.85}
+        onPress={(e) => onPress?.(e)}
+        style={styles.centerFab}
+      >
+        <Text style={styles.centerPlus}>+</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const EmptyTab = () => null;
 
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line },
+        tabBarActiveTintColor: colors.lime,
+        tabBarInactiveTintColor: colors.text2,
       }}
     >
+      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: "Hoje", tabBarIcon: tabIcon("◆") }} />
+      <Tab.Screen name="FeedTab" component={FeedScreen} options={{ title: "Feed", tabBarIcon: tabIcon("❒") }} />
       <Tab.Screen
-        name="HomeTab"
-        component={HomeScreen}
-        options={{ title: "Início", tabBarIcon: tabIcon("🏠") }}
+        name="RegisterTab"
+        component={EmptyTab}
+        options={{ title: "", tabBarButton: (p) => <CenterTabButton {...p} /> }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.getParent()?.navigate("Registrar");
+          },
+        })}
       />
-      <Tab.Screen
-        name="WorkoutTab"
-        component={TodayWorkoutScreen}
-        options={{ title: "Treino", tabBarIcon: tabIcon("🏋️") }}
-      />
-      <Tab.Screen
-        name="CoachTab"
-        component={CoachScreen}
-        options={{ title: "Coach", tabBarIcon: tabIcon("💬") }}
-      />
-      <Tab.Screen
-        name="FeedTab"
-        component={FeedScreen}
-        options={{ title: "Feed", tabBarIcon: tabIcon("🔥") }}
-      />
-      <Tab.Screen
-        name="ProfileTab"
-        component={ProfileScreen}
-        options={{ title: "Perfil", tabBarIcon: tabIcon("👤") }}
-      />
+      <Tab.Screen name="CoachTab" component={CoachScreen} options={{ title: "Coach", tabBarIcon: tabIcon("✦") }} />
+      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Perfil", tabBarIcon: tabIcon("●") }} />
     </Tab.Navigator>
   );
 }
@@ -104,6 +115,21 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
       ) : (
         <>
           <AppStack.Screen name="Tabs" component={MainTabs} />
+          <AppStack.Screen
+            name="Registrar"
+            component={RegistrarScreen}
+            options={{ presentation: "modal" }}
+          />
+          <AppStack.Screen
+            name="RegisterActivity"
+            component={RegisterActivityScreen}
+            options={{ headerShown: true, title: "Novo treino", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="TodayWorkout"
+            component={TodayWorkoutScreen}
+            options={{ headerShown: true, title: "Treino de hoje", ...headerStyle }}
+          />
           <AppStack.Screen
             name="Workout"
             component={WorkoutScreen}
@@ -142,7 +168,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="Leaderboard"
             component={LeaderboardScreen}
-            options={{ headerShown: true, title: "🏆 Ranking", ...headerStyle }}
+            options={{ headerShown: true, title: "Ranking", ...headerStyle }}
           />
           <AppStack.Screen
             name="PostDetail"
@@ -157,7 +183,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="History"
             component={HistoryScreen}
-            options={{ headerShown: true, title: "📊 Histórico", ...headerStyle }}
+            options={{ headerShown: true, title: "Histórico", ...headerStyle }}
           />
         </>
       )}
@@ -171,7 +197,7 @@ export function RootNavigator() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
@@ -195,4 +221,21 @@ export function RootNavigator() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
+  centerWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
+  centerFab: {
+    position: "absolute",
+    bottom: 4,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.lime,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.lime,
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  centerPlus: { fontSize: 30, lineHeight: 32, color: colors.onLime },
 });

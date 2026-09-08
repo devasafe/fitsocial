@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   KeyboardAvoidingView,
@@ -16,8 +15,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { createPost } from "../api/social";
 import { uploadImage } from "../api/uploads";
-import { PrimaryButton } from "../components/ui";
-import { colors, radius, spacing } from "../theme";
+import { Button, Txt } from "../components/ui";
+import { colors, radius, spacing, type as typeScale } from "../theme";
 
 export function CreatePostScreen() {
   const nav = useNavigation();
@@ -87,13 +86,18 @@ export function CreatePostScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.inner}>
-        <Text style={styles.label}>Compartilhe sua evolução</Text>
+        <Txt variant="titleScreen" style={styles.title}>
+          Compartilhe sua evolução
+        </Txt>
+        <Txt variant="label" color={colors.text2} style={styles.label}>
+          Como foi seu treino de hoje?
+        </Txt>
         <TextInput
           style={styles.textArea}
           value={text}
           onChangeText={setText}
-          placeholder="Como foi seu treino hoje? Conte pra galera…"
-          placeholderTextColor={colors.textMuted}
+          placeholder="Conte o que você treinou, como se sentiu e o que veio de novo."
+          placeholderTextColor={colors.text3}
           multiline
           autoFocus
         />
@@ -101,26 +105,32 @@ export function CreatePostScreen() {
         {imageUrl ? (
           <View style={styles.previewWrap}>
             <Image source={{ uri: imageUrl }} style={styles.preview} />
-            <TouchableOpacity style={styles.removeBtn} onPress={() => setImageUrl(null)}>
-              <Text style={styles.removeText}>Remover foto</Text>
+            <TouchableOpacity style={styles.removeBtn} onPress={() => setImageUrl(null)} activeOpacity={0.7}>
+              <Txt variant="bodyStrong" color={colors.danger}>
+                Remover foto
+              </Txt>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.pickBtn} onPress={pickImage} disabled={uploading}>
+          <TouchableOpacity style={styles.pickBtn} onPress={pickImage} disabled={uploading} activeOpacity={0.7}>
             {uploading ? (
-              <ActivityIndicator color={colors.primary} />
+              <ActivityIndicator color={colors.lime} />
             ) : (
-              <Text style={styles.pickText}>📷 Adicionar foto</Text>
+              <Txt variant="bodyStrong" color={colors.text2}>
+                Adicionar foto
+              </Txt>
             )}
           </TouchableOpacity>
         )}
 
-        <View style={{ height: spacing.lg }} />
-        <PrimaryButton
+        <View style={styles.spacer} />
+        <Button
           title="Publicar"
+          size="lg"
           onPress={handlePost}
           loading={saving}
           disabled={!text.trim() || uploading}
+          glow
         />
       </View>
     </KeyboardAvoidingView>
@@ -129,31 +139,32 @@ export function CreatePostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  inner: { flex: 1, padding: spacing.lg },
-  label: { color: colors.textMuted, marginBottom: spacing.xs, marginTop: spacing.md, fontSize: 13 },
+  inner: { flex: 1, padding: spacing.gutter },
+  title: { marginTop: spacing.sm, marginBottom: spacing.lg },
+  label: { marginBottom: spacing.sm },
   textArea: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    borderColor: colors.line,
+    borderRadius: radius.card,
     padding: spacing.md,
     color: colors.text,
+    fontFamily: typeScale.body.fontFamily,
     fontSize: 16,
-    minHeight: 120,
+    minHeight: 140,
     textAlignVertical: "top",
   },
   pickBtn: {
     marginTop: spacing.md,
     borderWidth: 1,
-    borderColor: colors.primary,
+    borderColor: colors.lineStrong,
     borderStyle: "dashed",
-    borderRadius: radius.md,
+    borderRadius: radius.card,
     paddingVertical: spacing.lg,
     alignItems: "center",
   },
-  pickText: { color: colors.primary, fontWeight: "700" },
   previewWrap: { marginTop: spacing.md },
-  preview: { width: "100%", height: 240, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
-  removeBtn: { alignSelf: "center", padding: spacing.sm },
-  removeText: { color: colors.danger, fontWeight: "600" },
+  preview: { width: "100%", height: 260, borderRadius: radius.media, backgroundColor: colors.surface2 },
+  removeBtn: { alignSelf: "center", paddingVertical: spacing.s12 },
+  spacer: { height: spacing.lg },
 });

@@ -1,10 +1,8 @@
 import React, { useCallback, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -20,17 +18,9 @@ import { PostCard } from "../components/PostCard";
 import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
-import { colors, radius, spacing } from "../theme";
+import { MetricTile, Button, Txt } from "../components/ui";
+import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
 
 export function ProfileScreen() {
   const route = useRoute<RouteProp<AppStackParams, "UserProfile">>();
@@ -86,7 +76,7 @@ export function ProfileScreen() {
   if (loading || !data) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
@@ -99,43 +89,80 @@ export function ProfileScreen() {
       contentContainerStyle={styles.list}
       ListHeaderComponent={
         <>
-        <View style={styles.header}>
-          <Avatar uri={data.user.avatarUrl} name={data.user.name} size={84} />
-          <Text style={styles.name}>{data.user.name}</Text>
-          {data.user.username ? <Text style={styles.handle}>@{data.user.username}</Text> : null}
-          {data.user.bio ? <Text style={styles.bio}>{data.user.bio}</Text> : null}
+          <View style={styles.header}>
+            <Avatar uri={data.user.avatarUrl} name={data.user.name} size={84} />
+            <Txt variant="titleScreen" style={styles.name}>
+              {data.user.name}
+            </Txt>
+            {data.user.username ? (
+              <Txt variant="body" color={colors.text2} style={styles.handle}>
+                @{data.user.username}
+              </Txt>
+            ) : null}
+            {data.user.bio ? (
+              <Txt variant="body" style={styles.bio}>
+                {data.user.bio}
+              </Txt>
+            ) : null}
+          </View>
 
-          <View style={styles.stats}>
-            <Stat label="Posts" value={data.counts.posts} />
-            <Stat label="Seguidores" value={data.counts.followers} />
-            <Stat label="Seguindo" value={data.counts.following} />
+          <View style={styles.metrics}>
+            <MetricTile value={String(data.counts.posts)} label="Treinos" style={styles.metric} />
+            <MetricTile
+              value={String(data.counts.followers)}
+              label="Seguidores"
+              style={styles.metric}
+            />
+            <MetricTile
+              value={String(data.counts.following)}
+              label="Seguindo"
+              style={styles.metric}
+            />
           </View>
 
           {data.isMe ? (
-            <>
-              <TouchableOpacity style={styles.editBtn} onPress={() => nav.navigate("EditProfile")}>
-                <Text style={styles.editText}>Editar perfil</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-                <Text style={styles.logoutText}>Sair da conta</Text>
-              </TouchableOpacity>
-            </>
+            <View style={styles.actions}>
+              <Button
+                title="Editar perfil"
+                variant="secondary"
+                onPress={() => nav.navigate("EditProfile")}
+              />
+              <Button title="Sair da conta" variant="ghost" onPress={logout} />
+            </View>
           ) : (
-            <TouchableOpacity
-              style={[styles.followBtn, data.isFollowing && styles.followingBtn]}
-              onPress={toggleFollow}
-              disabled={busy}
-            >
-              <Text style={[styles.followText, data.isFollowing && styles.followingText]}>
-                {data.isFollowing ? "Seguindo" : "Seguir"}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.actions}>
+              <Button
+                title={data.isFollowing ? "Seguindo" : "Seguir"}
+                variant={data.isFollowing ? "secondary" : "primary"}
+                onPress={toggleFollow}
+                disabled={busy}
+              />
+            </View>
           )}
-        </View>
-        {badges.length > 0 && <Badges badges={badges} />}
+
+          {badges.length > 0 && <Badges badges={badges} />}
+
+          <Txt variant="titleSection" style={styles.postsHeading}>
+            Atividades
+          </Txt>
         </>
       }
-      ListEmptyComponent={<Text style={styles.empty}>Nenhum post ainda.</Text>}
+      ListEmptyComponent={
+        <View style={styles.empty}>
+          <Txt variant="body" color={colors.text2} style={styles.emptyText}>
+            {data.isMe
+              ? "Você ainda não publicou treinos. Registre o de hoje para começar seu histórico."
+              : "Ainda não há treinos publicados por aqui."}
+          </Txt>
+          {data.isMe ? (
+            <Button
+              title="Publicar treino"
+              onPress={() => nav.navigate("CreatePost")}
+              style={styles.emptyBtn}
+            />
+          ) : null}
+        </View>
+      }
       renderItem={({ item }) => (
         <PostCard post={item} onPressComments={(post) => nav.navigate("PostDetail", { post })} />
       )}
@@ -146,46 +173,16 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
-  list: { padding: spacing.md, gap: spacing.md },
-  header: { alignItems: "center", paddingVertical: spacing.lg },
-  name: { color: colors.text, fontSize: 22, fontWeight: "800", marginTop: spacing.sm },
-  handle: { color: colors.textMuted, fontSize: 14, marginTop: 2 },
-  bio: {
-    color: colors.text,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.lg,
-  },
-  stats: { flexDirection: "row", gap: spacing.xl, marginVertical: spacing.lg },
-  stat: { alignItems: "center" },
-  statValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
-  statLabel: { color: colors.textMuted, fontSize: 12 },
-  followBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-  },
-  followingBtn: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
-  followText: { color: colors.primaryText, fontWeight: "700" },
-  followingText: { color: colors.text },
-  editBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  editText: { color: colors.text, fontWeight: "700" },
-  logoutBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm,
-  },
-  logoutText: { color: colors.textMuted, fontWeight: "600" },
-  empty: { color: colors.textMuted, textAlign: "center", padding: spacing.lg },
+  list: { paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.s32, gap: spacing.card },
+  header: { alignItems: "center" },
+  name: { marginTop: spacing.md, textAlign: "center" },
+  handle: { marginTop: 2 },
+  bio: { textAlign: "center", marginTop: spacing.sm, paddingHorizontal: spacing.md },
+  metrics: { flexDirection: "row", gap: spacing.card, marginTop: spacing.lg },
+  metric: { flex: 1 },
+  actions: { gap: spacing.sm, marginTop: spacing.md },
+  postsHeading: { marginTop: spacing.s32, marginBottom: spacing.xs },
+  empty: { alignItems: "center", paddingVertical: spacing.lg },
+  emptyText: { textAlign: "center", marginBottom: spacing.md },
+  emptyBtn: { alignSelf: "center", paddingHorizontal: spacing.s32 },
 });

@@ -1,16 +1,15 @@
 import React, { useState } from "react";
 import {
-  View,
-  Text,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   TouchableOpacity,
   Alert,
 } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Field, PrimaryButton } from "../components/ui";
+import { Field, Button, Txt } from "../components/ui";
 import { colors, spacing } from "../theme";
 import type { AuthStackParams } from "../navigation/types";
 
@@ -44,22 +43,31 @@ export function RegisterScreen({ navigation }: Props) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.inner}>
-        <Text style={styles.title}>Criar conta</Text>
-        <Text style={styles.subtitle}>Comece hoje sua jornada fit.</Text>
+      <ScrollView
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Txt variant="titleScreen" style={styles.title}>
+          Criar conta
+        </Txt>
+        <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+          Leva menos de um minuto.
+        </Txt>
 
         <Field label="Nome" value={name} onChangeText={setName} placeholder="Seu nome" />
-        <View>
-          <Field
-            label="@usuário"
-            value={username}
-            onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="seu_usuario"
-          />
-          <Text style={styles.hint}>3–20 caracteres: letras minúsculas, números, . e _</Text>
-        </View>
+
+        <Field
+          label="@usuário"
+          value={username}
+          onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="seu_usuario"
+        />
+        <Txt variant="caption" color={colors.text3} style={styles.hint}>
+          3 a 20 caracteres: letras minúsculas, números, ponto e sublinhado
+        </Txt>
+
         <Field
           label="E-mail"
           value={email}
@@ -76,28 +84,27 @@ export function RegisterScreen({ navigation }: Props) {
           placeholder="mínimo 8 caracteres"
         />
 
-        <PrimaryButton title="Criar conta" onPress={handleRegister} loading={loading} />
+        <Button title="Criar conta" onPress={handleRegister} loading={loading} size="lg" glow />
 
         <TouchableOpacity
           style={styles.link}
           onPress={() => navigation.navigate("Login")}
+          activeOpacity={0.7}
         >
-          <Text style={styles.linkText}>
-            Já tem conta? <Text style={styles.linkStrong}>Entrar</Text>
-          </Text>
+          <Txt variant="body" color={colors.text2}>
+            Já tem conta? <Txt variant="bodyStrong" color={colors.lime}>Entrar</Txt>
+          </Txt>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  inner: { flex: 1, justifyContent: "center", padding: spacing.lg },
-  title: { color: colors.text, fontSize: 28, fontWeight: "800" },
-  subtitle: { color: colors.textMuted, marginBottom: spacing.xl, marginTop: spacing.xs },
-  hint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs, marginBottom: spacing.md },
+  inner: { flexGrow: 1, justifyContent: "center", padding: spacing.gutter },
+  title: { marginBottom: spacing.xs },
+  subtitle: { marginBottom: spacing.xl },
+  hint: { marginTop: -spacing.sm, marginBottom: spacing.md },
   link: { marginTop: spacing.lg, alignItems: "center" },
-  linkText: { color: colors.textMuted },
-  linkStrong: { color: colors.primary, fontWeight: "700" },
 });

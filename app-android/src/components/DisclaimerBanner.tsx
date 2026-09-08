@@ -1,17 +1,23 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { Txt } from "./ui";
 import { colors, radius, spacing } from "../theme";
 
-/** Aviso de saúde reutilizável (guardrail). */
+/**
+ * SafetyNote (§5): aviso de saúde discreto e persistente — nunca descartável.
+ * Sobriedade em `info`: acento de 3px à esquerda, sem cor de fundo inundada.
+ */
 export function DisclaimerBanner({ compact }: { compact?: boolean }) {
   return (
     <View style={styles.banner}>
-      <Text style={styles.icon}>⚕️</Text>
-      <Text style={styles.text}>
+      <Txt variant="label" color={colors.info} style={styles.tag}>
+        Saúde
+      </Txt>
+      <Txt variant="caption" color={colors.text2} style={styles.text}>
         {compact
           ? "As recomendações não substituem um profissional de saúde."
-          : "As orientações do coach são um ponto de partida gerado por IA e não substituem médico, nutricionista ou educador físico. Consulte um profissional, principalmente se tiver condições de saúde."}
-      </Text>
+          : "As orientações do coach são um ponto de partida gerado por IA e não substituem médico, nutricionista ou educador físico. Consulte um profissional, principalmente se você tem alguma condição de saúde."}
+      </Txt>
     </View>
   );
 }
@@ -19,14 +25,17 @@ export function DisclaimerBanner({ compact }: { compact?: boolean }) {
 const styles = StyleSheet.create({
   banner: {
     flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing.sm,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.sm,
-    padding: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.chip,
     borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
+    borderColor: colors.line,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.info,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  icon: { fontSize: 16 },
-  text: { color: colors.textMuted, fontSize: 12, lineHeight: 16, flex: 1 },
+  tag: { marginTop: 1 },
+  text: { flex: 1 },
 });

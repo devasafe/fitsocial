@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   ScrollView,
@@ -12,7 +11,7 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { importPlan } from "../api/plans";
-import { PrimaryButton } from "../components/ui";
+import { Button, Txt } from "../components/ui";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
 import { colors, radius, spacing } from "../theme";
 
@@ -41,10 +40,10 @@ export function ImportPlanScreen() {
     setLoading(true);
     try {
       await importPlan(token!, text.trim());
-      Alert.alert("Plano importado! ✅", "Organizamos seu plano no app. Confira na tela inicial.");
+      Alert.alert("Plano importado", "Organizamos seu plano no app. Confira na tela inicial.");
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não foi possível importar", (err as Error).message);
+      Alert.alert("Não deu para importar", (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -55,12 +54,12 @@ export function ImportPlanScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Importar meu plano</Text>
-        <Text style={styles.subtitle}>
-          Já tem um plano de um profissional? Cole aqui do jeito que veio — a IA
-          organiza no formato do app pra você acompanhar e registrar.
-        </Text>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Txt variant="titleScreen">Importar meu plano</Txt>
+        <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+          Já tem um plano de um profissional? Cole aqui do jeito que veio — a IA organiza no
+          formato do app para você acompanhar e registrar.
+        </Txt>
 
         <DisclaimerBanner compact />
 
@@ -69,16 +68,17 @@ export function ImportPlanScreen() {
           value={text}
           onChangeText={setText}
           placeholder={PLACEHOLDER}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={colors.text3}
           multiline
           textAlignVertical="top"
         />
 
-        <PrimaryButton
+        <Button
           title="Importar e organizar"
           onPress={handleImport}
           loading={loading}
           disabled={text.trim().length < 10}
+          size="lg"
         />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -87,17 +87,18 @@ export function ImportPlanScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  title: { color: colors.text, fontSize: 24, fontWeight: "800" },
-  subtitle: { color: colors.textMuted, lineHeight: 20 },
+  content: { padding: spacing.gutter, gap: spacing.md },
+  subtitle: { marginTop: spacing.xs },
   textArea: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    borderColor: colors.line,
+    borderRadius: radius.chip,
     padding: spacing.md,
     color: colors.text,
+    fontFamily: "Archivo_400Regular",
     fontSize: 15,
+    lineHeight: 22,
     minHeight: 260,
   },
 });

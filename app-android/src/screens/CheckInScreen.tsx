@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   ScrollView,
@@ -13,7 +12,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
-import { PrimaryButton } from "../components/ui";
+import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
@@ -122,7 +121,7 @@ export function CheckInScreen() {
   }, [rows, storageKey]);
 
   function handleReset() {
-    Alert.alert("Recomeçar treino?", "Isso limpa as marcações e cargas deste treino.", [
+    Alert.alert("Recomeçar treino?", "Isso limpa as marcações e as cargas deste treino.", [
       { text: "Cancelar", style: "cancel" },
       { text: "Recomeçar", style: "destructive", onPress: () => setRows(makeRows()) },
     ]);
@@ -163,127 +162,167 @@ export function CheckInScreen() {
         sessionDay: session.day,
         entries,
         shareToFeed: share,
-        shareText: share ? `Concluí o treino: ${session.day} 💪` : undefined,
+        shareText: share ? `Concluí o treino: ${session.day}` : undefined,
       });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      Alert.alert("Treino registrado! 🎉", share ? "E compartilhado no seu feed." : undefined);
+      Alert.alert("Treino salvo", share ? "Publicado no seu feed." : undefined);
       nav.goBack();
     } catch (err) {
-      Alert.alert("Não foi possível registrar", (err as Error).message);
+      Alert.alert("Não foi possível salvar", (err as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
+  const pct = rows.length ? (doneCount / rows.length) * 100 : 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <Text style={styles.progress}>
-            {doneCount}/{rows.length} feitos
-          </Text>
-          <TouchableOpacity onPress={handleReset}>
-            <Text style={styles.reset}>Recomeçar</Text>
+          <View style={styles.progressWrap}>
+            <Txt variant="metricMd" tabular>
+              {doneCount}
+            </Txt>
+            <Txt variant="label" color={colors.text2}>
+              de {rows.length} séries feitas
+            </Txt>
+          </View>
+          <TouchableOpacity onPress={handleReset} hitSlop={8}>
+            <Txt variant="label" color={colors.text2}>
+              Recomeçar
+            </Txt>
           </TouchableOpacity>
         </View>
         <View style={styles.barTrack}>
-          <View style={[styles.barFill, { width: `${(doneCount / rows.length) * 100}%` }]} />
+          <View style={[styles.barFill, { width: `${pct}%` }]} />
         </View>
-        <Text style={styles.autosave}>💾 Progresso salvo automaticamente — pode fechar e voltar.</Text>
+        <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
+          Progresso salvo automaticamente. Pode fechar e voltar.
+        </Txt>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
         {rows.map((row, i) => {
           const pace = paceLabel(row);
           return (
-          <View key={i} style={[styles.card, row.done && styles.cardDone]}>
-            <TouchableOpacity style={styles.cardTop} onPress={() => toggleDone(i)} activeOpacity={0.7}>
-              <View style={[styles.check, row.done && styles.checkOn]}>
-                {row.done && <Text style={styles.checkMark}>✓</Text>}
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.exNameRow}>
-                  <ExerciseVideoThumb
-                    video={videos[row.name] ?? null}
-                    loading={loadingVideos}
-                    exerciseName={row.name}
-                  />
-                  <Text style={[styles.exName, row.done && styles.exNameDone]}>{row.name}</Text>
+            <Card key={i} level={1} style={[styles.card, row.done && styles.cardDone]}>
+              <TouchableOpacity
+                style={styles.cardTop}
+                onPress={() => toggleDone(i)}
+                activeOpacity={0.7}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: row.done }}
+                accessibilityLabel={`${row.name}, marcar como feito`}
+              >
+                <View style={[styles.check, row.done && styles.checkOn]}>
+                  {row.done ? <Txt style={styles.checkMark}>✓</Txt> : null}
                 </View>
-                <Text style={styles.exTarget}>Meta: {row.target}</Text>
-              </View>
-            </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.exNameRow}>
+                    <ExerciseVideoThumb
+                      video={videos[row.name] ?? null}
+                      loading={loadingVideos}
+                      exerciseName={row.name}
+                    />
+                    <Txt
+                      variant="bodyStrong"
+                      color={row.done ? colors.text3 : colors.text}
+                      style={[styles.exName, row.done && styles.exNameDone]}
+                    >
+                      {row.name}
+                    </Txt>
+                  </View>
+                  <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                    Meta {row.target}
+                  </Txt>
+                </View>
+              </TouchableOpacity>
 
-            {row.kind === "cardio" ? (
-              <>
+              {row.kind === "cardio" ? (
+                <>
+                  <View style={styles.inputsRow}>
+                    <View style={styles.inputWrap}>
+                      <Txt variant="caption" color={colors.text2} style={styles.inputLabel}>
+                        Duração (min)
+                      </Txt>
+                      <TextInput
+                        style={styles.input}
+                        value={row.duration}
+                        onChangeText={(v) => updateField(i, "duration", v)}
+                        keyboardType="numeric"
+                        placeholder="—"
+                        placeholderTextColor={colors.text3}
+                      />
+                    </View>
+                    <View style={styles.inputWrap}>
+                      <Txt variant="caption" color={colors.text2} style={styles.inputLabel}>
+                        Distância (km)
+                      </Txt>
+                      <TextInput
+                        style={styles.input}
+                        value={row.distance}
+                        onChangeText={(v) => updateField(i, "distance", v)}
+                        keyboardType="numeric"
+                        placeholder="—"
+                        placeholderTextColor={colors.text3}
+                      />
+                    </View>
+                  </View>
+                  {pace ? (
+                    <Txt variant="caption" color={colors.text2} style={{ marginTop: spacing.s8 }}>
+                      Pace médio {pace}
+                    </Txt>
+                  ) : null}
+                </>
+              ) : (
                 <View style={styles.inputsRow}>
                   <View style={styles.inputWrap}>
-                    <Text style={styles.inputLabel}>Duração (min)</Text>
+                    <Txt variant="caption" color={colors.text2} style={styles.inputLabel}>
+                      Carga (kg)
+                    </Txt>
                     <TextInput
                       style={styles.input}
-                      value={row.duration}
-                      onChangeText={(v) => updateField(i, "duration", v)}
+                      value={row.weight}
+                      onChangeText={(v) => updateField(i, "weight", v)}
                       keyboardType="numeric"
                       placeholder="—"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor={colors.text3}
                     />
                   </View>
                   <View style={styles.inputWrap}>
-                    <Text style={styles.inputLabel}>Distância (km)</Text>
+                    <Txt variant="caption" color={colors.text2} style={styles.inputLabel}>
+                      Reps
+                    </Txt>
                     <TextInput
                       style={styles.input}
-                      value={row.distance}
-                      onChangeText={(v) => updateField(i, "distance", v)}
+                      value={row.reps}
+                      onChangeText={(v) => updateField(i, "reps", v)}
                       keyboardType="numeric"
                       placeholder="—"
-                      placeholderTextColor={colors.textMuted}
+                      placeholderTextColor={colors.text3}
                     />
                   </View>
                 </View>
-                {pace ? <Text style={styles.hint}>Pace médio: {pace}</Text> : null}
-              </>
-            ) : (
-              <View style={styles.inputsRow}>
-                <View style={styles.inputWrap}>
-                  <Text style={styles.inputLabel}>Carga (kg)</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={row.weight}
-                    onChangeText={(v) => updateField(i, "weight", v)}
-                    keyboardType="numeric"
-                    placeholder="—"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-                <View style={styles.inputWrap}>
-                  <Text style={styles.inputLabel}>Reps</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={row.reps}
-                    onChangeText={(v) => updateField(i, "reps", v)}
-                    keyboardType="numeric"
-                    placeholder="—"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-            )}
-          </View>
+              )}
+            </Card>
           );
         })}
 
         <View style={styles.shareRow}>
-          <Text style={styles.shareLabel}>Compartilhar no feed</Text>
+          <Txt variant="bodyStrong">Compartilhar no feed</Txt>
           <Switch
             value={share}
             onValueChange={setShare}
-            trackColor={{ true: colors.primary, false: colors.border }}
+            trackColor={{ true: colors.lime, false: colors.line }}
             thumbColor={colors.text}
           />
         </View>
 
-        <PrimaryButton
-          title={`Finalizar treino (${doneCount}/${rows.length})`}
+        <Button
+          title={`Salvar treino (${doneCount}/${rows.length})`}
+          size="lg"
+          glow
           onPress={handleFinish}
           loading={saving}
         />
@@ -295,52 +334,52 @@ export function CheckInScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.xs },
-  progress: { color: colors.text, fontWeight: "800" },
-  reset: { color: colors.textMuted, fontWeight: "600" },
-  autosave: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
-  barTrack: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: "hidden" },
-  barFill: { height: 8, backgroundColor: colors.primary },
-  list: { padding: spacing.md, gap: spacing.md },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+  header: { paddingHorizontal: spacing.gutter, paddingTop: spacing.s16, paddingBottom: spacing.s12 },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.s12,
   },
-  cardDone: { borderColor: colors.primary },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  progressWrap: { flexDirection: "row", alignItems: "baseline", gap: spacing.s8 },
+  barTrack: { height: 6, borderRadius: radius.full, backgroundColor: colors.surface2, overflow: "hidden" },
+  barFill: { height: 6, borderRadius: radius.full, backgroundColor: colors.lime },
+  list: { padding: spacing.gutter, gap: spacing.card },
+  card: { borderRadius: radius.card },
+  cardDone: { borderColor: colors.lime },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.s12 },
   check: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: radius.chip,
     borderWidth: 2,
-    borderColor: colors.textMuted,
+    borderColor: colors.lineStrong,
     alignItems: "center",
     justifyContent: "center",
   },
-  checkOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  checkMark: { color: colors.primaryText, fontWeight: "900" },
-  exNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  exName: { color: colors.text, fontWeight: "700", fontSize: 15 },
-  exNameDone: { textDecorationLine: "line-through", color: colors.textMuted },
-  exTarget: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  inputsRow: { flexDirection: "row", gap: spacing.md, marginTop: spacing.sm },
+  checkOn: { backgroundColor: colors.lime, borderColor: colors.lime },
+  checkMark: { color: colors.onLime, fontSize: 22, fontWeight: "900" },
+  exNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.s8 },
+  exName: { flexShrink: 1 },
+  exNameDone: { textDecorationLine: "line-through" },
+  inputsRow: { flexDirection: "row", gap: spacing.s12, marginTop: spacing.s16 },
   inputWrap: { flex: 1 },
-  inputLabel: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.xs },
+  inputLabel: { marginBottom: spacing.xs },
   input: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surface2,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
+    borderColor: colors.line,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.s12,
     color: colors.text,
-    fontSize: 16,
+    fontSize: 24,
+    fontVariant: ["tabular-nums"],
   },
-  hint: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs, fontStyle: "italic" },
-  shareRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: spacing.sm },
-  shareLabel: { color: colors.text, fontWeight: "600" },
+  shareRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.s8,
+  },
 });

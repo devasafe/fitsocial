@@ -1,16 +1,20 @@
 import React from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParams } from "../navigation/types";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, elevation } from "../theme";
+import { Txt, Card, MetricTile } from "../components/ui";
 
 type Props = NativeStackScreenProps<AppStackParams, "Diet">;
 
-function Macro({ label, value }: { label: string; value: number }) {
+// Aviso de cuidado persistente e discreto (brief §7): plano não substitui profissional.
+function SafetyNote() {
   return (
-    <View style={styles.macro}>
-      <Text style={styles.macroValue}>{value}g</Text>
-      <Text style={styles.macroLabel}>{label}</Text>
+    <View style={styles.safety}>
+      <Txt variant="caption" color={colors.text2}>
+        Este plano é uma sugestão gerada por IA. Ele não substitui a orientação de um
+        nutricionista ou médico.
+      </Txt>
     </View>
   );
 }
@@ -20,78 +24,80 @@ export function DietScreen({ route }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.calBadge}>
-        <Text style={styles.calValue}>{diet.dailyCalories}</Text>
-        <Text style={styles.calLabel}>kcal / dia</Text>
+      <View style={styles.hero}>
+        <Txt variant="metricLg" tabular>
+          {diet.dailyCalories}
+        </Txt>
+        <Txt variant="label" color={colors.text2} style={{ marginTop: 4 }}>
+          kcal por dia
+        </Txt>
       </View>
 
       <View style={styles.macros}>
-        <Macro label="Proteína" value={diet.macros.proteinG} />
-        <Macro label="Carbo" value={diet.macros.carbsG} />
-        <Macro label="Gordura" value={diet.macros.fatG} />
+        <MetricTile value={`${diet.macros.proteinG}g`} label="Proteína" style={styles.macro} />
+        <MetricTile value={`${diet.macros.carbsG}g`} label="Carbo" style={styles.macro} />
+        <MetricTile value={`${diet.macros.fatG}g`} label="Gordura" style={styles.macro} />
       </View>
 
       {diet.meals.map((meal, i) => (
-        <View key={i} style={styles.meal}>
+        <Card key={i} level={1}>
           <View style={styles.mealHeader}>
-            <Text style={styles.mealName}>{meal.name}</Text>
-            {meal.timeHint ? <Text style={styles.mealTime}>{meal.timeHint}</Text> : null}
+            <Txt variant="titleCard">{meal.name}</Txt>
+            {meal.timeHint ? (
+              <Txt variant="label" color={colors.text2}>
+                {meal.timeHint}
+              </Txt>
+            ) : null}
           </View>
-          {meal.items.map((item, j) => (
-            <View key={j} style={styles.item}>
-              <Text style={styles.itemFood}>{item.food}</Text>
-              <Text style={styles.itemQty}>{item.quantity}</Text>
-            </View>
-          ))}
-        </View>
+          <View style={styles.items}>
+            {meal.items.map((item, j) => (
+              <View key={j} style={[styles.item, j > 0 && styles.itemDivider]}>
+                <Txt variant="body" style={{ flex: 1 }}>
+                  {item.food}
+                </Txt>
+                <Txt variant="body" color={colors.text2} tabular>
+                  {item.quantity}
+                </Txt>
+              </View>
+            ))}
+          </View>
+        </Card>
       ))}
 
-      {diet.notes ? <Text style={styles.notes}>{diet.notes}</Text> : null}
+      {diet.notes ? (
+        <Txt variant="body" color={colors.text2} style={styles.notes}>
+          {diet.notes}
+        </Txt>
+      ) : null}
+
+      <SafetyNote />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  calBadge: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
+  content: { padding: spacing.gutter, gap: spacing.card },
+  hero: {
+    ...elevation.e2,
+    borderRadius: radius.hero,
+    padding: spacing.s20,
     alignItems: "center",
   },
-  calValue: { color: colors.primaryText, fontSize: 32, fontWeight: "800" },
-  calLabel: { color: colors.primaryText, opacity: 0.8 },
-  macros: { flexDirection: "row", gap: spacing.sm },
-  macro: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    alignItems: "center",
+  macros: { flexDirection: "row", gap: spacing.card },
+  macro: { flex: 1 },
+  mealHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  items: { marginTop: spacing.s12 },
+  item: { flexDirection: "row", justifyContent: "space-between", paddingVertical: spacing.s8 },
+  itemDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  notes: { lineHeight: 22, marginTop: spacing.xs },
+  safety: {
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.info,
+    padding: spacing.s12,
+    marginTop: spacing.xs,
   },
-  macroValue: { color: colors.text, fontSize: 18, fontWeight: "800" },
-  macroLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  meal: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  mealHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: spacing.sm },
-  mealName: { color: colors.text, fontWeight: "800", fontSize: 16 },
-  mealTime: { color: colors.primary, fontWeight: "600" },
-  item: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-  itemFood: { color: colors.text, flex: 1 },
-  itemQty: { color: colors.textMuted },
-  notes: { color: colors.textMuted, fontStyle: "italic", lineHeight: 20 },
 });

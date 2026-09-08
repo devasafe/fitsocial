@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   FlatList,
@@ -14,11 +13,25 @@ import { useFocusEffect, useRoute, type RouteProp } from "@react-navigation/nati
 import { useAuth } from "../context/AuthContext";
 import { getComments, createComment, type Comment } from "../api/social";
 import { PostCard } from "../components/PostCard";
-import { colors, radius, spacing } from "../theme";
+import { Avatar } from "../components/Avatar";
+import { Txt } from "../components/ui";
+import { colors, radius, spacing, type as typeScale } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
-function initials(name: string) {
-  return name.trim().slice(0, 1).toUpperCase();
+// Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
+function timeAgo(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return "";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return "agora";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `há ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `há ${d} d`;
+  const w = Math.floor(d / 7);
+  return `há ${w} sem`;
 }
 
 export function PostDetailScreen() {
@@ -59,6 +72,8 @@ export function PostDetailScreen() {
     }
   }
 
+  const canSend = !!text.trim() && !sending;
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -71,21 +86,34 @@ export function PostDetailScreen() {
         ListHeaderComponent={
           <View style={styles.headerWrap}>
             <PostCard post={post} />
-            <Text style={styles.sectionTitle}>Comentários</Text>
-            {loading && <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.md }} />}
+            <Txt variant="titleSection" style={styles.sectionTitle}>
+              Comentários
+            </Txt>
+            {loading && <ActivityIndicator color={colors.lime} style={styles.loader} />}
           </View>
         }
         ListEmptyComponent={
-          !loading ? <Text style={styles.empty}>Seja o primeiro a comentar!</Text> : null
+          !loading ? (
+            <Txt variant="body" color={colors.text2} style={styles.empty}>
+              Ainda não há comentários. Escreva o primeiro.
+            </Txt>
+          ) : null
         }
         renderItem={({ item }) => (
           <View style={styles.comment}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(item.author.name)}</Text>
-            </View>
+            <Avatar name={item.author.name} size={36} />
             <View style={styles.commentBody}>
-              <Text style={styles.commentAuthor}>{item.author.name}</Text>
-              <Text style={styles.commentText}>{item.text}</Text>
+              <View style={styles.commentTop}>
+                <Txt variant="label" color={colors.text}>
+                  {item.author.name}
+                </Txt>
+                <Txt variant="caption" color={colors.text3}>
+                  {timeAgo(item.createdAt)}
+                </Txt>
+              </View>
+              <Txt variant="body" style={styles.commentText}>
+                {item.text}
+              </Txt>
             </View>
           </View>
         )}
@@ -96,16 +124,20 @@ export function PostDetailScreen() {
           style={styles.input}
           value={text}
           onChangeText={setText}
-          placeholder="Escreva um comentário…"
-          placeholderTextColor={colors.textMuted}
+          placeholder="Escreva um comentário"
+          placeholderTextColor={colors.text3}
           multiline
         />
         <TouchableOpacity
-          style={[styles.sendBtn, (!text.trim() || sending) && styles.sendDisabled]}
+          style={[styles.sendBtn, !canSend && styles.sendDisabled]}
           onPress={handleSend}
-          disabled={!text.trim() || sending}
+          disabled={!canSend}
+          activeOpacity={0.85}
+          accessibilityLabel="Enviar comentário"
         >
-          <Text style={styles.sendText}>›</Text>
+          <Txt variant="titleSection" color={colors.onLime} style={styles.sendText}>
+            ›
+          </Txt>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -114,56 +146,57 @@ export function PostDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  list: { padding: spacing.md, gap: spacing.md },
+  list: { padding: spacing.gutter, gap: spacing.card },
   headerWrap: { gap: spacing.md },
-  sectionTitle: { color: colors.text, fontWeight: "800", fontSize: 16, marginTop: spacing.sm },
-  empty: { color: colors.textMuted, textAlign: "center", padding: spacing.lg },
-  comment: { flexDirection: "row", gap: spacing.sm },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { color: colors.primaryText, fontWeight: "800", fontSize: 13 },
+  sectionTitle: { marginTop: spacing.sm },
+  loader: { marginTop: spacing.md },
+  empty: { textAlign: "center", paddingVertical: spacing.lg },
+  comment: { flexDirection: "row", gap: spacing.s12 },
   commentBody: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.card,
+    padding: spacing.s12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
   },
-  commentAuthor: { color: colors.text, fontWeight: "700", fontSize: 13 },
-  commentText: { color: colors.text, marginTop: 2 },
+  commentTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 2,
+  },
+  commentText: { marginTop: 2 },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    padding: spacing.sm,
+    padding: spacing.s12,
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.line,
+    backgroundColor: colors.surface,
   },
   input: {
     flex: 1,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.s12,
     color: colors.text,
-    maxHeight: 100,
+    maxHeight: 120,
+    fontFamily: typeScale.body.fontFamily,
     fontSize: 15,
   },
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    backgroundColor: colors.lime,
     alignItems: "center",
     justifyContent: "center",
   },
   sendDisabled: { opacity: 0.4 },
-  sendText: { color: colors.primaryText, fontSize: 26, fontWeight: "800", marginTop: -4 },
+  sendText: { marginTop: -3 },
 });

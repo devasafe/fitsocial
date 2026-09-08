@@ -1,9 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, StyleSheet, ActivityIndicator, TouchableOpacity } from "react-native";
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { checkUsername, updateMe } from "../api/auth";
-import { PrimaryButton } from "../components/ui";
-import { colors, radius, spacing } from "../theme";
+import { Button, Txt } from "../components/ui";
+import { colors, radius, spacing, type as typeScale } from "../theme";
 
 export function ChooseUsernameScreen() {
   const { token, refreshUser, logout } = useAuth();
@@ -51,45 +59,96 @@ export function ChooseUsernameScreen() {
     }
   }
 
+  const focused = valid && available === true;
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Escolha seu @usuário</Text>
-      <Text style={styles.sub}>É como as pessoas vão te encontrar. Pode trocar depois.</Text>
-      <View style={styles.inputRow}>
-        <Text style={styles.at}>@</Text>
-        <TextInput
-          style={styles.input}
-          value={username}
-          onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="seu_usuario"
-          placeholderTextColor={colors.textMuted}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <View style={styles.inner}>
+        <Txt variant="titleScreen">Escolha seu @usuário</Txt>
+        <Txt variant="body" color={colors.text2} style={styles.sub}>
+          É como as pessoas vão te encontrar. Pode trocar depois.
+        </Txt>
+
+        <View style={[styles.inputRow, focused && styles.inputRowFocused]}>
+          <Txt variant="bodyStrong" color={colors.text3}>@</Txt>
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="seu_usuario"
+            placeholderTextColor={colors.text3}
+          />
+          {checking ? <ActivityIndicator color={colors.text3} /> : null}
+        </View>
+
+        <Txt variant="caption" color={colors.text3} style={styles.hint}>
+          3 a 20 caracteres: letras minúsculas, números, ponto e sublinhado
+        </Txt>
+
+        {valid && available === false ? (
+          <Txt variant="label" color={colors.danger} style={styles.status}>
+            Esse nome já está em uso.
+          </Txt>
+        ) : null}
+        {valid && available === true ? (
+          <Txt variant="label" color={colors.lime} style={styles.status}>
+            Disponível ✓
+          </Txt>
+        ) : null}
+        {error ? (
+          <Txt variant="label" color={colors.danger} style={styles.status}>
+            {error}
+          </Txt>
+        ) : null}
+
+        <Button
+          title="Continuar"
+          onPress={handleSave}
+          loading={saving}
+          disabled={!valid || available !== true}
+          size="lg"
+          glow
+          style={styles.cta}
         />
-        {checking ? <ActivityIndicator color={colors.textMuted} /> : null}
+
+        <TouchableOpacity onPress={logout} style={styles.logout} activeOpacity={0.7}>
+          <Txt variant="bodyStrong" color={colors.text2}>Sair da conta</Txt>
+        </TouchableOpacity>
       </View>
-      <Text style={styles.hint}>3–20 caracteres: letras minúsculas, números, . e _</Text>
-      {valid && available === false ? <Text style={styles.err}>Esse nome já está em uso.</Text> : null}
-      {valid && available === true ? <Text style={styles.ok}>Disponível ✓</Text> : null}
-      {error ? <Text style={styles.err}>{error}</Text> : null}
-      <PrimaryButton title="Continuar" onPress={handleSave} loading={saving} disabled={!valid || available !== true} />
-      <TouchableOpacity onPress={logout} style={styles.logout}>
-        <Text style={styles.logoutText}>Sair da conta</Text>
-      </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, padding: spacing.lg, justifyContent: "center", gap: spacing.sm },
-  title: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  sub: { color: colors.textMuted, marginBottom: spacing.md },
-  inputRow: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md },
-  at: { color: colors.textMuted, fontSize: 16 },
-  input: { flex: 1, color: colors.text, fontSize: 16, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
-  hint: { color: colors.textMuted, fontSize: 12 },
-  ok: { color: colors.primary, fontWeight: "700" },
-  err: { color: colors.danger, fontWeight: "600" },
+  container: { flex: 1, backgroundColor: colors.bg },
+  inner: { flex: 1, justifyContent: "center", padding: spacing.gutter },
+  sub: { marginTop: spacing.sm, marginBottom: spacing.lg },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.chip,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: spacing.md,
+  },
+  inputRowFocused: { borderColor: colors.lineStrong },
+  input: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: typeScale.body.fontFamily,
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.xs,
+  },
+  hint: { marginTop: spacing.sm },
+  status: { marginTop: spacing.sm },
+  cta: { marginTop: spacing.lg },
   logout: { alignItems: "center", marginTop: spacing.md },
-  logoutText: { color: colors.textMuted, fontWeight: "600" },
 });

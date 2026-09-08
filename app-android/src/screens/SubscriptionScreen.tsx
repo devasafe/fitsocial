@@ -1,15 +1,15 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { devUpgrade } from "../api/billing";
-import { PrimaryButton } from "../components/ui";
+import { Button, Txt } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
 const BENEFITS = [
   "Planos de treino e dieta ilimitados",
-  "Regeração do plano sempre que quiser",
-  "Prioridade nas novidades do coach IA",
+  "Regenere seu plano quando quiser",
+  "Prioridade nas novidades do coach",
 ];
 
 export function SubscriptionScreen() {
@@ -24,12 +24,14 @@ export function SubscriptionScreen() {
       await devUpgrade(token!);
       await refreshUser();
       Alert.alert(
-        isPremium ? "Premium desativado" : "Bem-vindo ao Premium! 🎉",
-        isPremium ? "Sua conta voltou para o plano grátis." : "Agora você tem acesso ilimitado."
+        isPremium ? "Acesso Fundador desativado" : "Acesso Fundador ativado",
+        isPremium
+          ? "Sua conta voltou para o plano grátis."
+          : "Agora você usa tudo sem limite."
       );
       nav.goBack();
     } catch (err) {
-      Alert.alert("Erro", (err as Error).message);
+      Alert.alert("Não deu para atualizar", (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -38,54 +40,74 @@ export function SubscriptionScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
-        <Text style={styles.crown}>👑</Text>
-        <Text style={styles.title}>FitSocial Premium</Text>
-        <Text style={styles.subtitle}>Leve sua evolução ao próximo nível.</Text>
+        <View style={styles.pill}>
+          <Txt variant="label" color={colors.onLime}>
+            Fundador
+          </Txt>
+        </View>
+        <Txt variant="titleScreen" style={styles.title}>
+          Acesso completo
+        </Txt>
+        <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+          Enquanto construímos o FitSocial, fundadores usam tudo sem limite.
+        </Txt>
       </View>
 
       <View style={styles.card}>
+        <Txt variant="titleCard" style={styles.cardTitle}>
+          O que está incluído
+        </Txt>
         {BENEFITS.map((b) => (
           <View key={b} style={styles.benefit}>
-            <Text style={styles.check}>✓</Text>
-            <Text style={styles.benefitText}>{b}</Text>
+            <Txt style={styles.check} color={colors.lime}>
+              ✓
+            </Txt>
+            <Txt variant="body" style={styles.benefitText}>
+              {b}
+            </Txt>
           </View>
         ))}
       </View>
 
-      <Text style={styles.price}>R$ 19,90/mês</Text>
-
-      <PrimaryButton
-        title={isPremium ? "Desativar Premium (teste)" : "Ativar Premium (teste)"}
+      <Button
+        title={isPremium ? "Sair do acesso Fundador" : "Ativar acesso Fundador"}
         onPress={handleUpgrade}
         loading={loading}
+        variant={isPremium ? "secondary" : "primary"}
+        size="lg"
       />
 
-      <Text style={styles.note}>
-        ⚙️ Este é um upgrade de desenvolvimento para demonstrar o fluxo. A compra
-        real será feita pela Google Play (via RevenueCat) na versão publicada.
-      </Text>
+      <Txt variant="caption" color={colors.text3} style={styles.note}>
+        No futuro, o Premium custará R$ 19,90/mês pela Google Play (via RevenueCat).
+        Por enquanto, esta ativação é de desenvolvimento para demonstrar o fluxo.
+      </Txt>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.lg },
-  hero: { alignItems: "center", paddingVertical: spacing.lg },
-  crown: { fontSize: 48 },
-  title: { color: colors.text, fontSize: 26, fontWeight: "800", marginTop: spacing.sm },
-  subtitle: { color: colors.textMuted, marginTop: spacing.xs },
+  content: { padding: spacing.gutter, gap: spacing.lg },
+  hero: { alignItems: "flex-start", paddingVertical: spacing.md, gap: spacing.sm },
+  pill: {
+    backgroundColor: colors.lime,
+    borderRadius: radius.full,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.md,
+  },
+  title: { marginTop: spacing.xs },
+  subtitle: { marginTop: spacing.xs },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    borderRadius: radius.hero,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
     gap: spacing.md,
   },
+  cardTitle: { marginBottom: spacing.xs },
   benefit: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  check: { color: colors.primary, fontSize: 18, fontWeight: "800" },
-  benefitText: { color: colors.text, flex: 1, fontSize: 15 },
-  price: { color: colors.primary, fontSize: 24, fontWeight: "800", textAlign: "center" },
-  note: { color: colors.textMuted, fontSize: 12, lineHeight: 18, textAlign: "center" },
+  check: { fontSize: 16, fontWeight: "800" },
+  benefitText: { flex: 1 },
+  note: { textAlign: "center" },
 });

@@ -12,6 +12,7 @@ export type AppStackParams = {
   ChooseUsername: undefined;
   OnboardingChat: undefined;
   Tabs: undefined;
+  TodayWorkout: undefined;
   Workout: { workout: Workout };
   Diet: { diet: Diet };
   CheckIn: { session: Session };
@@ -23,13 +24,17 @@ export type AppStackParams = {
   PostDetail: { post: Post };
   ImportPlan: undefined;
   History: undefined;
+  // Registro de atividade multiesporte (Fase 2a).
+  Registrar: undefined;
+  RegisterActivity: { sportId: string };
 };
 
-// Abas inferiores dentro de "Tabs".
+// Abas inferiores dentro de "Tabs": Hoje · Feed · (+) · Coach · Perfil.
+// "RegisterTab" não é uma aba de conteúdo — é o botão central de registrar.
 export type MainTabParams = {
   HomeTab: undefined;
-  WorkoutTab: undefined;
-  CoachTab: undefined;
   FeedTab: undefined;
+  RegisterTab: undefined;
+  CoachTab: undefined;
   ProfileTab: undefined;
 };

@@ -1,17 +1,11 @@
 import React, { useCallback, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getCurrentPlan, type Plan } from "../api/plans";
 import { colors, radius, spacing } from "../theme";
+import { Txt, Card, Screen } from "../components/ui";
 import type { AppStackParams } from "../navigation/types";
 
 export function TodayWorkoutScreen() {
@@ -37,7 +31,7 @@ export function TodayWorkoutScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
@@ -45,55 +39,59 @@ export function TodayWorkoutScreen() {
   if (!plan) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyTitle}>Você ainda não tem um plano</Text>
-        <Text style={styles.emptyText}>Vá em "Início" para gerar ou importar seu plano.</Text>
+        <Txt variant="titleSection" style={{ textAlign: "center" }}>
+          Você ainda não tem um plano
+        </Txt>
+        <Txt variant="body" color={colors.text2} style={styles.emptyText}>
+          Gere ou importe seu plano na aba Início para começar a treinar.
+        </Txt>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Treino de hoje</Text>
-      <Text style={styles.subtitle}>Qual treino você vai fazer? Toque para começar.</Text>
+    <Screen scroll contentStyle={styles.content}>
+      <Txt variant="titleScreen">Treino de hoje</Txt>
+      <Txt variant="body" color={colors.text2} style={{ marginBottom: spacing.sm }}>
+        Escolha o treino e toque para começar.
+      </Txt>
 
       {plan.workout.sessions.map((session, i) => (
         <TouchableOpacity
           key={i}
-          style={styles.card}
           onPress={() => nav.navigate("CheckIn", { session })}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <View style={{ flex: 1 }}>
-            <Text style={styles.day}>{session.day}</Text>
-            <Text style={styles.focus}>{session.focus}</Text>
-            <Text style={styles.count}>{session.exercises.length} exercícios</Text>
-          </View>
-          <Text style={styles.play}>▶</Text>
+          <Card level={1} style={styles.card}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="titleCard">{session.day}</Txt>
+              <Txt variant="body" color={colors.text2} style={{ marginTop: 2 }}>
+                {session.focus}
+              </Txt>
+              <Txt variant="label" color={colors.text2} style={{ marginTop: spacing.s8 }}>
+                {session.exercises.length} exercícios
+              </Txt>
+            </View>
+            <Txt variant="metricMd" color={colors.text3} style={styles.chevron}>
+              ›
+            </Txt>
+          </Card>
         </TouchableOpacity>
       ))}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center", padding: spacing.xl },
-  content: { padding: spacing.lg, gap: spacing.md, paddingTop: spacing.xl },
-  title: { color: colors.text, fontSize: 26, fontWeight: "800" },
-  subtitle: { color: colors.textMuted, marginBottom: spacing.sm },
-  card: {
-    flexDirection: "row",
+  center: {
+    flex: 1,
+    backgroundColor: colors.bg,
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    justifyContent: "center",
+    padding: spacing.xl,
   },
-  day: { color: colors.text, fontWeight: "800", fontSize: 17 },
-  focus: { color: colors.textMuted, marginTop: 2 },
-  count: { color: colors.primary, fontSize: 12, marginTop: spacing.xs, fontWeight: "600" },
-  play: { color: colors.primary, fontSize: 26, fontWeight: "800" },
-  emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700", textAlign: "center" },
-  emptyText: { color: colors.textMuted, textAlign: "center", marginTop: spacing.sm },
+  content: { gap: spacing.card },
+  card: { flexDirection: "row", alignItems: "center", borderRadius: radius.card },
+  chevron: { marginLeft: spacing.s12 },
+  emptyText: { textAlign: "center", marginTop: spacing.sm },
 });

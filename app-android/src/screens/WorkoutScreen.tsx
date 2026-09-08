@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import { View, StyleSheet, ScrollView } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParams } from "../navigation/types";
 import { colors, radius, spacing } from "../theme";
 import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
 import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
 import { useAuth } from "../context/AuthContext";
+import { Txt, Card, Button } from "../components/ui";
 
 type Props = NativeStackScreenProps<AppStackParams, "Workout">;
 
@@ -29,41 +30,58 @@ export function WorkoutScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>{workout.split}</Text>
-        <Text style={styles.badgeSub}>{workout.daysPerWeek}x por semana</Text>
+      <View style={styles.head}>
+        <Txt variant="titleScreen">{workout.split}</Txt>
+        <Txt variant="label" color={colors.text2} style={{ marginTop: 4 }}>
+          {workout.daysPerWeek} treinos por semana
+        </Txt>
       </View>
 
       {workout.sessions.map((session, i) => (
-        <View key={i} style={styles.session}>
-          <Text style={styles.sessionDay}>{session.day}</Text>
-          <Text style={styles.sessionFocus}>{session.focus}</Text>
+        <Card key={i} level={1} style={styles.session}>
+          <Txt variant="titleCard">{session.day}</Txt>
+          <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>
+            {session.focus}
+          </Txt>
 
-          {session.exercises.map((ex, j) => (
-            <View key={j} style={styles.exercise}>
-              <View style={styles.exerciseHeader}>
+          <View style={styles.exList}>
+            {session.exercises.map((ex, j) => (
+              <View key={j} style={[styles.exercise, j > 0 && styles.exerciseDivider]}>
                 <ExerciseVideoThumb
                   video={videos[ex.name] ?? null}
                   loading={loadingVideos}
                   exerciseName={ex.name}
                 />
-                <Text style={styles.exerciseName}>{ex.name}</Text>
-                <Text style={styles.exerciseSets}>
-                  {ex.sets} × {ex.reps}
-                </Text>
+                <View style={styles.exBody}>
+                  <Txt variant="bodyStrong" numberOfLines={2}>
+                    {ex.name}
+                  </Txt>
+                  <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                    Descanso {ex.restSeconds}s
+                  </Txt>
+                  {ex.notes ? (
+                    <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                      {ex.notes}
+                    </Txt>
+                  ) : null}
+                </View>
+                <Txt variant="metricMd" tabular style={styles.exSets}>
+                  {ex.sets}
+                  <Txt variant="label" color={colors.text2}>
+                    {" "}× {ex.reps}
+                  </Txt>
+                </Txt>
               </View>
-              <Text style={styles.exerciseMeta}>Descanso: {ex.restSeconds}s</Text>
-              {ex.notes ? <Text style={styles.exerciseNotes}>{ex.notes}</Text> : null}
-            </View>
-          ))}
+            ))}
+          </View>
 
-          <TouchableOpacity
-            style={styles.checkinBtn}
+          <Button
+            title="Começar treino"
+            size="lg"
             onPress={() => navigation.navigate("CheckIn", { session })}
-          >
-            <Text style={styles.checkinText}>▶ Iniciar este treino</Text>
-          </TouchableOpacity>
-        </View>
+            style={{ marginTop: spacing.s16 }}
+          />
+        </Card>
       ))}
     </ScrollView>
   );
@@ -71,41 +89,12 @@ export function WorkoutScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  badge: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  badgeText: { color: colors.primaryText, fontWeight: "800", fontSize: 18 },
-  badgeSub: { color: colors.primaryText, opacity: 0.8, marginTop: 2 },
-  session: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sessionDay: { color: colors.text, fontWeight: "800", fontSize: 16 },
-  sessionFocus: { color: colors.textMuted, marginBottom: spacing.sm },
-  exercise: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingVertical: spacing.sm,
-  },
-  exerciseHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  exerciseName: { color: colors.text, fontSize: 15, fontWeight: "600", flex: 1, marginHorizontal: spacing.sm },
-  exerciseSets: { color: colors.primary, fontWeight: "700" },
-  exerciseMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  exerciseNotes: { color: colors.textMuted, fontSize: 12, fontStyle: "italic", marginTop: 2 },
-  checkinBtn: {
-    marginTop: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-  checkinText: { color: colors.primary, fontWeight: "700" },
+  content: { padding: spacing.gutter, gap: spacing.card },
+  head: { marginBottom: spacing.sm },
+  session: { borderRadius: radius.card },
+  exList: { marginTop: spacing.s16 },
+  exercise: { flexDirection: "row", alignItems: "center", gap: spacing.s12, paddingVertical: spacing.s12 },
+  exerciseDivider: { borderTopWidth: 1, borderTopColor: colors.line },
+  exBody: { flex: 1 },
+  exSets: { textAlign: "right" },
 });

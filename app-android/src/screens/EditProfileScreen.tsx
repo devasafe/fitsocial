@@ -1,13 +1,13 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from "react-native";
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { updateMe } from "../api/auth";
 import { uploadImage } from "../api/uploads";
 import { Avatar } from "../components/Avatar";
-import { PrimaryButton } from "../components/ui";
-import { colors, radius, spacing } from "../theme";
+import { Field, Button, Txt } from "../components/ui";
+import { colors, spacing } from "../theme";
 
 export function EditProfileScreen() {
   const nav = useNavigation();
@@ -68,29 +68,50 @@ export function EditProfileScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.avatarRow}>
         <Avatar uri={avatarUrl} name={name || "?"} size={84} />
-        <TouchableOpacity onPress={pickImage} disabled={uploading}>
-          <Text style={styles.change}>{uploading ? "Enviando…" : "Trocar foto"}</Text>
+        <TouchableOpacity onPress={pickImage} disabled={uploading} activeOpacity={0.7}>
+          <Txt variant="bodyStrong" color={colors.lime}>
+            {uploading ? "Enviando…" : "Trocar foto"}
+          </Txt>
         </TouchableOpacity>
       </View>
-      <Text style={styles.label}>@usuário</Text>
-      <TextInput style={styles.input} value={username} autoCapitalize="none" onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))} placeholder="seu_usuario" placeholderTextColor={colors.textMuted} />
-      <Text style={styles.label}>Nome</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Seu nome" placeholderTextColor={colors.textMuted} />
-      <Text style={styles.label}>Bio ({bio.length}/160)</Text>
-      <TextInput style={[styles.input, styles.bio]} value={bio} onChangeText={(v) => setBio(v.slice(0, 160))} placeholder="Fale de você" placeholderTextColor={colors.textMuted} multiline />
-      {error ? <Text style={styles.err}>{error}</Text> : null}
-      <PrimaryButton title="Salvar" onPress={handleSave} loading={saving} />
+
+      <Field
+        label="@usuário"
+        value={username}
+        autoCapitalize="none"
+        onChangeText={(v) => setUsername(v.toLowerCase().replace(/[^a-z0-9._]/g, ""))}
+        placeholder="seu_usuario"
+      />
+      <Field
+        label="Nome"
+        value={name}
+        onChangeText={setName}
+        placeholder="Seu nome"
+      />
+      <Field
+        label={`Bio (${bio.length}/160)`}
+        value={bio}
+        onChangeText={(v) => setBio(v.slice(0, 160))}
+        placeholder="Fale de você"
+        multiline
+        style={styles.bio}
+      />
+
+      {error ? (
+        <Txt variant="bodyStrong" color={colors.danger} style={styles.err}>
+          {error}
+        </Txt>
+      ) : null}
+
+      <Button title="Salvar" size="lg" onPress={handleSave} loading={saving} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.sm },
-  avatarRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.md },
-  change: { color: colors.primary, fontWeight: "700" },
-  label: { color: colors.textMuted, fontSize: 12, marginTop: spacing.sm },
-  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.sm, padding: spacing.md, color: colors.text, fontSize: 16 },
-  bio: { height: 90, textAlignVertical: "top" },
-  err: { color: colors.danger, fontWeight: "600" },
+  content: { padding: spacing.gutter },
+  avatarRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.lg },
+  bio: { height: 96, textAlignVertical: "top" },
+  err: { marginBottom: spacing.md },
 });

@@ -1,11 +1,53 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { getLeaderboard, type LeaderRow } from "../api/gamification";
+import { Txt } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
-const MEDALS = ["🥇", "🥈", "🥉"];
+const LIME_SOFT = "rgba(200,250,75,0.12)";
+
+/** Uma linha do ranking. Ordena por consistência; ninguém é humilhado por ficar por último. */
+function LeaderboardRow({ row, position }: { row: LeaderRow; position: number }) {
+  const initial = row.name.trim().charAt(0).toUpperCase() || "?";
+  const topThree = position <= 3;
+  return (
+    <View style={[styles.row, row.isMe && styles.rowMe]}>
+      <Txt
+        variant="titleCard"
+        tabular
+        color={topThree ? colors.lime : colors.text2}
+        style={styles.pos}
+      >
+        {position}
+      </Txt>
+      <View style={[styles.avatar, row.isMe && styles.avatarMe]}>
+        <Txt variant="label" color={row.isMe ? colors.onLime : colors.text}>
+          {initial}
+        </Txt>
+      </View>
+      <View style={styles.nameWrap}>
+        <Txt variant="titleCard" color={colors.text} numberOfLines={1}>
+          {row.name}
+        </Txt>
+        {row.isMe ? (
+          <Txt variant="caption" color={colors.lime}>
+            você
+          </Txt>
+        ) : null}
+      </View>
+      <View style={styles.points}>
+        <Txt variant="metricMd" tabular color={colors.text}>
+          {row.week}
+        </Txt>
+        <Txt variant="caption" color={colors.text3}>
+          treinos
+        </Txt>
+      </View>
+    </View>
+  );
+}
 
 export function LeaderboardScreen() {
   const { token } = useAuth();
@@ -30,7 +72,7 @@ export function LeaderboardScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
@@ -42,20 +84,19 @@ export function LeaderboardScreen() {
       keyExtractor={(r) => r.userId}
       contentContainerStyle={styles.list}
       ListHeaderComponent={
-        <Text style={styles.subtitle}>Treinos nos últimos 7 dias — você e quem você segue.</Text>
+        <View style={styles.headerWrap}>
+          <Txt variant="titleScreen">Ranking</Txt>
+          <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+            Treinos dos últimos 7 dias — você e quem você segue.
+          </Txt>
+        </View>
       }
       ListEmptyComponent={
-        <Text style={styles.empty}>Siga pessoas para comparar sua evolução!</Text>
+        <Txt variant="body" color={colors.text2} style={styles.empty}>
+          Siga pessoas para comparar sua evolução. Ninguém fica em último aqui.
+        </Txt>
       }
-      renderItem={({ item, index }) => (
-        <View style={[styles.row, item.isMe && styles.rowMe]}>
-          <Text style={styles.pos}>{MEDALS[index] ?? `${index + 1}º`}</Text>
-          <Text style={[styles.name, item.isMe && styles.nameMe]}>
-            {item.name} {item.isMe ? "(você)" : ""}
-          </Text>
-          <Text style={styles.week}>{item.week}</Text>
-        </View>
-      )}
+      renderItem={({ item, index }) => <LeaderboardRow row={item} position={index + 1} />}
     />
   );
 }
@@ -63,22 +104,33 @@ export function LeaderboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
-  list: { padding: spacing.md, gap: spacing.sm },
-  subtitle: { color: colors.textMuted, marginBottom: spacing.sm, textAlign: "center" },
+  list: { paddingHorizontal: spacing.gutter, paddingTop: spacing.xl, paddingBottom: spacing.xl, gap: spacing.card },
+  headerWrap: { marginBottom: spacing.md },
+  subtitle: { marginTop: spacing.xs },
   row: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.card,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
     gap: spacing.md,
   },
-  rowMe: { borderColor: colors.primary },
-  pos: { fontSize: 18, width: 32, textAlign: "center", color: colors.text, fontWeight: "800" },
-  name: { flex: 1, color: colors.text, fontWeight: "600" },
-  nameMe: { color: colors.primary },
-  week: { color: colors.text, fontWeight: "800", fontSize: 16 },
-  empty: { color: colors.textMuted, textAlign: "center", padding: spacing.lg },
+  rowMe: { borderColor: colors.lime, backgroundColor: LIME_SOFT },
+  pos: { width: 28, textAlign: "center" },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.full,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarMe: { backgroundColor: colors.lime, borderColor: colors.lime },
+  nameWrap: { flex: 1, gap: 1 },
+  points: { alignItems: "flex-end" },
+  empty: { textAlign: "center", paddingVertical: spacing.xl },
 });

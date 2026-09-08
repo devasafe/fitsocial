@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
-  Text,
   TextInput,
   StyleSheet,
   FlatList,
@@ -16,7 +15,8 @@ import {
   sendOnboardingMessage,
   type ChatMessage,
 } from "../api/onboarding";
-import { colors, radius, spacing } from "../theme";
+import { Txt } from "../components/ui";
+import { colors, radius, spacing, type as typeScale } from "../theme";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
 
 export function OnboardingChat() {
@@ -80,10 +80,12 @@ export function OnboardingChat() {
   if (booting) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
+
+  const canSend = !!input.trim() && !sending;
 
   return (
     <KeyboardAvoidingView
@@ -91,8 +93,10 @@ export function OnboardingChat() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Seu coach</Text>
-        <Text style={styles.headerSub}>Montando seu perfil</Text>
+        <Txt variant="titleScreen">Seu coach</Txt>
+        <Txt variant="caption" color={colors.text2} style={styles.headerSub}>
+          Montando seu perfil
+        </Txt>
       </View>
 
       <View style={styles.disclaimerWrap}>
@@ -105,22 +109,25 @@ export function OnboardingChat() {
         keyExtractor={(_, i) => String(i)}
         contentContainerStyle={styles.list}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.bubble,
-              item.role === "user" ? styles.bubbleUser : styles.bubbleCoach,
-            ]}
-          >
-            <Text style={item.role === "user" ? styles.textUser : styles.textCoach}>
-              {item.content}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const mine = item.role === "user";
+          return (
+            <View style={[styles.bubble, mine ? styles.bubbleUser : styles.bubbleCoach]}>
+              <Txt
+                variant={mine ? "bodyStrong" : "body"}
+                color={mine ? colors.onLime : colors.text}
+              >
+                {item.content}
+              </Txt>
+            </View>
+          );
+        }}
       />
 
       {sending && (
-        <Text style={styles.typing}>coach está digitando…</Text>
+        <Txt variant="caption" color={colors.text3} style={styles.typing}>
+          O coach está digitando…
+        </Txt>
       )}
 
       <View style={styles.inputRow}>
@@ -128,17 +135,21 @@ export function OnboardingChat() {
           style={styles.input}
           value={input}
           onChangeText={setInput}
-          placeholder="Digite sua resposta…"
-          placeholderTextColor={colors.textMuted}
+          placeholder="Escreva sua resposta"
+          placeholderTextColor={colors.text3}
           multiline
           onSubmitEditing={handleSend}
         />
         <TouchableOpacity
-          style={[styles.sendBtn, (!input.trim() || sending) && styles.sendDisabled]}
+          style={[styles.sendBtn, !canSend && styles.sendDisabled]}
           onPress={handleSend}
-          disabled={!input.trim() || sending}
+          disabled={!canSend}
+          activeOpacity={0.85}
+          accessibilityLabel="Enviar resposta"
         >
-          <Text style={styles.sendText}>›</Text>
+          <Txt variant="titleSection" color={colors.onLime} style={styles.sendText}>
+            ›
+          </Txt>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -150,47 +161,53 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
   header: {
     paddingTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.gutter,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: colors.line,
   },
-  headerTitle: { color: colors.text, fontSize: 20, fontWeight: "800" },
-  headerSub: { color: colors.primary, fontSize: 13, marginTop: 2 },
-  disclaimerWrap: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
-  list: { padding: spacing.md, gap: spacing.sm },
-  bubble: { maxWidth: "82%", padding: spacing.md, borderRadius: radius.lg },
-  bubbleCoach: { backgroundColor: colors.surface, alignSelf: "flex-start", borderTopLeftRadius: 4 },
-  bubbleUser: { backgroundColor: colors.primary, alignSelf: "flex-end", borderTopRightRadius: 4 },
-  textCoach: { color: colors.text, lineHeight: 21 },
-  textUser: { color: colors.primaryText, lineHeight: 21, fontWeight: "600" },
-  typing: { color: colors.textMuted, fontStyle: "italic", paddingHorizontal: spacing.lg, marginBottom: spacing.xs },
+  headerSub: { marginTop: 2 },
+  disclaimerWrap: { paddingHorizontal: spacing.gutter, paddingTop: spacing.md },
+  list: { padding: spacing.gutter, gap: spacing.s12 },
+  bubble: { maxWidth: "82%", paddingVertical: spacing.s12, paddingHorizontal: spacing.md, borderRadius: radius.card },
+  bubbleCoach: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignSelf: "flex-start",
+    borderTopLeftRadius: 4,
+  },
+  bubbleUser: { backgroundColor: colors.lime, alignSelf: "flex-end", borderTopRightRadius: 4 },
+  typing: { paddingHorizontal: spacing.gutter, marginBottom: spacing.xs },
   inputRow: {
     flexDirection: "row",
     alignItems: "flex-end",
-    padding: spacing.sm,
+    padding: spacing.s12,
     gap: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: colors.line,
   },
   input: {
     flex: 1,
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: radius.lg,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     color: colors.text,
+    fontFamily: typeScale.body.fontFamily,
     maxHeight: 120,
     fontSize: 16,
   },
   sendBtn: {
     width: 46,
     height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.primary,
+    borderRadius: radius.full,
+    backgroundColor: colors.lime,
     alignItems: "center",
     justifyContent: "center",
   },
   sendDisabled: { opacity: 0.4 },
-  sendText: { color: colors.primaryText, fontSize: 28, fontWeight: "800", marginTop: -4 },
+  sendText: { marginTop: -4, fontSize: 26 },
 });

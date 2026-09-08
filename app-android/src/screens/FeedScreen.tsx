@@ -1,23 +1,24 @@
 import React, { useCallback, useState } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getFeed, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
-import { colors, radius, spacing } from "../theme";
+import { Txt, Button } from "../components/ui";
+import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
 export function FeedScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,24 +43,33 @@ export function FeedScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} size="large" />
+        <ActivityIndicator color={colors.lime} size="large" />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <Text style={styles.logo}>FitSocial</Text>
-        <TouchableOpacity style={styles.newBtn} onPress={() => nav.navigate("CreatePost")}>
-          <Text style={styles.newBtnText}>+ Postar</Text>
-        </TouchableOpacity>
+      <View style={[styles.topBar, { paddingTop: insets.top + spacing.s12 }]}>
+        <Txt variant="titleScreen" color={colors.lime}>
+          FitSocial
+        </Txt>
+        <Button
+          title="Publicar"
+          size="sm"
+          onPress={() => nav.navigate("CreatePost")}
+          style={styles.publishBtn}
+        />
       </View>
 
       <FlatList
         data={posts}
         keyExtractor={(p) => p.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[
+          styles.list,
+          { paddingBottom: insets.bottom + spacing.s32 },
+          posts.length === 0 && styles.listEmpty,
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -67,15 +77,22 @@ export function FeedScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor={colors.primary}
+            tintColor={colors.lime}
           />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>Seu feed está vazio</Text>
-            <Text style={styles.emptyText}>
-              Siga outras pessoas ou faça seu primeiro post de evolução!
-            </Text>
+            <Txt variant="titleSection" style={styles.emptyTitle}>
+              Seu feed está tranquilo por enquanto
+            </Txt>
+            <Txt variant="body" color={colors.text2} style={styles.emptyText}>
+              Publique seu treino de hoje ou siga outras pessoas para acompanhar a evolução delas por aqui.
+            </Txt>
+            <Button
+              title="Publicar treino"
+              onPress={() => nav.navigate("CreatePost")}
+              style={styles.emptyBtn}
+            />
           </View>
         }
         renderItem={({ item }) => (
@@ -97,20 +114,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.gutter,
+    paddingBottom: spacing.s12,
   },
-  logo: { color: colors.primary, fontSize: 22, fontWeight: "800" },
-  newBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  newBtnText: { color: colors.primaryText, fontWeight: "700" },
-  list: { padding: spacing.md, gap: spacing.md, flexGrow: 1 },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xl, marginTop: spacing.xl },
-  emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700", marginBottom: spacing.xs },
-  emptyText: { color: colors.textMuted, textAlign: "center", lineHeight: 20 },
+  publishBtn: { paddingHorizontal: spacing.md },
+  list: { paddingHorizontal: spacing.gutter, paddingTop: spacing.sm, gap: spacing.card },
+  listEmpty: { flexGrow: 1 },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.md },
+  emptyTitle: { textAlign: "center", marginBottom: spacing.sm },
+  emptyText: { textAlign: "center", marginBottom: spacing.lg },
+  emptyBtn: { alignSelf: "center", paddingHorizontal: spacing.s32 },
 });
