@@ -50,6 +50,9 @@ const userSchema = new Schema(
     contentVisible: { type: Boolean, default: true, index: true },
     /** Marca a conta como excluída (LGPD). Separado de banir. */
     deletedAt: { type: Date, default: null },
+    /** Última vez que a pessoa usou o app. Alimenta o painel; escrito no
+     *  máximo a cada 10 minutos para não pesar em toda requisição. */
+    lastSeenAt: { type: Date, default: null, index: true },
 
     // --- Assinatura ---
     // `tier` continua sendo a verdade que o app lê; estes campos dizem POR QUE
