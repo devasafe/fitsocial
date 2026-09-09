@@ -60,4 +60,22 @@ describe("Nutrição — diário", () => {
     const day = await request(app).get(`/nutrition/day?date=${DATE}`).set("Authorization", `Bearer ${token}`);
     expect(day.body.logs).toHaveLength(1);
   });
+
+  it("recentes traz alimentos distintos, mais novo primeiro", async () => {
+    await request(app)
+      .post("/nutrition/logs")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ date: DATE, meal: "lanche", name: "Ovos", kcal: 210, proteinG: 19 }); // duplicado de nome
+    await request(app)
+      .post("/nutrition/logs")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ date: DATE, meal: "janta", name: "Banana", kcal: 90, proteinG: 1 });
+
+    const r = await request(app).get("/nutrition/recent-foods").set("Authorization", `Bearer ${token}`);
+    expect(r.status).toBe(200);
+    const names = r.body.data.map((f: { name: string }) => f.name);
+    expect(new Set(names).size).toBe(names.length); // distintos
+    expect(names[0]).toBe("Banana"); // mais recente primeiro
+    expect(names).toContain("Ovos");
+  });
 });

@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, FlatList } from "react-native";
 import { Skeleton } from "../components/Skeleton";
+import { EmptyState } from "../components/EmptyState";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { getLeaderboard, type LeaderRow } from "../api/gamification";
@@ -102,9 +103,11 @@ export function LeaderboardScreen({ embedded }: { embedded?: boolean } = {}) {
         error ? (
           <ErrorState message="Não foi possível carregar o ranking." onRetry={load} />
         ) : (
-          <Txt variant="body" color={colors.text2} style={styles.empty}>
-            Siga pessoas para comparar sua evolução. Ninguém fica em último aqui.
-          </Txt>
+          <EmptyState
+            icon="🏆"
+            title="Ranking vazio por enquanto"
+            description="Siga pessoas para comparar sua evolução. Aqui ninguém fica em último."
+          />
         )
       }
       renderItem={({ item, index }) => <LeaderboardRow row={item} position={index + 1} />}

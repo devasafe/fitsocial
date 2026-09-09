@@ -3,7 +3,8 @@ import { View, TouchableOpacity } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card, ErrorState } from "../components/ui";
+import { Txt, Screen, ErrorState } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
 import { Avatar } from "../components/Avatar";
 import { notify } from "../lib/notify";
 import { listNotifications, markNotificationsRead, type NotificationItem } from "../api/notifications";
@@ -101,12 +102,11 @@ export function NotificacoesScreen() {
       {error && items.length === 0 ? (
         <ErrorState message="Não foi possível carregar as notificações." onRetry={load} />
       ) : items.length === 0 ? (
-        <Card level={2} style={{ marginTop: spacing.md }}>
-          <Txt variant="titleCard">Nada novo por aqui</Txt>
-          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-            Quando alguém curtir, comentar, te seguir ou entrar no seu desafio, aparece aqui.
-          </Txt>
-        </Card>
+        <EmptyState
+          icon="🔔"
+          title="Nada novo por aqui"
+          description="Quando alguém curtir, comentar, te seguir ou entrar no seu desafio, aparece aqui."
+        />
       ) : (
         groupByDay(items).map((group) => (
           <View key={group.label} style={{ gap: spacing.sm }}>

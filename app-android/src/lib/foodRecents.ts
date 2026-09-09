@@ -1,11 +1,23 @@
 // Alimentos recentes guardados localmente (não há endpoint de "recentes" hoje).
 // Alimenta o quick-add de nutrição — re-registrar o que você come sempre em 1 toque.
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fetchRecentFoods } from "../api/nutrition";
 
 export interface RecentFood {
   name: string;
   kcal: number;
   proteinG: number;
+}
+
+// Recentes do servidor (autoritativo, cruza dispositivos) com fallback local.
+export async function loadRecents(token: string): Promise<RecentFood[]> {
+  try {
+    const server = await fetchRecentFoods(token);
+    if (server.length) return server;
+  } catch {
+    /* offline / erro — cai no cache local */
+  }
+  return getRecentFoods();
 }
 
 const KEY = "fitsocial.foodRecents";

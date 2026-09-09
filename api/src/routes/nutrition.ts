@@ -60,6 +60,24 @@ nutritionRouter.get(
   })
 );
 
+// Alimentos recentes (distintos por nome, mais novo primeiro) — para o quick-add.
+nutritionRouter.get(
+  "/recent-foods",
+  asyncHandler(async (req, res) => {
+    const logs = await FoodLog.find({ user: req.user!._id }).sort({ createdAt: -1 }).limit(100);
+    const seen = new Set<string>();
+    const out: { name: string; kcal: number; proteinG: number }[] = [];
+    for (const l of logs) {
+      const key = l.name.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ name: l.name, kcal: l.kcal, proteinG: l.proteinG });
+      if (out.length >= 15) break;
+    }
+    res.json({ data: out });
+  })
+);
+
 // Apaga um registro.
 nutritionRouter.delete(
   "/logs/:id",

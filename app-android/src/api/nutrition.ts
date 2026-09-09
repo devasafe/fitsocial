@@ -39,6 +39,11 @@ export async function deleteFood(token: string, id: string): Promise<void> {
   await apiFetch(`/nutrition/logs/${id}`, { method: "DELETE", token });
 }
 
+export async function fetchRecentFoods(token: string): Promise<{ name: string; kcal: number; proteinG: number }[]> {
+  const res = await apiFetch<{ data: { name: string; kcal: number; proteinG: number }[] }>("/nutrition/recent-foods", { token });
+  return res.data;
+}
+
 export const MEAL_LABEL: Record<Meal, string> = {
   cafe: "Café da manhã",
   almoco: "Almoço",

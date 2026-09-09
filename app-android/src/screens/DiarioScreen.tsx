@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Chip } from "../components/ui";
 import { notify } from "../lib/notify";
 import { getDay, logFood, deleteFood, MEAL_LABEL, type DaySummary, type Meal } from "../api/nutrition";
-import { getRecentFoods, pushRecentFood, type RecentFood } from "../lib/foodRecents";
+import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
 import { colors, spacing, radius } from "../theme";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
@@ -56,7 +56,7 @@ export function DiarioScreen() {
     } finally {
       setLoading(false);
     }
-    getRecentFoods().then(setRecents);
+    loadRecents(token!).then(setRecents);
   }, [token, date]);
 
   useFocusEffect(

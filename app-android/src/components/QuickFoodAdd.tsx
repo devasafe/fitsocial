@@ -5,7 +5,7 @@ import { Modal, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platfor
 import { Txt, Button, Chip } from "./ui";
 import { notify } from "../lib/notify";
 import { logFood, MEAL_LABEL, type Meal } from "../api/nutrition";
-import { getRecentFoods, pushRecentFood, type RecentFood } from "../lib/foodRecents";
+import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
 import { colors, spacing, radius } from "../theme";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
@@ -46,9 +46,9 @@ export function QuickFoodAdd({
   useEffect(() => {
     if (visible) {
       setMeal(defaultMeal());
-      getRecentFoods().then(setRecents);
+      loadRecents(token).then(setRecents);
     }
-  }, [visible]);
+  }, [visible, token]);
 
   const commit = useCallback(
     async (food: RecentFood) => {
@@ -56,7 +56,7 @@ export function QuickFoodAdd({
       try {
         await logFood(token, { date: todayStr(), meal, name: food.name, kcal: food.kcal, proteinG: food.proteinG });
         await pushRecentFood(food);
-        setRecents(await getRecentFoods());
+        setRecents(await loadRecents(token));
         setName("");
         setKcal("");
         setProtein("");
