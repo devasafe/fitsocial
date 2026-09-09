@@ -13,9 +13,11 @@ ar; em pivô de "só musculação" para multiesporte (corrida/GPS, jiu-jitsu, et
 ## Stack real
 
 Node 20+ · Express · TypeScript **strict** · MongoDB/Mongoose · zod · Expo/React Native.
-Deploy **hoje**: API na Render, web (Expo export) na Vercel, banco no Atlas, IA no Gemini free
-tier. **Não há** Redis, BullMQ, MinIO nem worker — entram só quando uma feature exigir
-(ver `ARQUITETURA.md` §6). Entrypoint: `api/src/index.ts` → `api/src/app.ts`.
+Deploy **hoje**: tudo na VPS via Coolify — API em `fitapi.satriz.club`, web em
+`fit.satriz.club`, fotos no MinIO (`fitcdn.satriz.club`), Mongo self-hosted e fechado, IA no
+Gemini free tier. Detalhes e armadilhas de infra: `docs/INFRA.md`. **Não há** Redis, BullMQ
+nem worker — entram só quando uma feature exigir (ver `ARQUITETURA.md` §6).
+Entrypoint: `api/src/index.ts` → `api/src/app.ts`.
 
 ## Estrutura
 

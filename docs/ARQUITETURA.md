@@ -20,21 +20,27 @@ FitSocial/
 - **Backend**: Express + Mongoose. Entrypoint `api/src/index.ts` (→ `createApp()` em
   `api/src/app.ts`). ESM com imports `.js` (NodeNext). Validação com **zod**.
 - **Dependências de runtime**: express, mongoose, zod, multer, bcryptjs, jsonwebtoken, cors,
-  dotenv. **Não há** Redis, BullMQ, MinIO nem processo worker. Um único processo web.
+  dotenv, @aws-sdk/client-s3, sharp. **Não há** Redis, BullMQ nem processo worker. Um único
+  processo web. O MinIO existe como serviço na VPS, não como dependência do processo.
 - **Testes**: vitest + supertest + `mongodb-memory-server` (Mongo em memória).
 - **App**: Expo / React Native. Estrutura em `app-android/src/`:
   `api/ · components/ · context/ · navigation/ · screens/ · theme.ts · config.ts`.
 
 ### Deploy atual
 
-- **API** → Render (Web Service `fitsocial-api`), `https://fitsocial-api.onrender.com`.
-- **Web (Expo export)** → Vercel, `https://fitsocial-rust.vercel.app`.
-- **Banco** → MongoDB Atlas (cluster0), Network Access `0.0.0.0/0`.
+Tudo roda na **VPS via Coolify** (projeto `FitSocial`, environment `production`).
+Detalhes operacionais, coordenadas e armadilhas: [`INFRA.md`](./INFRA.md).
+
+- **API** → `https://fitapi.satriz.club` (Dockerfile em `api/Dockerfile`).
+- **Web (Expo export)** → `https://fit.satriz.club` (Dockerfile em `app-android/Dockerfile`).
+- **Fotos** → MinIO, leitura pública em `https://fitcdn.satriz.club/fotos`.
+- **Banco** → MongoDB self-hosted na própria VPS, **fechado para a internet** (só rede Docker).
 - **IA** → Google Gemini free tier (`gemini-2.5-flash` é o modelo que funciona no free tier).
 
-> **Decisão (set/2026):** o alvo de produção é a **VPS do Asafe via Coolify** — a API e o web
-> saem da Render/Vercel e passam a rodar na VPS, junto do MinIO. A **migração em si é tarefa
-> de ops, ainda não executada**; até lá o que está no ar segue na Render/Vercel. Ver §6.
+> **Migração executada em 09/09/2026.** Render e Vercel foram aposentados; o Atlas deixou de
+> ser a origem dos dados (88 documentos migrados). O domínio `satriz.club` é **provisório** —
+> quando houver domínio próprio, basta trocar DNS + as env `CORS_ORIGIN`,
+> `MEDIA_PUBLIC_BASE_URL` e `EXPO_PUBLIC_API_URL`. Nenhum código muda.
 
 ## 2. Estrutura do backend (real)
 
@@ -176,8 +182,8 @@ Entra por necessidade de feature, nunca antecipada:
 
 | Peça | Quando entra | Motivo |
 |---|---|---|
-| **Object storage** (MinIO na VPS/Coolify) | Fase 1 ✅ código pronto | Fotos hoje vão para o disco efêmero da Render e **somem** a cada redeploy. Ver §6.1. |
-| **Migração de deploy p/ VPS** | Decidida; execução = fase de ops | Alvo: API + web + MinIO na VPS/Coolify, aposentando Render+Vercel. Migração ainda não executada. |
+| **Object storage** (MinIO na VPS/Coolify) | Fase 1 ✅ **no ar** | As fotos sobrevivem a redeploy (volume persistente). Ver §6.1. |
+| **Migração de deploy p/ VPS** | ✅ **concluída em 09/09/2026** | API + web + MinIO + Mongo na VPS/Coolify. Render e Vercel aposentados. Ver `INFRA.md`. |
 | **Fila + worker** (ex.: BullMQ/Redis) | Quando houver job assíncrono real | Processar rota de GPS, fan-out de push, cron de reajuste semanal. Não antes. |
 | **Índice geoespacial 2dsphere** | Se houver consulta geo | "Atividades/pessoas perto de mim". Só quando a feature existir. |
 
@@ -187,9 +193,13 @@ Camada plugável em `api/src/services/storage/`, espelhando o padrão de `servic
 interface `StorageProvider`, factory `getStorageProvider()` por env `STORAGE_PROVIDER`,
 `setStorageProvider()` para testes. Duas implementações:
 
-- **`disk`** (default) — salva em `./uploads`; bom para dev. **Prod na Render continua
-  efêmero** enquanto o provider for `disk`.
+- **`disk`** (default) — salva em `./uploads`; usado só em desenvolvimento.
 - **`s3`** — compatível com S3/R2/**MinIO** via `@aws-sdk/client-s3` (`forcePathStyle`).
+  **É o provider de produção** (`STORAGE_PROVIDER=s3`).
+
+> **Cuidado ao mexer em `storage/disk.ts`:** o módulo cria o diretório de uploads já no
+> import, mesmo quando o provider é `s3`. É por isso que `api/Dockerfile` precisa criar
+> `/app/uploads` com dono `node` — sem isso o processo morre no boot com `EACCES`.
 
 O upload (`POST /uploads`) usa `multer.memoryStorage()` → **`processImage`** (sharp:
 reencoda p/ JPEG **removendo EXIF** e reduz p/ ≤1600px) → `storage.save()`. URLs relativas
@@ -202,13 +212,17 @@ Com a API rodando na **mesma VPS** (decisão VPS-only, §1), o `S3_ENDPOINT` pod
 **interno** do MinIO na rede Docker do Coolify; só o `MEDIA_PUBLIC_BASE_URL` (leitura das fotos)
 precisa de domínio público + HTTPS.
 
-**Para ligar em produção** (ação manual do Asafe, ainda não feita):
-1. No Coolify, subir o serviço **MinIO**; expor uma rota pública HTTPS só para leitura dos objetos.
-2. Criar um bucket (ex.: `fotos`) com leitura pública e gerar Access Key / Secret.
-3. Setar as env da API: `STORAGE_PROVIDER=s3`, `S3_ENDPOINT` (interno), `S3_BUCKET`,
-   `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `MEDIA_PUBLIC_BASE_URL` (público).
-4. (Opcional) imagens antigas provavelmente já se perderam no disco efêmero; URLs antigas
-   `onrender.com/uploads/...` podem dar 404. Pré-lançamento: aceitável.
+**Como está ligado hoje** (feito em 09/09/2026):
+
+1. MinIO roda na VPS com **volume persistente** montado em `/data`.
+2. Bucket `fotos`: objetos com leitura anônima; **listagem do bucket é negada**.
+3. A API usa uma credencial dedicada (`fitsocial-api`), restrita ao bucket `fotos` —
+   não é a credencial root do MinIO, e não pode criar buckets.
+4. `S3_ENDPOINT=http://minio-fitsocial:9000` — tráfego interno na rede Docker; as chaves
+   nunca saem da VPS. Só `MEDIA_PUBLIC_BASE_URL` é público.
+
+Imagens anteriores à migração (`onrender.com/uploads/...`) foram perdidas com o disco
+efêmero e dão 404. Pré-lançamento: aceitável.
 
 ## 7. Roadmap (fases)
 
