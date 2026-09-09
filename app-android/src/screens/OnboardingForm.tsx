@@ -42,28 +42,38 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function numField(value: string, set: (t: string) => void, placeholder: string) {
+// Um campo por linha, com o rótulo em cima. Lado a lado, cada um ficava com um
+// terço da largura e o número não cabia em tela estreita.
+function numField(
+  value: string,
+  set: (t: string) => void,
+  label: string,
+  placeholder: string
+) {
   return (
-    <TextInput
-      value={value}
-      onChangeText={set}
-      placeholder={placeholder}
-      placeholderTextColor={colors.text3}
-      keyboardType="numeric"
-      style={{
-        flex: 1,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.line,
-        borderRadius: radius.chip,
-        paddingHorizontal: spacing.md,
-        paddingVertical: 12,
-        color: colors.text,
-        fontSize: 18,
-        textAlign: "center",
-        fontVariant: ["tabular-nums"],
-      }}
-    />
+    <View style={{ gap: spacing.xs }}>
+      <Txt variant="label" color={colors.text2}>
+        {label}
+      </Txt>
+      <TextInput
+        value={value}
+        onChangeText={set}
+        placeholder={placeholder}
+        placeholderTextColor={colors.text3}
+        keyboardType="numeric"
+        style={{
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: radius.chip,
+          paddingHorizontal: spacing.md,
+          paddingVertical: 12,
+          color: colors.text,
+          fontSize: 18,
+          fontVariant: ["tabular-nums"],
+        }}
+      />
+    </View>
   );
 }
 
@@ -144,15 +154,10 @@ export function OnboardingForm() {
         ))}
       </Section>
 
-      <View style={{ gap: spacing.sm }}>
-        <Txt variant="label" color={colors.text2}>
-          Idade · Altura (cm) · Peso (kg)
-        </Txt>
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          {numField(age, setAge, "Idade")}
-          {numField(height, setHeight, "Altura")}
-          {numField(weight, setWeight, "Peso")}
-        </View>
+      <View style={{ gap: spacing.md }}>
+        {numField(age, setAge, "Idade", "28")}
+        {numField(height, setHeight, "Altura em cm", "175")}
+        {numField(weight, setWeight, "Peso em kg", "72")}
       </View>
 
       <Section title="Sua experiência">
