@@ -248,3 +248,34 @@ button.discreto.perigo { border-color: var(--perigo); color: var(--perigo); }
 button.discreto.perigo:hover { background: rgba(242, 99, 75, 0.12); color: var(--perigo); }
 
 input[type="number"] { max-width: 130px; }
+
+/* ---------- painel de crescimento ---------- */
+
+.cartoes {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-bottom: 34px;
+}
+
+.cartao {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.duas-colunas {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1.6fr 1fr;
+}
+
+/* O Recharts injeta um outline no SVG ao focar; o foco visível já é dado
+   pelos botões da janela, e aqui ele só piscava sem motivo. */
+.recharts-wrapper:focus,
+.recharts-surface:focus { outline: none; }
+
+@media (max-width: 1080px) {
+  .duas-colunas { grid-template-columns: 1fr; }
+}

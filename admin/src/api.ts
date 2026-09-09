@@ -180,3 +180,45 @@ export const definirPremium = (
     body: { grant, durationDays, reason },
     token,
   });
+
+/* ---------- painel de crescimento ---------- */
+
+export interface PontoDaSerie {
+  dia: string;
+  valor: number;
+}
+
+export interface SerieAtivos {
+  dia: string;
+  registraram: number;
+  abriram: number;
+}
+
+export interface Panorama {
+  totais: {
+    contas: number; premium: number; banidas: number; suspensas: number;
+    treinos: number; posts: number; ativos7d: number;
+  };
+  series: {
+    novos: PontoDaSerie[];
+    ativos: SerieAtivos[];
+    treinos: PontoDaSerie[];
+    posts: PontoDaSerie[];
+    comentarios: PontoDaSerie[];
+    coach: PontoDaSerie[];
+  };
+  retencao: {
+    d1: number; d7: number; d30: number;
+    base: { d1: number; d7: number; d30: number };
+  };
+  conversao: {
+    premium: number;
+    porOrigem: { origem: string; total: number }[];
+    taxa: number;
+    ativacao: number;
+  };
+  acessoDesde: string | null;
+}
+
+export const buscarPanorama = (token: string, dias: number) =>
+  api<Panorama>(`/admin/metrics/overview?dias=${dias}`, { token });
