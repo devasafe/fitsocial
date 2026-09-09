@@ -7,16 +7,24 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
+import { getDay, type DaySummary } from "../api/nutrition";
 import { listNotifications } from "../api/notifications";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
+function todayStr(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const { user, token, logout } = useAuth();
+  const { user, token } = useAuth();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
+  const [day, setDay] = useState<DaySummary | null>(null);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -32,9 +40,12 @@ export function HomeScreen() {
     } finally {
       setLoading(false);
     }
-    // Contador do sino — best-effort, nunca quebra o carregamento da Home.
+    // Best-effort — sino e nutrição do dia nunca quebram o carregamento da Home.
     listNotifications(token!)
       .then((res) => setUnread(res.unread))
+      .catch(() => {});
+    getDay(token!, todayStr())
+      .then(setDay)
       .catch(() => {});
   }, [token]);
 
@@ -82,6 +93,14 @@ export function HomeScreen() {
     }
   }
 
+  // Sessão de hoje = a primeira do plano (1 toque para começar; "escolher outro" leva à lista).
+  const todaySession = plan?.workout.sessions?.[0];
+
+  function startToday() {
+    if (todaySession) navigation.navigate("CheckIn", { session: todaySession });
+    else navigation.navigate("TodayWorkout");
+  }
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
@@ -108,11 +127,11 @@ export function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
-          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.7} style={{ paddingHorizontal: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
+          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.7} hitSlop={8}>
             <Txt variant="titleCard" color={colors.lime}>✦</Txt>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} style={{ paddingHorizontal: 2 }}>
+          <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} hitSlop={8}>
             <Txt variant="titleCard">🔔</Txt>
             {unread > 0 && (
               <View
@@ -134,11 +153,6 @@ export function HomeScreen() {
                 </Txt>
               </View>
             )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={logout} activeOpacity={0.7}>
-            <Txt variant="label" color={colors.text3}>
-              Sair
-            </Txt>
           </TouchableOpacity>
         </View>
       </View>
@@ -169,18 +183,23 @@ export function HomeScreen() {
         </Card>
       ) : (
         <>
-          {/* Treino de hoje — cartão herói */}
+          {/* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */}
           <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
             <Txt variant="label" color={colors.text2}>
               Treino de hoje
             </Txt>
             <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
-              {plan.workout.split}
+              {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
             </Txt>
-            <Button title="Começar treino" onPress={() => navigation.navigate("TodayWorkout")} size="lg" glow />
+            <Button title="Começar treino" onPress={startToday} size="lg" glow />
+            <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
+              <Txt variant="label" color={colors.text2}>
+                Escolher outro treino
+              </Txt>
+            </TouchableOpacity>
           </Card>
 
-          {/* Sequência + semana + total */}
+          {/* Progresso do dia/semana */}
           {stats && (
             <View style={{ flexDirection: "row", gap: spacing.card }}>
               <View style={{ flex: 1, borderRadius: 20, padding: spacing.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line }}>
@@ -196,60 +215,87 @@ export function HomeScreen() {
             </View>
           )}
 
-          {/* Atalhos */}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.card }}>
-            <Button title="Desafios" variant="secondary" onPress={() => navigation.navigate("Desafios")} style={{ flexBasis: "47%", flexGrow: 1 }} />
-            <Button title="Nutrição" variant="secondary" onPress={() => navigation.navigate("Diario")} style={{ flexBasis: "47%", flexGrow: 1 }} />
-            <Button title="Atividades" variant="secondary" onPress={() => navigation.navigate("MinhasAtividades")} style={{ flexBasis: "47%", flexGrow: 1 }} />
-            <Button title="Recordes" variant="secondary" onPress={() => navigation.navigate("MeusPRs")} style={{ flexBasis: "47%", flexGrow: 1 }} />
-            <Button title="Ranking" variant="secondary" onPress={() => navigation.navigate("Leaderboard")} style={{ flexBasis: "47%", flexGrow: 1 }} />
-            <Button title="Evolução" variant="secondary" onPress={() => navigation.navigate("History")} style={{ flexBasis: "47%", flexGrow: 1 }} />
+          {/* Nutrição de hoje — porta de entrada do diário */}
+          <NutritionToday
+            day={day}
+            fallbackTarget={plan.diet.dailyCalories}
+            onPress={() => navigation.navigate("Diario")}
+          />
+
+          {/* Coach contextual */}
+          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.85}>
+            <Card>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
+                <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+                <Txt variant="titleCard">Seu coach</Txt>
+              </View>
+              <Txt variant="body" color={colors.text2}>
+                {plan.summary}
+              </Txt>
+              <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
+                Conversar com o coach ›
+              </Txt>
+            </Card>
+          </TouchableOpacity>
+
+          {/* Referência: treino e dieta completos */}
+          <NavRow title="Meu treino" sub={plan.workout.split} onPress={() => navigation.navigate("Workout", { workout: plan.workout })} />
+          <NavRow title="Minha dieta" sub={`${plan.diet.dailyCalories} kcal por dia`} onPress={() => navigation.navigate("Diet", { diet: plan.diet })} />
+
+          {/* Ações secundárias do plano */}
+          <View style={{ flexDirection: "row", justifyContent: "center", gap: spacing.xl, marginTop: spacing.sm }}>
+            <TouchableOpacity onPress={handleAdjust} disabled={adjusting} activeOpacity={0.7}>
+              <Txt variant="label" color={colors.text2}>
+                {adjusting ? "Reajustando…" : "Pedir reajuste"}
+              </Txt>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleRegenerate} disabled={generating} activeOpacity={0.7}>
+              <Txt variant="label" color={colors.text2}>
+                {generating ? "Gerando…" : "Gerar novo plano"}
+              </Txt>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7}>
+              <Txt variant="label" color={colors.text2}>
+                Importar plano
+              </Txt>
+            </TouchableOpacity>
           </View>
 
-          {/* Estratégia do coach */}
-          <Card>
-            <Txt variant="titleCard">Estratégia do seu coach</Txt>
-            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-              {plan.summary}
-            </Txt>
-          </Card>
-
-          {/* Treino / Dieta */}
-          <NavRow
-            title="Meu treino"
-            sub={plan.workout.split}
-            onPress={() => navigation.navigate("Workout", { workout: plan.workout })}
-          />
-          <NavRow
-            title="Minha dieta"
-            sub={`${plan.diet.dailyCalories} kcal por dia`}
-            onPress={() => navigation.navigate("Diet", { diet: plan.diet })}
-          />
-
-          <Button
-            title={adjusting ? "Coach reajustando…" : "Pedir reajuste ao coach"}
-            variant="secondary"
-            onPress={handleAdjust}
-            disabled={adjusting}
-          />
-
-          <Txt variant="caption" color={colors.text3}>
+          <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
             {plan.disclaimer}
           </Txt>
-
-          <TouchableOpacity onPress={handleRegenerate} disabled={generating} activeOpacity={0.7} style={{ paddingVertical: spacing.sm, alignItems: "center" }}>
-            <Txt variant="label" color={colors.text2}>
-              {generating ? "Gerando…" : "Gerar novo plano"}
-            </Txt>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7} style={{ alignItems: "center" }}>
-            <Txt variant="label" color={colors.text2}>
-              Importar outro plano meu
-            </Txt>
-          </TouchableOpacity>
         </>
       )}
     </Screen>
+  );
+}
+
+// Card de nutrição do dia: kcal registradas vs meta + barra. Toque abre o diário.
+function NutritionToday({ day, fallbackTarget, onPress }: { day: DaySummary | null; fallbackTarget: number; onPress: () => void }) {
+  const kcal = day?.totals.kcal ?? 0;
+  const target = day?.target?.dailyCalories ?? fallbackTarget;
+  const pct = target > 0 ? Math.min(1, kcal / target) : 0;
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+      <Card>
+        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
+          <Txt variant="titleCard">Nutrição de hoje</Txt>
+          <Txt variant="label" color={colors.lime}>
+            Registrar ›
+          </Txt>
+        </View>
+        <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
+          {kcal}
+          <Txt variant="titleSection" color={colors.text2}>
+            {" "}
+            / {target} kcal
+          </Txt>
+        </Txt>
+        <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
+          <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.lime }} />
+        </View>
+      </Card>
+    </TouchableOpacity>
   );
 }
 
