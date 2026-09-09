@@ -1,5 +1,5 @@
 import { apiFetch } from "./client";
-import type { NewPR } from "./activities";
+import type { NewPR, Activity } from "./activities";
 
 export interface CheckInEntry {
   exerciseName: string;
@@ -22,15 +22,12 @@ export function createCheckIn(
     sessionDay: string;
     entries: CheckInEntry[];
     notes?: string;
-    shareToFeed?: boolean;
-    shareText?: string;
   }
 ) {
-  return apiFetch<{ log: unknown; post: { id: string } | null; newPRs: NewPR[] }>("/checkins", {
-    method: "POST",
-    token,
-    body: data,
-  });
+  return apiFetch<{ log: unknown; post: { id: string } | null; newPRs: NewPR[]; activity: Activity }>(
+    "/checkins",
+    { method: "POST", token, body: data }
+  );
 }
 
 export function getCheckInStats(token: string) {

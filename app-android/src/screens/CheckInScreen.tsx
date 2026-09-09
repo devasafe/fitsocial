@@ -5,11 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Animated,
 } from "react-native";
 import { notify, confirmDialog } from "../lib/notify";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
@@ -51,7 +51,7 @@ function paceLabel(row: { duration: string; distance: string }): string | null {
 
 export function CheckInScreen() {
   const route = useRoute<RouteProp<AppStackParams, "CheckIn">>();
-  const nav = useNavigation();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
   const { session } = route.params;
@@ -70,7 +70,6 @@ export function CheckInScreen() {
     }));
 
   const [rows, setRows] = useState<Row[]>(makeRows);
-  const [share, setShare] = useState(true);
   const [saving, setSaving] = useState(false);
   const loaded = useRef(false);
   const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
@@ -199,20 +198,11 @@ export function CheckInScreen() {
 
     setSaving(true);
     try {
-      const res = await createCheckIn(token!, {
-        sessionDay: session.day,
-        entries,
-        shareToFeed: share,
-        shareText: share ? `Concluí o treino: ${session.day}` : undefined,
-      });
+      const res = await createCheckIn(token!, { sessionDay: session.day, entries });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      const prs = res.newPRs ?? [];
-      if (prs.length) {
-        celebratePR(prs);
-        nav.goBack();
-      } else {
-        notify("Treino salvo", share ? "Publicado no seu feed." : undefined, () => nav.goBack());
-      }
+      celebratePR(res.newPRs ?? []);
+      // Sempre abre o compositor com o treino anexado (foto/texto ou "Agora não").
+      nav.navigate("CreatePost", { activity: res.activity });
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);
     } finally {
@@ -370,15 +360,6 @@ export function CheckInScreen() {
           );
         })}
 
-        <View style={styles.shareRow}>
-          <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-          <Switch
-            value={share}
-            onValueChange={setShare}
-            trackColor={{ true: colors.lime, false: colors.line }}
-            thumbColor={colors.text}
-          />
-        </View>
         <View style={{ height: spacing.sm }} />
       </ScrollView>
 

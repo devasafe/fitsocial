@@ -110,6 +110,10 @@ describe("Check-ins + reajuste", () => {
     );
     expect(res.status).toBe(201);
     expect(res.body.log.sessionDay).toBe("Dia A — Peito");
+    // Devolve a atividade completa para o compositor de post.
+    expect(res.body.activity).toBeTruthy();
+    expect(res.body.activity.kind).toBe("strength");
+    expect(typeof res.body.activity.id).toBe("string");
 
     const stats = await auth(request(app).get("/checkins/stats"));
     expect(stats.body.stats.total).toBe(1);

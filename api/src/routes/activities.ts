@@ -14,7 +14,7 @@ import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 export const activitiesRouter = Router();
 activitiesRouter.use(requireAuth);
 
-function serializeActivity(a: InstanceType<typeof Activity>) {
+export function serializeActivity(a: InstanceType<typeof Activity>) {
   return {
     id: a._id.toString(),
     author: a.user.toString(),

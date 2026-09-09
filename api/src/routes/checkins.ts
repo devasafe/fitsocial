@@ -5,6 +5,7 @@ import { createLogSchema } from "../models/WorkoutLog.js";
 import { Activity, activityCreateSchema } from "../models/Activity.js";
 import { Plan } from "../models/Plan.js";
 import { createActivity } from "../services/activities.js";
+import { serializeActivity } from "./activities.js";
 import { computeStats } from "../services/adherence.js";
 
 export const checkinsRouter = Router();
@@ -89,6 +90,8 @@ checkinsRouter.post(
       log: serializeLog(activity),
       post: post ? { id: post._id.toString() } : null,
       newPRs,
+      // Atividade completa para o app anexar no compositor de post.
+      activity: serializeActivity(activity),
     });
   })
 );
