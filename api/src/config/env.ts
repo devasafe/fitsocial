@@ -49,7 +49,9 @@ export const env = {
   // (429) ou falha, cai pra próxima. Todas aceitam CSV (uma env com várias chaves).
   geminiApiKeys: keyList("GEMINI_API_KEYS", "GEMINI_API_KEY"),
   groqApiKeys: keyList("GROQ_API_KEYS", "GROQ_API_KEY"),
-  groqModel: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+  // O llama-3.3-70b-versatile saiu do catálogo do Groq. Conferido em 09/09/2026:
+  // gpt-oss-120b responde em ~2s, devolve JSON válido e escreve bem em português.
+  groqModel: process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
   openrouterApiKeys: keyList("OPENROUTER_API_KEYS", "OPENROUTER_API_KEY"),
   openrouterModel: process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free",
   // Chave da YouTube Data API v3 (opcional). Sem ela, os vídeos de exercício degradam graciosamente.

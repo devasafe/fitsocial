@@ -42,7 +42,7 @@ Detalhes operacionais, coordenadas e armadilhas: [`INFRA.md`](./INFRA.md).
 > prompt trivial, e a geração de plano completa leva ~20s. Isso não é lentidão do nosso
 > código — é o tier. Toda decisão de prazo e de espera na interface parte daí.
 >
-> **Cadeia de fallback:** Gemini → Groq. Cada chamada tem prazo (`AI_TIMEOUT_MS`, 45s) e
+> **Cadeia de fallback:** Gemini (`gemini-3.5-flash`) → Groq (`openai/gpt-oss-120b`, ~2s). Cada chamada tem prazo (`AI_TIMEOUT_MS`, 45s) e
 > insiste uma vez na mesma chave quando o erro é passageiro (5xx). Prazo estourado **não** é
 > repetido: cair para o Groq (1-2s) é mais rápido do que gastar outro prazo inteiro.
 > Ver `api/src/services/ai/http.ts`.
