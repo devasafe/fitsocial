@@ -107,7 +107,7 @@ export function PostDetailScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.comment}>
-            <Avatar name={item.author.name} size={36} />
+            <Avatar uri={item.author.avatarUrl} name={item.author.name} size={36} />
             <View style={styles.commentBody}>
               <View style={styles.commentTop}>
                 <Txt variant="label" color={colors.text}>

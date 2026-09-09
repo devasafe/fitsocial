@@ -224,7 +224,7 @@ export function DesafioDetailScreen({ route }: Props) {
               <Txt variant="titleCard" tabular color={colors.text2} style={{ width: 28 }}>
                 {r.position}
               </Txt>
-              <Avatar name={r.name} size={36} />
+              <Avatar uri={r.avatarUrl} name={r.name} size={36} />
               <Txt variant="bodyStrong" style={{ flex: 1 }}>
                 {r.name}
                 {r.isMe ? " (você)" : ""}
@@ -259,7 +259,7 @@ export function DesafioDetailScreen({ route }: Props) {
             posts.map((p) => (
               <Card key={p.id} style={{ gap: spacing.sm }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                  <Avatar name={p.author.name} size={32} />
+                  <Avatar uri={p.author.avatarUrl} name={p.author.name} size={32} />
                   <View style={{ flex: 1 }}>
                     <Txt variant="bodyStrong">{p.author.name}</Txt>
                     <Txt variant="caption" color={colors.text3}>

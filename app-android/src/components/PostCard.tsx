@@ -136,7 +136,7 @@ export function PostCard({
           disabled={!onPressAuthor}
           activeOpacity={0.7}
         >
-          <Avatar name={post.author.name} size={40} />
+          <Avatar uri={post.author.avatarUrl} name={post.author.name} size={40} />
           <View style={styles.headerText}>
             <Txt variant="titleCard">{post.author.name}</Txt>
             {when ? (

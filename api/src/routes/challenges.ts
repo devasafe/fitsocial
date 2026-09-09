@@ -243,10 +243,15 @@ challengesRouter.post(
     const comment = await ChallengePostComment.create({ post: post._id, author: req.user!._id, text });
     post.commentCount += 1;
     await post.save();
-    await comment.populate("author", "name");
+    await comment.populate("author", "name avatarUrl");
     const a = comment.author as unknown as PostAuthor;
     res.status(201).json({
-      data: { id: comment._id.toString(), text: comment.text, createdAt: comment.get("createdAt") as Date, author: { id: a._id.toString(), name: a.name } },
+      data: {
+        id: comment._id.toString(),
+        text: comment.text,
+        createdAt: comment.get("createdAt") as Date,
+        author: { id: a._id.toString(), name: a.name, avatarUrl: a.avatarUrl ?? "" },
+      },
     });
   })
 );
@@ -259,11 +264,16 @@ challengesRouter.get(
     const comments = await ChallengePostComment.find({ post: req.params.postId })
       .sort({ createdAt: 1 })
       .limit(200)
-      .populate("author", "name");
+      .populate("author", "name avatarUrl");
     res.json({
       data: comments.map((c) => {
         const a = c.author as unknown as PostAuthor;
-        return { id: c._id.toString(), text: c.text, createdAt: c.get("createdAt") as Date, author: { id: a._id.toString(), name: a.name } };
+        return {
+          id: c._id.toString(),
+          text: c.text,
+          createdAt: c.get("createdAt") as Date,
+          author: { id: a._id.toString(), name: a.name, avatarUrl: a.avatarUrl ?? "" },
+        };
       }),
     });
   })

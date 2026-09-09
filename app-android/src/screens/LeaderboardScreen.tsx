@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import { View, StyleSheet, FlatList, Image } from "react-native";
 import { Skeleton } from "../components/Skeleton";
 import { EmptyState } from "../components/EmptyState";
 import { useFocusEffect } from "@react-navigation/native";
@@ -24,11 +24,18 @@ function LeaderboardRow({ row, position }: { row: LeaderRow; position: number })
       >
         {position}
       </Txt>
-      <View style={[styles.avatar, row.isMe && styles.avatarMe]}>
-        <Txt variant="label" color={row.isMe ? colors.onLime : colors.text}>
-          {initial}
-        </Txt>
-      </View>
+      {row.avatarUrl ? (
+        <Image
+          source={{ uri: row.avatarUrl }}
+          style={[styles.avatar, row.isMe && styles.avatarMeBorda]}
+        />
+      ) : (
+        <View style={[styles.avatar, row.isMe && styles.avatarMe]}>
+          <Txt variant="label" color={row.isMe ? colors.onLime : colors.text}>
+            {initial}
+          </Txt>
+        </View>
+      )}
       <View style={styles.nameWrap}>
         <Txt variant="titleCard" color={colors.text} numberOfLines={1}>
           {row.name}
@@ -145,6 +152,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarMe: { backgroundColor: colors.lime, borderColor: colors.lime },
+  avatarMeBorda: { borderColor: colors.lime, borderWidth: 2 },
   nameWrap: { flex: 1, gap: 1 },
   points: { alignItems: "flex-end" },
   empty: { textAlign: "center", paddingVertical: spacing.xl },

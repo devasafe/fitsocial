@@ -100,7 +100,7 @@ export function ActivityInteractions({
         <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
           {comments.map((c) => (
             <View key={c.id} style={{ flexDirection: "row", gap: spacing.sm }}>
-              <Avatar name={c.author.name} size={28} />
+              <Avatar uri={c.author.avatarUrl} name={c.author.name} size={28} />
               <View style={{ flex: 1 }}>
                 <Txt variant="label">
                   {c.author.name}{" "}
