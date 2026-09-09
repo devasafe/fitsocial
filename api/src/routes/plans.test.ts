@@ -198,4 +198,27 @@ describe("Plans", () => {
     expect(ex[0].kind).toBe("cardio");
     expect(ex[1].kind).toBe("strength");
   });
+
+  it("edita o plano manualmente (PUT /current, in place)", async () => {
+    const current = await auth(request(app).get("/plans/current"));
+    const version = current.body.plan.version;
+    const workout = { ...current.body.plan.workout, split: "Editado à mão ABC" };
+    const diet = { ...current.body.plan.diet, dailyCalories: 2222 };
+
+    const put = await auth(request(app).put("/plans/current").send({ workout, diet }));
+    expect(put.status).toBe(200);
+    expect(put.body.plan.workout.split).toBe("Editado à mão ABC");
+    expect(put.body.plan.diet.dailyCalories).toBe(2222);
+    expect(put.body.plan.version).toBe(version); // edição não cria versão
+
+    const after = await auth(request(app).get("/plans/current"));
+    expect(after.body.plan.diet.dailyCalories).toBe(2222);
+  });
+
+  it("PUT /current com corpo inválido → 400", async () => {
+    const res = await auth(
+      request(app).put("/plans/current").send({ workout: { split: "x" }, diet: {} })
+    );
+    expect(res.status).toBe(400);
+  });
 });

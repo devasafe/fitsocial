@@ -4,7 +4,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
-import { Plan } from "../models/Plan.js";
+import { Plan, workoutSchema, dietSchema } from "../models/Plan.js";
 import { Activity } from "../models/Activity.js";
 import { generatePlan, adjustPlan, importPlanFromText } from "../services/ai/planGenerator.js";
 import { buildAdherenceSummary } from "../services/adherence.js";
@@ -141,6 +141,32 @@ plansRouter.post(
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
+  })
+);
+
+// Edição MANUAL do plano (treino e/ou dieta) — in place, mantém a versão.
+const updatePlanSchema = z.object({
+  summary: z.string().max(2000).optional(),
+  workout: workoutSchema,
+  diet: dietSchema,
+});
+
+plansRouter.put(
+  "/current",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = updatePlanSchema.parse(req.body);
+    const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
+    if (!plan) throw new HttpError(404, "Nenhum plano para editar");
+
+    plan.workout = body.workout;
+    plan.diet = body.diet;
+    if (body.summary !== undefined) plan.summary = body.summary;
+    plan.markModified("workout");
+    plan.markModified("diet");
+    await plan.save();
+
+    res.json({ plan: serializePlan(plan) });
   })
 );
 

@@ -53,6 +53,11 @@ export function importPlan(token: string, text: string) {
   return apiFetch<{ plan: Plan }>("/plans/import", { method: "POST", token, body: { text } });
 }
 
+/** Edição manual do plano (treino/dieta) — salva in place. */
+export function updatePlan(token: string, data: { summary?: string; workout: Workout; diet: Diet }) {
+  return apiFetch<{ plan: Plan }>("/plans/current", { method: "PUT", token, body: data });
+}
+
 /** Busca o plano atual; retorna null se ainda não houver (404). */
 export async function getCurrentPlan(token: string): Promise<Plan | null> {
   try {

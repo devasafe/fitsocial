@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParams } from "../navigation/types";
 import { colors, radius, spacing, elevation } from "../theme";
-import { Txt, Card, MetricTile } from "../components/ui";
+import { Txt, Card, MetricTile, Button } from "../components/ui";
 
 type Props = NativeStackScreenProps<AppStackParams, "Diet">;
 
@@ -19,11 +19,14 @@ function SafetyNote() {
   );
 }
 
-export function DietScreen({ route }: Props) {
+export function DietScreen({ route, navigation }: Props) {
   const { diet } = route.params;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={{ alignItems: "flex-end" }}>
+        <Button title="Editar" variant="secondary" size="sm" onPress={() => navigation.navigate("EditDiet")} />
+      </View>
       <View style={styles.hero}>
         <Txt variant="metricLg" tabular>
           {diet.dailyCalories}

@@ -18,7 +18,7 @@ const sessionSchema = z.object({
   exercises: z.array(exerciseSchema).min(1),
 });
 
-const workoutSchema = z.object({
+export const workoutSchema = z.object({
   split: z.string(), // ex.: "Full body 3x", "ABC"
   daysPerWeek: z.number().int().min(1).max(7),
   sessions: z.array(sessionSchema).min(1),
@@ -35,7 +35,7 @@ const mealSchema = z.object({
   items: z.array(mealItemSchema).min(1),
 });
 
-const dietSchema = z.object({
+export const dietSchema = z.object({
   dailyCalories: z.number().int().min(800).max(6000),
   macros: z.object({
     proteinG: z.number().int().min(0),

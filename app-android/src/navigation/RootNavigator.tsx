@@ -10,6 +10,8 @@ import { HomeScreen } from "../screens/HomeScreen";
 import { OnboardingForm } from "../screens/OnboardingForm";
 import { WorkoutScreen } from "../screens/WorkoutScreen";
 import { DietScreen } from "../screens/DietScreen";
+import { EditWorkoutScreen } from "../screens/EditWorkoutScreen";
+import { EditDietScreen } from "../screens/EditDietScreen";
 import { ComunidadeScreen } from "../screens/ComunidadeScreen";
 import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
@@ -179,6 +181,16 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Diet"
             component={DietScreen}
             options={{ headerShown: true, title: "Minha dieta", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="EditWorkout"
+            component={EditWorkoutScreen}
+            options={{ headerShown: true, title: "Editar treino", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="EditDiet"
+            component={EditDietScreen}
+            options={{ headerShown: true, title: "Editar dieta", ...headerStyle }}
           />
           <AppStack.Screen
             name="CreatePost"

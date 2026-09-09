@@ -31,7 +31,10 @@ export function WorkoutScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.head}>
-        <Txt variant="titleScreen">{workout.split}</Txt>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Txt variant="titleScreen">{workout.split}</Txt>
+          <Button title="Editar" variant="secondary" size="sm" onPress={() => navigation.navigate("EditWorkout")} />
+        </View>
         <Txt variant="label" color={colors.text2} style={{ marginTop: 4 }}>
           {workout.daysPerWeek} treinos por semana
         </Txt>
