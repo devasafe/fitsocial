@@ -66,6 +66,11 @@ export const env = {
   // Segredo esperado no header Authorization do webhook do RevenueCat (opcional).
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
+  // O painel é uma segunda origem, então CORS_ORIGIN passou a aceitar lista
+  // separada por vírgula. Uma origem só continua funcionando igual.
+  corsOrigins: keyList("CORS_ORIGIN").length ? keyList("CORS_ORIGIN") : ["*"],
+  // Sessão do painel é curta de propósito: quem entra ali apaga contas.
+  adminSessionExpiresIn: process.env.ADMIN_SESSION_EXPIRES_IN ?? "12h",
   // Tetos diários por chave de IA, para o painel administrativo.
   aiDailyLimits: dailyLimits(process.env.AI_DAILY_LIMITS),
   // Por quantos dias guardar o detalhe de cada chamada de IA (TTL da coleção).

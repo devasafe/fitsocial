@@ -29,6 +29,9 @@ const userSchema = new Schema(
     onboardingComplete: { type: Boolean, default: false },
     // Meta diária de água em ml (0 = não definida → app usa sugestão pelo peso).
     waterGoalMl: { type: Number, default: 0 },
+    // Papel administrativo. Só muda por script (scripts/grantAdmin.ts) — nunca
+    // por rota, nunca por env: tier é presente, role é privilégio.
+    role: { type: String, enum: ["user", "admin"], default: "user", index: true },
   },
   { timestamps: true }
 );

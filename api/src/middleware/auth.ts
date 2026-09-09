@@ -9,6 +9,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: UserDoc;
+      /** Escopo do token apresentado ("admin" só em sessão do painel). */
+      tokenScope?: string;
     }
   }
 }
@@ -29,6 +31,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     }
 
     req.user = user;
+    req.tokenScope = payload.scope;
     next();
   } catch (err) {
     if (err instanceof HttpError) return next(err);
