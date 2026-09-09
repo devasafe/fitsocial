@@ -2,11 +2,20 @@ import { useEffect, useState } from "react";
 import { buscarAdmin, sessao, type Admin } from "./api";
 import { Entrar } from "./pages/Entrar";
 import { Ia } from "./pages/Ia";
+import { Usuarios } from "./pages/Usuarios";
 
 export function App() {
   const [token, setToken] = useState<string | null>(() => sessao.ler());
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [verificando, setVerificando] = useState(true);
+  // Seção no hash: dá URL para marcar nos favoritos sem trazer um roteador.
+  const [seccao, setSeccao] = useState(() => window.location.hash.slice(2) || "ia");
+
+  useEffect(() => {
+    const ouvir = () => setSeccao(window.location.hash.slice(2) || "ia");
+    window.addEventListener("hashchange", ouvir);
+    return () => window.removeEventListener("hashchange", ouvir);
+  }, []);
 
   // Valida a sessão guardada antes de mostrar qualquer coisa: token na aba não
   // é prova de acesso — o papel pode ter sido revogado desde o último uso.
@@ -53,7 +62,21 @@ export function App() {
         </div>
 
         <nav className="nav">
-          <button aria-current="page">Consumo de IA</button>
+          {[
+            { id: "ia", rotulo: "Consumo de IA" },
+            { id: "usuarios", rotulo: "Usuários" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              aria-current={seccao === item.id ? "page" : undefined}
+              onClick={() => {
+                window.location.hash = `#/${item.id}`;
+                setSeccao(item.id);
+              }}
+            >
+              {item.rotulo}
+            </button>
+          ))}
         </nav>
 
         <div className="rodape-lateral">
@@ -69,7 +92,7 @@ export function App() {
       </aside>
 
       <main className="conteudo">
-        <Ia token={token} />
+        {seccao === "usuarios" ? <Usuarios token={token} /> : <Ia token={token} />}
       </main>
     </div>
   );

@@ -220,3 +220,31 @@ button.discreto[aria-pressed="true"] { background: var(--surface-3); color: var(
 @media (prefers-reduced-motion: no-preference) {
   .nav button, button.discreto { transition: background-color 120ms, color 120ms; }
 }
+
+/* ---------- diálogo ---------- */
+
+.cortina {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 11, 9, 0.72);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  z-index: 10;
+}
+
+.dialogo {
+  background: var(--surface-2);
+  border: 1px solid var(--line-forte);
+  border-radius: 16px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 22px;
+  width: 430px;
+}
+
+button.acao.perigosa { background: var(--perigo); color: var(--texto); }
+button.discreto.perigo { border-color: var(--perigo); color: var(--perigo); }
+button.discreto.perigo:hover { background: rgba(242, 99, 75, 0.12); color: var(--perigo); }
+
+input[type="number"] { max-width: 130px; }

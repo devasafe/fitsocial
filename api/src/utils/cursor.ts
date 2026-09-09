@@ -20,3 +20,25 @@ export function decodeCursor(raw: string): Cursor | null {
     return null;
   }
 }
+
+/** Mesma ideia, mas ordenado por `createdAt` — usado nas listas do painel.
+ *  As funções acima continuam servindo `startedAt` (atividades). */
+export interface CursorCriacao {
+  createdAt: Date;
+  id: string;
+}
+
+export function encodeCursorCriacao(c: CursorCriacao): string {
+  return Buffer.from(JSON.stringify({ c: c.createdAt.toISOString(), i: c.id })).toString("base64url");
+}
+
+export function decodeCursorCriacao(raw: string): CursorCriacao | null {
+  try {
+    const o = JSON.parse(Buffer.from(raw, "base64url").toString());
+    const createdAt = new Date(o.c);
+    if (Number.isNaN(createdAt.getTime()) || typeof o.i !== "string") return null;
+    return { createdAt, id: o.i };
+  } catch {
+    return null;
+  }
+}

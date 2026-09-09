@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User, publicUser } from "../models/User.js";
+import { aplicarEventoDeCompra } from "../services/entitlement.js";
 
 export const billingRouter = Router();
 
@@ -43,7 +44,9 @@ billingRouter.post(
       else if (INACTIVE_EVENTS.has(type)) tier = "free";
 
       if (tier) {
-        await User.updateOne({ _id: appUserId }, { tier });
+        // Não escreve `tier` direto: a camada de precedência decide, para um
+        // EXPIRATION da loja não derrubar uma cortesia dada pelo painel.
+        await aplicarEventoDeCompra(appUserId, tier === "premium");
       }
     }
 

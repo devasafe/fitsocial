@@ -32,6 +32,35 @@ const userSchema = new Schema(
     // Papel administrativo. Só muda por script (scripts/grantAdmin.ts) — nunca
     // por rota, nunca por env: tier é presente, role é privilégio.
     role: { type: String, enum: ["user", "admin"], default: "user", index: true },
+
+    // --- Moderação ---
+    status: {
+      type: String,
+      enum: ["active", "suspended", "banned"],
+      default: "active",
+      index: true,
+    },
+    /** Motivo da última mudança de status. Interno: nunca vai para o app. */
+    statusReason: { type: String, default: "", maxlength: 500 },
+    statusChangedAt: { type: Date, default: null },
+    statusChangedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    /** Fim da suspensão. Vencido, a conta se libera sozinha no próximo acesso. */
+    suspendedUntil: { type: Date, default: null },
+    /** false = conteúdo some do feed dos outros, sem nada ser apagado. */
+    contentVisible: { type: Boolean, default: true, index: true },
+    /** Marca a conta como excluída (LGPD). Separado de banir. */
+    deletedAt: { type: Date, default: null },
+
+    // --- Assinatura ---
+    // `tier` continua sendo a verdade que o app lê; estes campos dizem POR QUE
+    // a pessoa é premium, para o webhook da loja não derrubar uma cortesia.
+    premiumSource: {
+      type: String,
+      enum: ["purchase", "admin", "founder", null],
+      default: null,
+    },
+    /** Fim da cortesia. null = sem prazo. */
+    premiumUntil: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -59,5 +88,9 @@ export function publicUser(user: UserDoc) {
     onboardingComplete: user.onboardingComplete,
   };
 }
+
+// O painel lista por data de cadastro e filtra por status/tier.
+userSchema.index({ createdAt: -1 });
+userSchema.index({ status: 1, createdAt: -1 });
 
 export const User = mongoose.model("User", userSchema);

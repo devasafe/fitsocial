@@ -4,6 +4,7 @@ import { requireAdmin } from "../../middleware/admin.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { adminSessionRouter } from "./session.js";
 import { adminAiRouter } from "./ai.js";
+import { adminUsersRouter } from "./users.js";
 
 export const adminRouter = Router();
 
@@ -25,3 +26,4 @@ adminRouter.get(
 );
 
 adminRouter.use("/ai", adminAiRouter);
+adminRouter.use("/users", adminUsersRouter);

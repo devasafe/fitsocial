@@ -113,3 +113,70 @@ export const buscarSerie = (token: string, dias: number) =>
   api<UsoPorDia[]>(`/admin/ai/usage?dias=${dias}`, { token });
 
 export const buscarChaves = (token: string) => api<UsoPorChave[]>("/admin/ai/keys", { token });
+
+/* ---------- usuários ---------- */
+
+export interface UsuarioAdmin {
+  id: string;
+  name: string;
+  email: string;
+  username: string | null;
+  role: string;
+  tier: string;
+  tierEfetivo: "free" | "premium";
+  premiumSource: string | null;
+  premiumUntil: string | null;
+  status: string;
+  statusEfetivo: string;
+  statusReason: string;
+  suspendedUntil: string | null;
+  contentVisible: boolean;
+  createdAt: string;
+}
+
+export interface DetalheUsuario {
+  user: UsuarioAdmin;
+  contagens: { posts: number; atividades: number };
+  auditoria: { acao: string; motivo: string; quando: string; por: string }[];
+}
+
+export interface FiltroUsuarios {
+  q?: string;
+  status?: string;
+  tier?: string;
+  cursor?: string | null;
+}
+
+export function listarUsuarios(token: string, f: FiltroUsuarios = {}) {
+  const p = new URLSearchParams({ limit: "25" });
+  if (f.q) p.set("q", f.q);
+  if (f.status) p.set("status", f.status);
+  if (f.tier) p.set("tier", f.tier);
+  if (f.cursor) p.set("cursor", f.cursor);
+  return api<UsuarioAdmin[]>(`/admin/users?${p}`, { token });
+}
+
+export const buscarUsuario = (token: string, id: string) =>
+  api<DetalheUsuario>(`/admin/users/${id}`, { token });
+
+export const banirUsuario = (token: string, id: string, reason: string) =>
+  api<UsuarioAdmin>(`/admin/users/${id}/ban`, { method: "POST", body: { reason }, token });
+
+export const desbanirUsuario = (token: string, id: string, reason: string) =>
+  api<UsuarioAdmin>(`/admin/users/${id}/unban`, { method: "POST", body: { reason }, token });
+
+export const suspenderUsuario = (token: string, id: string, until: string, reason: string) =>
+  api<UsuarioAdmin>(`/admin/users/${id}/suspend`, { method: "POST", body: { until, reason }, token });
+
+export const definirPremium = (
+  token: string,
+  id: string,
+  grant: boolean,
+  durationDays: number | null,
+  reason: string
+) =>
+  api<UsuarioAdmin>(`/admin/users/${id}/premium`, {
+    method: "POST",
+    body: { grant, durationDays, reason },
+    token,
+  });

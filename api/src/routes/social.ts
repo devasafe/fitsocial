@@ -239,7 +239,7 @@ socialRouter.get(
     const following = await Follow.find({ follower: me }).select("following");
     const authorIds = [...following.map((f) => f.following), me];
 
-    const posts = await Post.find({ author: { $in: authorIds } })
+    const posts = await Post.find({ author: { $in: authorIds }, hidden: { $ne: true } })
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl")
@@ -259,7 +259,10 @@ socialRouter.get(
     const limit = Math.min(Number(req.query.limit) || 50, 50);
     // Paginação por cursor: ?before=<ISO do createdAt do último post da página anterior>.
     const before = String(req.query.before ?? "");
-    const filter = before && !Number.isNaN(Date.parse(before)) ? { createdAt: { $lt: new Date(before) } } : {};
+    const filter: mongoose.FilterQuery<typeof Post> =
+      before && !Number.isNaN(Date.parse(before)) ? { createdAt: { $lt: new Date(before) } } : {};
+    // Conteúdo escondido pela moderação não aparece na descoberta.
+    filter.hidden = { $ne: true };
 
     const posts = await Post.find(filter)
       .sort({ createdAt: -1 })
@@ -287,7 +290,11 @@ socialRouter.get(
     assertObjectId(req.params.id);
     const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl")
       .populate("activity", "kind sportId payload metrics durationSec title");
-    if (!post) throw new HttpError(404, "Post não encontrado");
+    // Post escondido responde 404 para terceiros: existir e negar já entrega
+    // que existe. O autor continua vendo o próprio conteúdo.
+    if (!post || (post.hidden && !post.author._id.equals(req.user!._id))) {
+      throw new HttpError(404, "Post não encontrado");
+    }
     const likedIds = await likedSetFor(req.user!._id, [post._id]);
     res.json({ post: serializePost(post, likedIds) });
   })
@@ -391,7 +398,8 @@ socialRouter.get(
     if (!user) throw new HttpError(404, "Usuário não encontrado");
 
     const [posts, followers, following, isFollowing] = await Promise.all([
-      Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
+      Post.find({ author: user._id, ...(user._id.equals(me) ? {} : { hidden: { $ne: true } }) })
+        .sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
       .populate("activity", "kind sportId payload metrics durationSec title"),
       Follow.countDocuments({ following: user._id }),
       Follow.countDocuments({ follower: user._id }),
@@ -460,7 +468,7 @@ socialRouter.get(
   "/posts/:id/comments",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const comments = await Comment.find({ post: req.params.id })
+    const comments = await Comment.find({ post: req.params.id, hidden: { $ne: true } })
       .sort({ createdAt: 1 })
       .limit(200)
       .populate("author", "name");
