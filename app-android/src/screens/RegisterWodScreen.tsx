@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Switch } from "react-native";
+import { View, Switch, TextInput, TouchableOpacity } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -8,7 +8,7 @@ import { SuggestField } from "../components/SuggestField";
 import { createActivity, type CreateActivityInput } from "../api/activities";
 import { searchWods, type WodBenchmark } from "../api/library";
 import { usePRCelebration } from "../components/PRCelebration";
-import { colors, spacing, sportColor } from "../theme";
+import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
 
@@ -28,6 +28,39 @@ const LEVELS: { id: "rx" | "scaled" | "adaptado"; label: string }[] = [
   { id: "adaptado", label: "Adaptado" },
 ];
 
+interface MovForm {
+  name: string;
+  kg: string;
+  reps: string;
+  tempo: string; // "mm:ss" ou segundos
+}
+
+const movInput = {
+  flex: 1,
+  backgroundColor: colors.surface2,
+  borderWidth: 1,
+  borderColor: colors.line,
+  borderRadius: radius.chip,
+  paddingHorizontal: spacing.md,
+  paddingVertical: 10,
+  color: colors.text,
+  fontSize: 15,
+} as const;
+const movCompact = { textAlign: "center", fontSize: 14 } as const;
+
+// Aceita "mm:ss" ou segundos puros. Vazio/zero → null.
+function parseTempo(s: string): number | null {
+  const v = s.trim();
+  if (!v) return null;
+  if (v.includes(":")) {
+    const [m, sec] = v.split(":");
+    const total = (Number(m) || 0) * 60 + (Number(sec) || 0);
+    return total > 0 ? total : null;
+  }
+  const n = Number(v);
+  return Number.isNaN(n) || n <= 0 ? null : Math.round(n);
+}
+
 export function RegisterWodScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
@@ -39,9 +72,20 @@ export function RegisterWodScreen({ route, navigation }: Props) {
   const [sec, setSec] = useState("");
   const [num, setNum] = useState(""); // rounds / reps / carga
   const [prescription, setPrescription] = useState("");
+  const [movements, setMovements] = useState<MovForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [share, setShare] = useState(false);
   const [caption, setCaption] = useState("");
+
+  function setMov(i: number, patch: Partial<MovForm>) {
+    setMovements((prev) => prev.map((mv, idx) => (idx === i ? { ...mv, ...patch } : mv)));
+  }
+  function addMov() {
+    setMovements((prev) => [...prev, { name: "", kg: "", reps: "", tempo: "" }]);
+  }
+  function removeMov(i: number) {
+    setMovements((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   function toScoreType(wodType: string): ScoreType {
     if (wodType === "amrap") return "amrap";
@@ -60,6 +104,22 @@ export function RegisterWodScreen({ route, navigation }: Props) {
     if (scoreType === "amrap") payload.resultRounds = Number(num) || 0;
     if (scoreType === "for_reps") payload.resultReps = Number(num) || 0;
     if (scoreType === "max_load") payload.resultLoadKg = Number(num.replace(",", ".")) || 0;
+
+    // Movimentos (composição do WOD) — só linhas com nome; campos vazios viram ausentes.
+    const movs = movements
+      .filter((mv) => mv.name.trim())
+      .map((mv) => {
+        const kg = Number(mv.kg.replace(",", "."));
+        const reps = Number(mv.reps);
+        const t = parseTempo(mv.tempo);
+        return {
+          name: mv.name.trim(),
+          ...(mv.kg.trim() && !Number.isNaN(kg) ? { loadKg: kg } : {}),
+          ...(mv.reps.trim() && !Number.isNaN(reps) ? { reps } : {}),
+          ...(t != null ? { timeSec: t } : {}),
+        };
+      });
+    if (movs.length) payload.movements = movs;
 
     setSaving(true);
     try {
@@ -151,6 +211,42 @@ export function RegisterWodScreen({ route, navigation }: Props) {
             placeholder={scoreType === "max_load" ? "60" : "12"}
           />
         )}
+      </Card>
+
+      {/* Movimentos — composição do WOD (enxuto, tudo opcional exceto o nome) */}
+      <Card style={{ marginBottom: spacing.md }}>
+        <Txt variant="titleCard" style={{ marginBottom: 2 }}>
+          Movimentos
+        </Txt>
+        <Txt variant="caption" color={colors.text3} style={{ marginBottom: spacing.md }}>
+          O que teve no WOD — carga, reps e tempo por movimento (o que se aplicar).
+        </Txt>
+
+        {movements.map((mv, i) => (
+          <View key={i} style={{ marginBottom: spacing.md, gap: spacing.sm }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <TextInput
+                value={mv.name}
+                onChangeText={(t) => setMov(i, { name: t })}
+                placeholder={`Movimento ${i + 1} (ex.: Back Squat)`}
+                placeholderTextColor={colors.text3}
+                style={movInput}
+              />
+              <TouchableOpacity onPress={() => removeMov(i)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
+                <Txt variant="titleCard" color={colors.text3}>
+                  ✕
+                </Txt>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              <TextInput value={mv.kg} onChangeText={(t) => setMov(i, { kg: t })} placeholder="carga (kg)" placeholderTextColor={colors.text3} keyboardType="numeric" style={[movInput, movCompact]} />
+              <TextInput value={mv.reps} onChangeText={(t) => setMov(i, { reps: t })} placeholder="reps" placeholderTextColor={colors.text3} keyboardType="numeric" style={[movInput, movCompact]} />
+              <TextInput value={mv.tempo} onChangeText={(t) => setMov(i, { tempo: t })} placeholder="tempo (mm:ss)" placeholderTextColor={colors.text3} style={[movInput, movCompact]} />
+            </View>
+          </View>
+        ))}
+
+        <Button title="+ Adicionar movimento" variant="secondary" onPress={addMov} />
       </Card>
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: spacing.md }}>

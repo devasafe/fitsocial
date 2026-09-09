@@ -56,6 +56,8 @@ export type CreateActivityInput =
         resultLoadKg?: number | null;
         description?: string | null;
         strengthBlock?: { variant?: string; exercises: StrengthExerciseInput[] };
+        // Composição do WOD, movimento a movimento (tudo opcional exceto o nome).
+        movements?: { name: string; loadKg?: number | null; reps?: number | null; timeSec?: number | null }[];
       };
     });
 

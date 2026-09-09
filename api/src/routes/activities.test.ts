@@ -191,6 +191,32 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     expect(res.status).toBe(201);
     expect(res.body.data.kind).toBe("wod");
   });
+
+  it("cria WOD com lista de movimentos (carga/reps/tempo)", async () => {
+    const res = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({
+        sportId: "crossfit",
+        kind: "wod",
+        payload: {
+          name: "WOD do dia",
+          scoreType: "amrap",
+          level: "rx",
+          resultRounds: 8,
+          movements: [
+            { name: "Back Squat", loadKg: 100, reps: 5 },
+            { name: "Thrusters", loadKg: 42.5, reps: 21 },
+            { name: "Run", timeSec: 200 },
+          ],
+        },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.payload.movements).toHaveLength(3);
+    expect(res.body.data.payload.movements[0].name).toBe("Back Squat");
+    expect(res.body.data.payload.movements[0].loadKg).toBe(100);
+    expect(res.body.data.payload.movements[2].timeSec).toBe(200);
+  });
 });
 
 describe("Recordes de força (PR)", () => {

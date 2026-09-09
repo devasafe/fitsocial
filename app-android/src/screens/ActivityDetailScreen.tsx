@@ -25,6 +25,7 @@ interface Payload {
   description?: string | null;
   modality?: string;
   sessionType?: string;
+  movements?: { name: string; loadKg?: number | null; reps?: number | null; timeSec?: number | null }[];
 }
 
 function mmss(sec: number): string {
@@ -116,6 +117,22 @@ export function ActivityDetailScreen({ route }: Props) {
           </>
         )}
       </Card>
+
+      {/* Movimentos (WOD) */}
+      {a.kind === "wod" && p.movements && p.movements.length > 0 ? (
+        <Card>
+          <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
+            Movimentos
+          </Txt>
+          {p.movements.map((mv, i) => {
+            const parts: string[] = [];
+            if (mv.loadKg != null) parts.push(`${mv.loadKg} kg`);
+            if (mv.reps != null) parts.push(`${mv.reps} reps`);
+            if (mv.timeSec != null) parts.push(mmss(mv.timeSec));
+            return <StatRow key={i} label={mv.name} value={parts.join(" · ") || "—"} />;
+          })}
+        </Card>
+      ) : null}
 
       {/* Splits (endurance) */}
       {p.splits && p.splits.length > 0 ? (

@@ -102,6 +102,14 @@ export const genericPayloadSchema = z.object({
 });
 export type GenericPayload = z.infer<typeof genericPayloadSchema>;
 
+// Movimento avulso de um WOD (composição do treino) — tudo opcional exceto o nome.
+export const wodMovementSchema = z.object({
+  name: z.string().min(1).max(80),
+  loadKg: z.number().min(0).max(1000).nullish(),
+  reps: z.number().int().min(0).max(100_000).nullish(),
+  timeSec: z.number().int().min(0).max(36_000).nullish(),
+});
+
 export const wodPayloadSchema = z.object({
   name: z.string().min(1).max(80),
   scoreType: z.enum([
@@ -122,6 +130,8 @@ export const wodPayloadSchema = z.object({
   description: z.string().max(2000).nullish(),
   // Bloco de força opcional — mesma forma do strength; de onde saem os 1RM (§6.1).
   strengthBlock: strengthPayloadSchema.optional(),
+  // Composição do WOD movimento a movimento (descritiva): nome + carga/reps/tempo.
+  movements: z.array(wodMovementSchema).max(30).optional(),
 });
 export type WodPayload = z.infer<typeof wodPayloadSchema>;
 
