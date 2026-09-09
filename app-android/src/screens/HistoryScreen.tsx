@@ -46,7 +46,7 @@ function fmtMetric(v: number, metric: "pace" | "distance" | "duration"): string 
   return `${ss === 60 ? mm + 1 : mm}:${ssStr}`;
 }
 
-export function HistoryScreen() {
+export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
   const { token } = useAuth();
   const { width } = useWindowDimensions();
   const [exercises, setExercises] = useState<ExerciseProgress[]>([]);
@@ -108,9 +108,11 @@ export function HistoryScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Txt variant="titleScreen">
-        {mode === "strength" ? "Evolução de carga" : "Evolução de cardio"}
-      </Txt>
+      {!embedded && (
+        <Txt variant="titleScreen">
+          {mode === "strength" ? "Evolução de carga" : "Evolução de cardio"}
+        </Txt>
+      )}
 
       <View style={styles.toggle}>
         <Chip label="Musculação" active={mode === "strength"} onPress={() => setMode("strength")} />

@@ -16,7 +16,7 @@ import { Txt, Button, ErrorState } from "../components/ui";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
-export function FeedScreen() {
+export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
@@ -54,17 +54,19 @@ export function FeedScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.s12 }]}>
-        <Txt variant="titleScreen" color={colors.lime}>
-          FitSocial
-        </Txt>
-        <Button
-          title="Publicar"
-          size="sm"
-          onPress={() => nav.navigate("CreatePost")}
-          style={styles.publishBtn}
-        />
-      </View>
+      {!embedded && (
+        <View style={[styles.topBar, { paddingTop: insets.top + spacing.s12 }]}>
+          <Txt variant="titleScreen" color={colors.lime}>
+            FitSocial
+          </Txt>
+          <Button
+            title="Publicar"
+            size="sm"
+            onPress={() => nav.navigate("CreatePost")}
+            style={styles.publishBtn}
+          />
+        </View>
+      )}
 
       <FlatList
         data={posts}
@@ -74,6 +76,13 @@ export function FeedScreen() {
           { paddingBottom: insets.bottom + spacing.s32 },
           posts.length === 0 && styles.listEmpty,
         ]}
+        ListHeaderComponent={
+          embedded && posts.length > 0 ? (
+            <View style={{ alignItems: "flex-end", marginBottom: spacing.sm }}>
+              <Button title="Publicar" size="sm" onPress={() => nav.navigate("CreatePost")} style={styles.publishBtn} />
+            </View>
+          ) : undefined
+        }
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

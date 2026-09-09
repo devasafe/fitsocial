@@ -33,6 +33,7 @@ export type AppStackParams = {
   DesafioDetail: { id: string };
   Diario: undefined;
   Notificacoes: undefined;
+  Coach: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
   RegisterActivity: { sportId: string };
@@ -43,12 +44,13 @@ export type AppStackParams = {
   LiveTrack: { sportId: string };
 };
 
-// Abas inferiores dentro de "Tabs": Hoje · Feed · (+) · Coach · Perfil.
+// Abas inferiores dentro de "Tabs": Hoje · Progresso · (+) · Comunidade · Perfil.
 // "RegisterTab" não é uma aba de conteúdo — é o botão central de registrar.
+// Coach saiu da barra: virou camada transversal (acesso pelo header da Home).
 export type MainTabParams = {
   HomeTab: undefined;
-  FeedTab: undefined;
+  ProgressoTab: undefined;
   RegisterTab: undefined;
-  CoachTab: undefined;
+  ComunidadeTab: undefined;
   ProfileTab: undefined;
 };

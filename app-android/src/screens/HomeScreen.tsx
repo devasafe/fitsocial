@@ -109,6 +109,9 @@ export function HomeScreen() {
           )}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.7} style={{ paddingHorizontal: 2 }}>
+            <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} style={{ paddingHorizontal: 2 }}>
             <Txt variant="titleCard">🔔</Txt>
             {unread > 0 && (

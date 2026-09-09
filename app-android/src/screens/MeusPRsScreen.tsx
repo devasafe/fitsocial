@@ -16,7 +16,7 @@ const TYPE_ORDER: Record<string, number> = {
   horas: 1,
 };
 
-export function MeusPRsScreen() {
+export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   const { token } = useAuth();
   const [prs, setPRs] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);

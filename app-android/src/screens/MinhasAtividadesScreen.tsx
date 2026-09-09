@@ -30,7 +30,7 @@ function shortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function MinhasAtividadesScreen() {
+export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [items, setItems] = useState<Activity[]>([]);

@@ -49,7 +49,7 @@ function LeaderboardRow({ row, position }: { row: LeaderRow; position: number })
   );
 }
 
-export function LeaderboardScreen() {
+export function LeaderboardScreen({ embedded }: { embedded?: boolean } = {}) {
   const { token } = useAuth();
   const [rows, setRows] = useState<LeaderRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,11 +86,11 @@ export function LeaderboardScreen() {
       style={styles.container}
       data={rows}
       keyExtractor={(r) => r.userId}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, embedded && styles.listEmbedded]}
       ListHeaderComponent={
         <View style={styles.headerWrap}>
-          <Txt variant="titleScreen">Ranking</Txt>
-          <Txt variant="body" color={colors.text2} style={styles.subtitle}>
+          {!embedded && <Txt variant="titleScreen">Ranking</Txt>}
+          <Txt variant="body" color={colors.text2} style={embedded ? undefined : styles.subtitle}>
             Treinos dos últimos 7 dias — você e quem você segue.
           </Txt>
         </View>
@@ -113,6 +113,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" },
   list: { paddingHorizontal: spacing.gutter, paddingTop: spacing.xl, paddingBottom: spacing.xl, gap: spacing.card },
+  listEmbedded: { paddingTop: spacing.xs },
   headerWrap: { marginBottom: spacing.md },
   subtitle: { marginTop: spacing.xs },
   row: {

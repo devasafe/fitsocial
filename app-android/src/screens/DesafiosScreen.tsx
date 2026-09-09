@@ -16,7 +16,7 @@ function periodLabel(endAt: string): string {
   return `Termina em ${days} dia${days === 1 ? "" : "s"}`;
 }
 
-export function DesafiosScreen() {
+export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [tab, setTab] = useState<"mine" | "discover">("mine");

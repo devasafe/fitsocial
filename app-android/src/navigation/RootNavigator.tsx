@@ -10,7 +10,8 @@ import { HomeScreen } from "../screens/HomeScreen";
 import { OnboardingChat } from "../screens/OnboardingChat";
 import { WorkoutScreen } from "../screens/WorkoutScreen";
 import { DietScreen } from "../screens/DietScreen";
-import { FeedScreen } from "../screens/FeedScreen";
+import { ComunidadeScreen } from "../screens/ComunidadeScreen";
+import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
@@ -93,7 +94,7 @@ function MainTabs() {
       }}
     >
       <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: "Hoje", tabBarIcon: tabIcon("◆") }} />
-      <Tab.Screen name="FeedTab" component={FeedScreen} options={{ title: "Feed", tabBarIcon: tabIcon("❒") }} />
+      <Tab.Screen name="ProgressoTab" component={ProgressoScreen} options={{ title: "Progresso", tabBarIcon: tabIcon("▲") }} />
       <Tab.Screen
         name="RegisterTab"
         component={EmptyTab}
@@ -105,7 +106,7 @@ function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="CoachTab" component={CoachScreen} options={{ title: "Coach", tabBarIcon: tabIcon("✦") }} />
+      <Tab.Screen name="ComunidadeTab" component={ComunidadeScreen} options={{ title: "Comunidade", tabBarIcon: tabIcon("❒") }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Perfil", tabBarIcon: tabIcon("●") }} />
     </Tab.Navigator>
   );
@@ -262,6 +263,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Notificacoes"
             component={NotificacoesScreen}
             options={{ headerShown: true, title: "Notificações", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Coach"
+            component={CoachScreen}
+            options={{ headerShown: true, title: "Seu coach", ...headerStyle }}
           />
         </>
       )}
