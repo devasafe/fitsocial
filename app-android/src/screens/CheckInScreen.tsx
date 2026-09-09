@@ -30,6 +30,12 @@ interface Row {
   distance: string;
 }
 
+function fmt(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function paceLabel(row: { duration: string; distance: string }): string | null {
   const min = Number(row.duration);
   const km = Number(row.distance);
@@ -68,8 +74,32 @@ export function CheckInScreen() {
   const loaded = useRef(false);
   const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
   const [loadingVideos, setLoadingVideos] = useState(true);
+  const [rest, setRest] = useState<number | null>(null); // segundos de descanso restantes
+  const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const doneCount = useMemo(() => rows.filter((r) => r.done).length, [rows]);
+
+  function stopRest() {
+    if (restRef.current) clearInterval(restRef.current);
+    restRef.current = null;
+    setRest(null);
+  }
+  function startRest(sec: number) {
+    if (restRef.current) clearInterval(restRef.current);
+    setRest(sec);
+    restRef.current = setInterval(() => {
+      setRest((r) => {
+        if (r === null) return null;
+        if (r <= 1) {
+          if (restRef.current) clearInterval(restRef.current);
+          restRef.current = null;
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+  }
+  useEffect(() => () => stopRest(), []);
 
   // Resolve as miniaturas de vídeo dos exercícios da sessão (não bloqueia o check-in).
   useEffect(() => {
@@ -132,7 +162,12 @@ export function CheckInScreen() {
   }
 
   function toggleDone(i: number) {
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, done: !r.done } : r)));
+    setRows((prev) => {
+      const wasDone = prev[i]?.done;
+      // Ao MARCAR feito, dispara o descanso do exercício (padrão 60s).
+      if (!wasDone) startRest(session.exercises[i]?.restSeconds || 60);
+      return prev.map((r, idx) => (idx === i ? { ...r, done: !r.done } : r));
+    });
   }
   function updateField(i: number, field: "weight" | "reps" | "duration" | "distance", value: string) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
@@ -184,6 +219,7 @@ export function CheckInScreen() {
   }
 
   const pct = rows.length ? (doneCount / rows.length) * 100 : 0;
+  const currentIdx = rows.findIndex((r) => !r.done); // exercício "Agora"
 
   return (
     <View style={styles.container}>
@@ -211,11 +247,12 @@ export function CheckInScreen() {
         </Txt>
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.list}>
         {rows.map((row, i) => {
           const pace = paceLabel(row);
+          const isCurrent = i === currentIdx;
           return (
-            <Card key={i} level={1} style={[styles.card, row.done && styles.cardDone]}>
+            <Card key={i} level={1} style={[styles.card, row.done ? styles.cardDone : isCurrent ? styles.cardCurrent : null]}>
               <TouchableOpacity
                 style={styles.cardTop}
                 onPress={() => toggleDone(i)}
@@ -242,9 +279,16 @@ export function CheckInScreen() {
                       {row.name}
                     </Txt>
                   </View>
-                  <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
-                    Meta {row.target}
-                  </Txt>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 2 }}>
+                    <Txt variant="caption" color={colors.text3}>
+                      Meta {row.target}
+                    </Txt>
+                    {isCurrent && !row.done ? (
+                      <Txt variant="caption" color={colors.onLime} style={styles.nowTag}>
+                        Agora
+                      </Txt>
+                    ) : null}
+                  </View>
                 </View>
               </TouchableOpacity>
 
@@ -327,16 +371,42 @@ export function CheckInScreen() {
             thumbColor={colors.text}
           />
         </View>
+        <View style={{ height: spacing.sm }} />
+      </ScrollView>
 
+      {/* Timer de descanso — aparece ao marcar uma série feita */}
+      {rest !== null && (
+        <View style={styles.restPill}>
+          <Txt variant="bodyStrong" color={colors.onLime} tabular>
+            {rest > 0 ? `Descanso ${fmt(rest)}` : "Descanso completo — bora!"}
+          </Txt>
+          <View style={{ flexDirection: "row", gap: spacing.md, alignItems: "center" }}>
+            {rest > 0 ? (
+              <TouchableOpacity onPress={() => setRest((r) => (r ?? 0) + 30)} hitSlop={8}>
+                <Txt variant="label" color={colors.onLime}>
+                  +30s
+                </Txt>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={stopRest} hitSlop={8}>
+              <Txt variant="label" color={colors.onLime}>
+                {rest > 0 ? "Pular" : "Ok"}
+              </Txt>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Barra fixa — finalizar sempre acessível, sem rolar até o fim */}
+      <View style={styles.actionBar}>
         <Button
-          title={`Salvar treino (${doneCount}/${rows.length})`}
+          title={`Finalizar treino (${doneCount}/${rows.length})`}
           size="lg"
           glow
           onPress={handleFinish}
           loading={saving}
         />
-        <View style={{ height: spacing.xl }} />
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -356,6 +426,15 @@ const styles = StyleSheet.create({
   list: { padding: spacing.gutter, gap: spacing.card },
   card: { borderRadius: radius.card },
   cardDone: { borderColor: colors.lime },
+  cardCurrent: { borderColor: colors.lineStrong, borderLeftWidth: 3, borderLeftColor: colors.lime },
+  nowTag: {
+    backgroundColor: colors.lime,
+    color: colors.onLime,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    borderRadius: radius.full,
+    overflow: "hidden",
+  },
   cardTop: { flexDirection: "row", alignItems: "center", gap: spacing.s12 },
   check: {
     width: 44,
@@ -390,5 +469,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: spacing.s8,
+  },
+  restPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.lime,
+    marginHorizontal: spacing.gutter,
+    marginBottom: spacing.s8,
+    paddingVertical: spacing.s12,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.chip,
+  },
+  actionBar: {
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.s12,
+    paddingBottom: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.surface,
   },
 });
