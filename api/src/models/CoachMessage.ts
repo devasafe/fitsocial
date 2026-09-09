@@ -10,6 +10,10 @@ const coachMessageSchema = new Schema(
   { timestamps: true }
 );
 
+// Série temporal do painel varre por data. Sem este índice, contar posts por
+// dia significa percorrer a coleção inteira.
+coachMessageSchema.index({ createdAt: -1 });
+
 export type CoachMessageDoc = HydratedDocument<InferSchemaType<typeof coachMessageSchema>>;
 
 export const CoachMessage = mongoose.model("CoachMessage", coachMessageSchema);

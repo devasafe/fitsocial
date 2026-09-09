@@ -11,6 +11,10 @@ const commentSchema = new Schema(
   { timestamps: true }
 );
 
+// Série temporal do painel varre por data. Sem este índice, contar posts por
+// dia significa percorrer a coleção inteira.
+commentSchema.index({ createdAt: -1 });
+
 export type CommentDoc = HydratedDocument<InferSchemaType<typeof commentSchema>>;
 
 export const Comment = mongoose.model("Comment", commentSchema);

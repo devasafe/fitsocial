@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { AiUsage } from "../models/AiUsage.js";
 import { env } from "../config/env.js";
 import { setAiTelemetrySink, type AiCallRecord } from "./ai/telemetry.js";
+import { agruparPorDia, FUSO } from "../utils/dia.js";
 
 /** Liga a telemetria da IA ao banco. Chamado uma vez, no boot da API.
  *  Fora daqui a camada de IA continua sem saber que Mongo existe. */
@@ -92,7 +93,9 @@ export async function usagePorDia(dias = 30): Promise<UsagePorDia[]> {
     { $match: { createdAt: { $gte: desde } } },
     {
       $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" } },
+        // Mesmo fuso do dashboard: dois gráficos no mesmo painel não podem
+        // cortar o dia em horas diferentes.
+        _id: agruparPorDia("createdAt"),
         chamadas: { $sum: 1 },
         falhas: { $sum: { $cond: ["$ok", 0, 1] } },
         tokens: { $sum: "$totalTokens" },
@@ -104,8 +107,11 @@ export async function usagePorDia(dias = 30): Promise<UsagePorDia[]> {
   return linhas.map((l) => ({ dia: l._id, chamadas: l.chamadas, falhas: l.falhas, tokens: l.tokens }));
 }
 
-/** Datas são UTC no banco (convenção do CLAUDE.md); a borda converte se precisar. */
+/** Começo do dia de hoje em São Paulo, expresso no instante UTC correspondente.
+ *  Datas são UTC no banco (convenção do CLAUDE.md); a borda converte. */
 function inicioDoDiaUTC(): Date {
   const agora = new Date();
-  return new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()));
+  const hojeSP = agora.toLocaleDateString("en-CA", { timeZone: FUSO });
+  // -03:00 é o offset de São Paulo (o país não usa mais horário de verão).
+  return new Date(`${hojeSP}T00:00:00-03:00`);
 }

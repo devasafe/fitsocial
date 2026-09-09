@@ -18,6 +18,10 @@ const postSchema = new Schema(
   { timestamps: true }
 );
 
+// Série temporal do painel varre por data. Sem este índice, contar posts por
+// dia significa percorrer a coleção inteira.
+postSchema.index({ createdAt: -1 });
+
 export type PostDoc = HydratedDocument<InferSchemaType<typeof postSchema>>;
 
 export const Post = mongoose.model("Post", postSchema);
