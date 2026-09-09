@@ -59,12 +59,12 @@ function NumInput({
 }
 
 export function RegisterActivityScreen({ route, navigation }: Props) {
-  const { sportId } = route.params;
+  const { sportId, prefill } = route.params;
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
-  const [exercises, setExercises] = useState<ExerciseForm[]>([
-    { name: "", sets: [{ weightKg: "", reps: "" }] },
-  ]);
+  const [exercises, setExercises] = useState<ExerciseForm[]>(
+    prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
+  );
   const [share, setShare] = useState(false);
   const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);

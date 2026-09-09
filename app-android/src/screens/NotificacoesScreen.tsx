@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, ActivityIndicator, TouchableOpacity } from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -8,6 +8,7 @@ import { Avatar } from "../components/Avatar";
 import { notify } from "../lib/notify";
 import { listNotifications, markNotificationsRead, type NotificationItem } from "../api/notifications";
 import { getPost } from "../api/social";
+import { Skeleton } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -87,8 +88,10 @@ export function NotificacoesScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.sm }}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} height={64} radius={14} />
+        ))}
       </View>
     );
   }

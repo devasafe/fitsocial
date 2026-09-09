@@ -1,10 +1,5 @@
 import React, { useCallback, useState } from "react";
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  ActivityIndicator,
-} from "react-native";
+import { View, StyleSheet, FlatList } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +16,7 @@ import { getBadges, type Badge } from "../api/gamification";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { MetricTile, Button, Txt, Card, ErrorState } from "../components/ui";
 import { coachLine } from "../lib/coachContext";
+import { Skeleton } from "../components/Skeleton";
 import { notify } from "../lib/notify";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -92,8 +88,21 @@ export function ProfileScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.gutter, paddingTop: spacing.xl, alignItems: "center", gap: spacing.md }}>
+        <Skeleton width={84} height={84} radius={42} />
+        <Skeleton width="50%" height={22} />
+        <Skeleton width="30%" height={14} />
+        <View style={{ flexDirection: "row", gap: spacing.card, alignSelf: "stretch", marginTop: spacing.md }}>
+          <View style={{ flex: 1 }}>
+            <Skeleton height={64} radius={20} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Skeleton height={64} radius={20} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Skeleton height={64} radius={20} />
+          </View>
+        </View>
       </View>
     );
   }

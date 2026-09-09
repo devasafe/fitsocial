@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, StyleSheet, FlatList } from "react-native";
+import { Skeleton } from "../components/Skeleton";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { getLeaderboard, type LeaderRow } from "../api/gamification";
@@ -75,8 +76,10 @@ export function LeaderboardScreen({ embedded }: { embedded?: boolean } = {}) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.sm }}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <Skeleton key={i} height={56} radius={14} />
+        ))}
       </View>
     );
   }

@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   useWindowDimensions,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -18,6 +17,7 @@ import {
 } from "../api/checkins";
 import { LineChart } from "../components/LineChart";
 import { Txt, Card, Chip, SectionHeader, ErrorState } from "../components/ui";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { colors, radius, spacing } from "../theme";
 
 const METRICS = [
@@ -95,8 +95,10 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.card }}>
+        <Skeleton width="45%" height={22} />
+        <Skeleton height={40} radius={12} />
+        <SkeletonCard lines={3} height={200} />
       </View>
     );
   }

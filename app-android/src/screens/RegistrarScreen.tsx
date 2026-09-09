@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Button } from "../components/ui";
 import { listSports, type Sport } from "../api/sports";
-import { listActivities } from "../api/activities";
+import { listActivities, type Activity } from "../api/activities";
 import { sportLabel } from "../lib/sportLabel";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -15,6 +15,22 @@ interface RecentSport {
   sportId: string;
   kind: string;
   label: string;
+  activity: Activity; // a mais recente do esporte — fonte do "Repetir"
+}
+
+// Converte o payload de força salvo no formato do formulário (para pré-preencher).
+function strengthPrefill(payload: unknown): { name: string; sets: { weightKg: string; reps: string }[] }[] | undefined {
+  const p = payload as { exercises?: { name?: string; sets?: { weightKg?: number; reps?: number | null }[] }[] } | undefined;
+  if (!p?.exercises?.length) return undefined;
+  return p.exercises
+    .filter((e) => e.name)
+    .map((e) => {
+      const sets = (e.sets ?? []).map((s) => ({
+        weightKg: s.weightKg != null ? String(s.weightKg) : "",
+        reps: s.reps != null ? String(s.reps) : "",
+      }));
+      return { name: e.name as string, sets: sets.length ? sets : [{ weightKg: "", reps: "" }] };
+    });
 }
 
 export function RegistrarScreen() {
@@ -37,7 +53,7 @@ export function RegistrarScreen() {
         for (const a of res.data) {
           if (seen.has(a.sportId)) continue;
           seen.add(a.sportId);
-          out.push({ sportId: a.sportId, kind: a.kind, label: sportLabel(a.sportId) });
+          out.push({ sportId: a.sportId, kind: a.kind, label: sportLabel(a.sportId), activity: a });
           if (out.length >= 4) break;
         }
         setRecent(out);
@@ -45,11 +61,13 @@ export function RegistrarScreen() {
       .catch(() => {});
   }, [token]);
 
-  function route(kind: string, sportId: string, label: string) {
+  function route(kind: string, sportId: string, label: string, activity?: Activity) {
     switch (kind) {
-      case "strength":
-        nav.navigate("RegisterActivity", { sportId });
+      case "strength": {
+        const prefill = activity ? strengthPrefill(activity.payload) : undefined;
+        nav.navigate("RegisterActivity", prefill ? { sportId, prefill } : { sportId });
         break;
+      }
       case "endurance":
         nav.navigate("RegisterEndurance", { sportId });
         break;
@@ -80,8 +98,8 @@ export function RegistrarScreen() {
             Recentes
           </Txt>
           <Button
-            title={`Registrar ${recent[0].label}`}
-            onPress={() => route(recent[0].kind, recent[0].sportId, recent[0].label)}
+            title={`${recent[0].kind === "strength" ? "Repetir" : "Registrar"} ${recent[0].label}`}
+            onPress={() => route(recent[0].kind, recent[0].sportId, recent[0].label, recent[0].activity)}
             size="lg"
             glow
           />
@@ -90,7 +108,7 @@ export function RegistrarScreen() {
               {recent.slice(1).map((r) => (
                 <TouchableOpacity
                   key={r.sportId}
-                  onPress={() => route(r.kind, r.sportId, r.label)}
+                  onPress={() => route(r.kind, r.sportId, r.label, r.activity)}
                   activeOpacity={0.8}
                   style={{
                     flexDirection: "row",

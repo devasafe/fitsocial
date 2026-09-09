@@ -36,7 +36,11 @@ export type AppStackParams = {
   Coach: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
-  RegisterActivity: { sportId: string };
+  RegisterActivity: {
+    sportId: string;
+    // "Repetir último": pré-preenche os exercícios/séries a partir do último treino.
+    prefill?: { name: string; sets: { weightKg: string; reps: string }[] }[];
+  };
   RegisterEndurance: { sportId: string };
   RegisterClass: { sportId: string };
   RegisterGeneric: { sportId: string };

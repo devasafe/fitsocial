@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
+import { CoachSheet } from "../components/CoachSheet";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
@@ -33,6 +34,7 @@ export function HomeScreen() {
   const [generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
 
   const reloadDay = useCallback(() => {
     getDay(token!, todayStr())
@@ -151,7 +153,7 @@ export function HomeScreen() {
           )}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
-          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.7} hitSlop={8}>
+          <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.7} hitSlop={8}>
             <Txt variant="titleCard" color={colors.lime}>✦</Txt>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} hitSlop={8}>
@@ -247,7 +249,7 @@ export function HomeScreen() {
           />
 
           {/* Coach contextual */}
-          <TouchableOpacity onPress={() => navigation.navigate("Coach")} activeOpacity={0.85}>
+          <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
             <Card>
               <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
                 <Txt variant="titleCard" color={colors.lime}>✦</Txt>
@@ -301,6 +303,12 @@ export function HomeScreen() {
         token={token!}
         onClose={() => setQuickAdd(false)}
         onAdded={reloadDay}
+      />
+      <CoachSheet
+        visible={coachOpen}
+        token={token!}
+        onClose={() => setCoachOpen(false)}
+        onOpenSubscription={() => navigation.navigate("Subscription")}
       />
     </Screen>
   );
