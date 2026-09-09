@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Chip } from "../components/ui";
 import { notify } from "../lib/notify";
 import { getDay, logFood, deleteFood, MEAL_LABEL, type DaySummary, type Meal } from "../api/nutrition";
+import { getRecentFoods, pushRecentFood, type RecentFood } from "../lib/foodRecents";
 import { colors, spacing, radius } from "../theme";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
@@ -44,6 +45,7 @@ export function DiarioScreen() {
   const [kcal, setKcal] = useState("");
   const [protein, setProtein] = useState("");
   const [saving, setSaving] = useState(false);
+  const [recents, setRecents] = useState<RecentFood[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +56,7 @@ export function DiarioScreen() {
     } finally {
       setLoading(false);
     }
+    getRecentFoods().then(setRecents);
   }, [token, date]);
 
   useFocusEffect(
@@ -69,13 +72,9 @@ export function DiarioScreen() {
     }
     setSaving(true);
     try {
-      await logFood(token!, {
-        date,
-        meal,
-        name: name.trim(),
-        kcal: Number(kcal) || 0,
-        proteinG: Number(protein) || 0,
-      });
+      const food = { name: name.trim(), kcal: Number(kcal) || 0, proteinG: Number(protein) || 0 };
+      await logFood(token!, { date, meal, ...food });
+      await pushRecentFood(food);
       setName("");
       setKcal("");
       setProtein("");
@@ -155,6 +154,26 @@ export function DiarioScreen() {
             <Chip key={m} label={MEAL_LABEL[m]} active={meal === m} onPress={() => setMeal(m)} />
           ))}
         </View>
+        {recents.length > 0 && (
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm }}>
+            {recents.slice(0, 6).map((f, idx) => (
+              <TouchableOpacity
+                key={`${f.name}-${idx}`}
+                onPress={() => {
+                  setName(f.name);
+                  setKcal(String(f.kcal));
+                  setProtein(String(f.proteinG));
+                }}
+                activeOpacity={0.8}
+                style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.chip, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface2 }}
+              >
+                <Txt variant="caption" color={colors.text2}>
+                  {f.name} · {f.kcal}
+                </Txt>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         {input(name, setName, "Alimento")}
         <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
           {input(kcal, setKcal, "kcal")}

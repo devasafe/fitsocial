@@ -5,6 +5,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
+import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
@@ -30,6 +31,13 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [quickAdd, setQuickAdd] = useState(false);
+
+  const reloadDay = useCallback(() => {
+    getDay(token!, todayStr())
+      .then(setDay)
+      .catch(() => {});
+  }, [token]);
 
   const load = useCallback(async () => {
     try {
@@ -216,11 +224,12 @@ export function HomeScreen() {
             </View>
           )}
 
-          {/* Nutrição de hoje — porta de entrada do diário */}
+          {/* Nutrição de hoje — registro rápido + porta do diário */}
           <NutritionToday
             day={day}
             fallbackTarget={plan.diet.dailyCalories}
-            onPress={() => navigation.navigate("Diario")}
+            onOpen={() => navigation.navigate("Diario")}
+            onRegister={() => setQuickAdd(true)}
           />
 
           {/* Coach contextual */}
@@ -272,23 +281,33 @@ export function HomeScreen() {
           </Txt>
         </>
       )}
+
+      <QuickFoodAdd
+        visible={quickAdd}
+        token={token!}
+        onClose={() => setQuickAdd(false)}
+        onAdded={reloadDay}
+      />
     </Screen>
   );
 }
 
-// Card de nutrição do dia: kcal registradas vs meta + barra. Toque abre o diário.
-function NutritionToday({ day, fallbackTarget, onPress }: { day: DaySummary | null; fallbackTarget: number; onPress: () => void }) {
+// Card de nutrição do dia: kcal registradas vs meta + barra. Toque no card abre o
+// diário; "Registrar" abre o quick-add sem sair da Home.
+function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DaySummary | null; fallbackTarget: number; onOpen: () => void; onRegister: () => void }) {
   const kcal = day?.totals.kcal ?? 0;
   const target = day?.target?.dailyCalories ?? fallbackTarget;
   const pct = target > 0 ? Math.min(1, kcal / target) : 0;
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+    <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
       <Card>
         <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
           <Txt variant="titleCard">Nutrição de hoje</Txt>
-          <Txt variant="label" color={colors.lime}>
-            Registrar ›
-          </Txt>
+          <TouchableOpacity onPress={onRegister} hitSlop={8}>
+            <Txt variant="label" color={colors.lime}>
+              + Registrar
+            </Txt>
+          </TouchableOpacity>
         </View>
         <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
           {kcal}

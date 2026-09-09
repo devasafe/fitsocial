@@ -18,7 +18,9 @@ import { PostCard } from "../components/PostCard";
 import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
-import { MetricTile, Button, Txt, ErrorState } from "../components/ui";
+import { getCheckInStats, type CheckInStats } from "../api/checkins";
+import { MetricTile, Button, Txt, Card, ErrorState } from "../components/ui";
+import { coachLine } from "../lib/coachContext";
 import { notify } from "../lib/notify";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -30,8 +32,10 @@ export function ProfileScreen() {
   // Sem param => perfil próprio (aba); com param => perfil de outra pessoa.
   const targetId = route.params?.userId ?? me!.id;
 
+  const viewingSelf = !route.params?.userId || route.params.userId === me!.id;
   const [data, setData] = useState<UserProfile | null>(null);
   const [badges, setBadges] = useState<Badge[]>([]);
+  const [consist, setConsist] = useState<CheckInStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,7 +54,13 @@ export function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [token, targetId]);
+    // Consistência é do usuário logado — só no próprio perfil.
+    if (viewingSelf) {
+      getCheckInStats(token!)
+        .then((r) => setConsist(r.stats))
+        .catch(() => {});
+    }
+  }, [token, targetId, viewingSelf]);
 
   useFocusEffect(
     useCallback(() => {
@@ -140,6 +150,24 @@ export function ProfileScreen() {
               style={styles.metric}
             />
           </View>
+
+          {data.isMe && consist ? (
+            <Card level={2} style={{ marginTop: spacing.lg }}>
+              <Txt variant="label" color={colors.text2}>
+                Consistência
+              </Txt>
+              <Txt variant="metricLg" tabular color={colors.lime} style={{ marginTop: 2 }}>
+                {consist.streak}
+                <Txt variant="titleSection" color={colors.text2}>
+                  {" "}
+                  {consist.streak === 1 ? "dia seguido" : "dias seguidos"}
+                </Txt>
+              </Txt>
+              <Txt variant="body" color={colors.text2} style={{ marginTop: 2 }}>
+                {coachLine(consist)}
+              </Txt>
+            </Card>
+          ) : null}
 
           {data.isMe ? (
             <View style={styles.actions}>
