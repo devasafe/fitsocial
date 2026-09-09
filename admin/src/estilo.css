@@ -1,0 +1,222 @@
+/* Identidade herdada de docs/DESIGN.md — mesmos hex do app (app-android/src/theme.ts).
+   O que NÃO se herda: alvos de toque e "densidade sob demanda". Aqui é desktop,
+   mouse e teclado, e a densidade é o ponto. */
+
+:root {
+  --bg: #0e1310;
+  --surface: #161c18;
+  --surface-2: #1e2620;
+  --surface-3: #273029;
+  --line: #2a332c;
+  --line-forte: #3a453c;
+
+  --texto: #edebe1;
+  --texto-2: #a8ac9e;
+  --texto-3: #6e7469;
+
+  --lime: #c8fa4b;
+  --sobre-lime: #0e1310;
+  --alerta: #f5c63c;
+  --perigo: #f2634b;
+  --info: #7fb2e5;
+
+  /* Rampa térmica: no app mede intensidade de treino; aqui, de consumo. */
+  --termica-0: #2a332c;
+  --termica-1: #5c7a3e;
+  --termica-2: #8fbf42;
+  --termica-3: #c8fa4b;
+  --termica-4: #f5c63c;
+  --termica-5: #f2734b;
+
+  --display: "Sora", system-ui, sans-serif;
+  --corpo: "Archivo", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Número é sempre tabular: coluna de dígitos que não dança ao atualizar. */
+.num {
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -0.02em; }
+h1 { font-size: 24px; font-weight: 800; }
+h2 { font-size: 17px; font-weight: 700; }
+
+a { color: var(--lime); }
+
+:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+/* ---------- estrutura ---------- */
+
+.app { display: grid; grid-template-columns: 196px 1fr; height: 100%; }
+
+.lateral {
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.marca { display: flex; align-items: baseline; gap: 7px; padding: 0 8px; }
+.marca b { font-family: var(--display); font-weight: 800; font-size: 15px; }
+.marca span { color: var(--texto-3); font-size: 11px; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+
+.nav button {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--texto-2);
+  cursor: pointer;
+  font: inherit;
+  padding: 7px 9px;
+  text-align: left;
+}
+.nav button:hover { background: var(--surface-2); color: var(--texto); }
+.nav button[aria-current="page"] { background: var(--surface-3); color: var(--texto); }
+
+.rodape-lateral { margin-top: auto; padding: 0 8px; color: var(--texto-3); font-size: 12px; }
+
+.conteudo { overflow-y: auto; padding: 28px 32px 56px; }
+
+.cabecalho {
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+}
+.cabecalho p { color: var(--texto-2); margin: 5px 0 0; max-width: 62ch; }
+
+.secao { margin-bottom: 34px; }
+.secao > h2 { margin-bottom: 12px; }
+
+/* ---------- superfícies ---------- */
+/* Elevação por degrau de superfície + borda de 1px. Nada de sombra difusa. */
+
+.painel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* ---------- tabela ---------- */
+
+table { border-collapse: collapse; width: 100%; }
+
+th {
+  border-bottom: 1px solid var(--line-forte);
+  color: var(--texto-3);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px 8px;
+  text-align: left;
+}
+th.dir, td.dir { text-align: right; }
+
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-2); }
+
+/* ---------- formulário ---------- */
+
+label { color: var(--texto-2); display: block; font-size: 13px; margin-bottom: 6px; }
+
+input {
+  background: var(--surface-2);
+  border: 1px solid var(--line-forte);
+  border-radius: 10px;
+  color: var(--texto);
+  font: inherit;
+  padding: 10px 12px;
+  width: 100%;
+}
+input:focus { border-color: var(--lime); outline: none; }
+
+button.acao {
+  background: var(--lime);
+  border: 0;
+  border-radius: 10px;
+  color: var(--sobre-lime);
+  cursor: pointer;
+  font-family: var(--corpo);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 18px;
+}
+button.acao:disabled { background: var(--surface-3); color: var(--texto-3); cursor: not-allowed; }
+
+button.discreto {
+  background: none;
+  border: 1px solid var(--line-forte);
+  border-radius: 9px;
+  color: var(--texto-2);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 11px;
+}
+button.discreto:hover { color: var(--texto); border-color: var(--texto-3); }
+button.discreto[aria-pressed="true"] { background: var(--surface-3); color: var(--texto); }
+
+.erro {
+  background: rgba(242, 99, 75, 0.12);
+  border: 1px solid var(--perigo);
+  border-radius: 10px;
+  color: var(--texto);
+  padding: 10px 12px;
+}
+
+.aviso { color: var(--texto-3); font-size: 12px; }
+
+/* ---------- entrar ---------- */
+
+.entrar { display: grid; height: 100%; place-items: center; padding: 24px; }
+.entrar form { display: flex; flex-direction: column; gap: 14px; width: 320px; }
+.entrar .selo { color: var(--texto-3); font-size: 12px; }
+
+/* ---------- quota ---------- */
+
+.trilho {
+  background: var(--surface-3);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+.trilho > i { display: block; height: 100%; }
+
+.vazio { color: var(--texto-3); padding: 22px 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav button, button.discreto { transition: background-color 120ms, color 120ms; }
+}

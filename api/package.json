@@ -14,7 +14,8 @@
     "try:plan": "tsx src/scripts/tryPlan.ts",
     "migrate:activities": "tsx src/scripts/migrateWorkoutLogsToActivities.ts",
     "migrate:activities:rollback": "tsx src/scripts/migrateWorkoutLogsToActivities.ts --rollback",
-    "pr:recompute": "tsx src/scripts/recomputePRs.ts"
+    "pr:recompute": "tsx src/scripts/recomputePRs.ts",
+    "admin:grant": "tsx src/scripts/grantAdmin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

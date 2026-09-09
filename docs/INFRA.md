@@ -28,6 +28,7 @@ fit.satriz.club  fitapi.satriz.club  fitcdn.satriz.club  fitminio.satriz.club
 | Web | `FITSOCIAL FRONTEND` | Dockerfile, base `/app-android`, porta 3000 |
 | Storage | `minio-fitsocial` | Dockerfile inline sobre `minio/minio` |
 | Banco | `mongodb-fitsocial` | MongoDB 7 gerenciado pelo Coolify |
+| Painel | `FITSOCIAL ADMIN` | Dockerfile, base `/admin`, porta 3000 |
 
 Projeto `FitSocial`, environment `production`, servidor `Satriz Club`.
 Deploy é por push na branch `main` do repositório `devasafe/fitsocial`.
@@ -58,6 +59,12 @@ Deploy é por push na branch `main` do repositório `devasafe/fitsocial`.
 6. **`EXPO_PUBLIC_API_URL` é build-time.** O Expo inlina o valor no bundle. Tem que estar
    marcada como *build variable*, senão a web compila apontando para `localhost` e falha
    em silêncio — a página carrega, só nenhuma chamada funciona.
+   **`VITE_API_URL` do painel tem exatamente o mesmo comportamento.** Mesma armadilha,
+   mesmo sintoma, duas vezes.
+
+7. **`CORS_ORIGIN` agora é lista.** Com o painel no ar são duas origens; esquecer a
+   segunda dá erro de CORS no navegador sem nada aparecer no log da API:
+   `CORS_ORIGIN=https://fit.satriz.club,https://admin.fit.satriz.club`
 
 ## Trocar para um domínio próprio
 
@@ -76,6 +83,24 @@ Deploy é por push na branch `main` do repositório `devasafe/fitsocial`.
 Backup diário do Mongo às 4h, configurado no próprio recurso. **Sem o Atlas, o backup é
 responsabilidade nossa**: confirme periodicamente que os arquivos estão sendo gerados, e
 tente uma restauração de verdade pelo menos uma vez — backup nunca restaurado não conta.
+
+## Painel administrativo
+
+Fica em `admin.fit.satriz.club`, separado do app. Quem entra precisa de duas coisas:
+o papel `admin` no usuário **e** uma sessão criada pelo próprio painel. O token de 30 dias
+do aplicativo é recusado ali de propósito — perder o celular não pode significar perder o
+painel. A sessão do painel dura 12 horas.
+
+O primeiro admin nasce por linha de comando, dentro do container da API:
+
+```bash
+npm run admin:grant -- --email=voce@exemplo.com     # promove
+npm run admin:grant -- --email=voce@exemplo.com --revoke   # rebaixa
+```
+
+O script se recusa a criar um segundo admin sem `--force`, e a rebaixar o último admin sem
+`--force` — sem admin nenhum, só a linha de comando devolve o acesso. Toda ação
+administrativa fica registrada em `AdminAudit`, com o e-mail mascarado.
 
 ## Rotina
 

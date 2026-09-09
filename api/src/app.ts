@@ -20,13 +20,20 @@ import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
 import { billingRouter } from "./routes/billing.js";
 import { exerciseVideosRouter } from "./routes/exerciseVideos.js";
+import { adminRouter } from "./routes/admin/index.js";
 import { errorHandler } from "./middleware/error.js";
 
 /** Monta a aplicação Express (sem subir o servidor) — facilita os testes. */
 export function createApp() {
   const app = express();
 
-  app.use(cors({ origin: env.corsOrigin }));
+  // A API roda atrás do proxy do Coolify (Traefik). Sem isto, req.ip é sempre o
+  // IP do proxy: o rate limit por IP viraria um balde único para o mundo todo,
+  // e qualquer um trancaria o login do painel para todos. "1" = um único hop
+  // confiável; mais que isso permitiria forjar X-Forwarded-For.
+  app.set("trust proxy", 1);
+
+  app.use(cors({ origin: env.corsOrigins.includes("*") ? "*" : env.corsOrigins }));
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -52,6 +59,9 @@ export function createApp() {
   app.use("/coach", coachRouter);
   app.use("/billing", billingRouter);
   app.use("/exercise-videos", exerciseVideosRouter);
+
+  // Painel administrativo (domínio próprio; exige sessão de escopo admin).
+  app.use("/admin", adminRouter);
 
   // Rota não encontrada.
   app.use((_req, res) => res.status(404).json({ error: "Rota não encontrada" }));

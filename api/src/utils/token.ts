@@ -3,11 +3,18 @@ import { env } from "../config/env.js";
 
 export interface JwtPayload {
   sub: string; // id do usuário
+  /** "admin" = sessão do painel. Ausente = token normal do app. */
+  scope?: "admin";
 }
 
-export function signToken(userId: string): string {
-  return jwt.sign({ sub: userId } satisfies JwtPayload, env.jwtSecret, {
-    expiresIn: env.jwtExpiresIn as jwt.SignOptions["expiresIn"],
+/** Assina um token. Sem opções, é o token de 30 dias do app — como sempre foi. */
+export function signToken(
+  userId: string,
+  opts: { scope?: "admin"; expiresIn?: string } = {}
+): string {
+  const payload: JwtPayload = { sub: userId, ...(opts.scope ? { scope: opts.scope } : {}) };
+  return jwt.sign(payload, env.jwtSecret, {
+    expiresIn: (opts.expiresIn ?? env.jwtExpiresIn) as jwt.SignOptions["expiresIn"],
   });
 }
 

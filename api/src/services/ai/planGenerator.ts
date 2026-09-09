@@ -90,6 +90,7 @@ Gere o plano completo de treino e dieta para esta pessoa.`;
 /** Gera um plano (treino + dieta) validado a partir da ficha do usuário. */
 export async function generatePlan(
   profile: ProfileData,
+  userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<PlanData> {
   const raw = await provider.generate({
@@ -97,6 +98,8 @@ export async function generatePlan(
     messages: [{ role: "user", content: buildUserPrompt(profile) }],
     jsonMode: true,
     temperature: 0.5,
+    feature: "plan_generate",
+    userId,
   });
 
   return normalizePlanData(parseJson(raw, planDataSchema));
@@ -111,6 +114,7 @@ export async function adjustPlan(
   profile: ProfileData,
   currentPlan: PlanData,
   adherenceSummary: string,
+  userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<PlanData> {
   const userPrompt = `${buildUserPrompt(profile)}
@@ -131,6 +135,8 @@ Com base na adesão acima, gere uma NOVA VERSÃO do plano:
     messages: [{ role: "user", content: userPrompt }],
     jsonMode: true,
     temperature: 0.5,
+    feature: "plan_adjust",
+    userId,
   });
 
   return normalizePlanData(parseJson(raw, planDataSchema));
@@ -143,6 +149,7 @@ Com base na adesão acima, gere uma NOVA VERSÃO do plano:
 export async function importPlanFromText(
   text: string,
   profile: ProfileData | null,
+  userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<PlanData> {
   const profileLine = profile
@@ -166,6 +173,8 @@ ${PLAN_JSON_FORMAT}`;
     messages: [{ role: "user", content: `TEXTO DO PLANO DO USUÁRIO:\n\n${text}` }],
     jsonMode: true,
     temperature: 0.2,
+    feature: "plan_import",
+    userId,
   });
 
   return normalizePlanData(parseJson(raw, planDataSchema));
