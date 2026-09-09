@@ -11,6 +11,10 @@ export interface SearchUser {
 export interface PostAuthor {
   id: string;
   name: string;
+  avatarUrl?: string;
+  // Presentes no feed Explorar (descoberta); ausentes/false nos outros contextos.
+  isMe?: boolean;
+  isFollowing?: boolean;
 }
 export interface Post {
   id: string;

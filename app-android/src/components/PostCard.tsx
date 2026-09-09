@@ -4,7 +4,7 @@ import Svg, { Path } from "react-native-svg";
 import { useAuth } from "../context/AuthContext";
 import { likePost, unlikePost, type Post } from "../api/social";
 import { colors, radius, spacing } from "../theme";
-import { Card, Txt } from "./ui";
+import { Card, Txt, Button } from "./ui";
 import { Avatar } from "./Avatar";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
@@ -61,15 +61,36 @@ export function PostCard({
   post,
   onPressAuthor,
   onPressComments,
+  onToggleFollow,
 }: {
   post: Post;
   onPressAuthor?: (authorId: string) => void;
   onPressComments?: (post: Post) => void;
+  // Presente só no Explorar: mostra "Seguir/Seguindo" no card (descoberta em 1 toque).
+  onToggleFollow?: (authorId: string, next: boolean) => Promise<void>;
 }) {
   const { token } = useAuth();
   // Estado otimista da curtida (atualiza a UI antes da resposta do servidor).
   const [liked, setLiked] = useState(post.likedByMe);
   const [count, setCount] = useState(post.likeCount);
+  const [following, setFollowing] = useState(!!post.author.isFollowing);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  const showFollow = !!onToggleFollow && !post.author.isMe;
+
+  async function toggleFollow() {
+    if (!onToggleFollow || followBusy) return;
+    const next = !following;
+    setFollowing(next); // otimista
+    setFollowBusy(true);
+    try {
+      await onToggleFollow(post.author.id, next);
+    } catch {
+      setFollowing(!next); // reverte
+    } finally {
+      setFollowBusy(false);
+    }
+  }
 
   async function toggleLike() {
     const next = !liked;
@@ -90,22 +111,33 @@ export function PostCard({
 
   return (
     <Card style={styles.card}>
-      <TouchableOpacity
-        style={styles.header}
-        onPress={() => onPressAuthor?.(post.author.id)}
-        disabled={!onPressAuthor}
-        activeOpacity={0.7}
-      >
-        <Avatar name={post.author.name} size={40} />
-        <View style={styles.headerText}>
-          <Txt variant="titleCard">{post.author.name}</Txt>
-          {when ? (
-            <Txt variant="caption" color={colors.text3}>
-              {when}
-            </Txt>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.authorTap}
+          onPress={() => onPressAuthor?.(post.author.id)}
+          disabled={!onPressAuthor}
+          activeOpacity={0.7}
+        >
+          <Avatar name={post.author.name} size={40} />
+          <View style={styles.headerText}>
+            <Txt variant="titleCard">{post.author.name}</Txt>
+            {when ? (
+              <Txt variant="caption" color={colors.text3}>
+                {when}
+              </Txt>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+        {showFollow ? (
+          <Button
+            title={following ? "Seguindo" : "Seguir"}
+            size="sm"
+            variant={following ? "secondary" : "primary"}
+            onPress={toggleFollow}
+            disabled={followBusy}
+          />
+        ) : null}
+      </View>
 
       {post.text ? <Txt variant="body">{post.text}</Txt> : null}
       {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.image} /> : null}
@@ -143,6 +175,7 @@ export function PostCard({
 const styles = StyleSheet.create({
   card: { gap: spacing.s12 },
   header: { flexDirection: "row", alignItems: "center", gap: spacing.s12 },
+  authorTap: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.s12 },
   headerText: { flex: 1 },
   image: {
     width: "100%",

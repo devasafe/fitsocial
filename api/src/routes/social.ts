@@ -59,9 +59,11 @@ interface PopulatedAuthor {
 
 function serializePost(
   post: InstanceType<typeof Post>,
-  likedIds: Set<string>
+  likedIds: Set<string>,
+  opts?: { followingIds?: Set<string>; meId?: string }
 ) {
   const author = post.author as unknown as PopulatedAuthor;
+  const authorId = author._id.toString();
   return {
     id: post._id.toString(),
     text: post.text,
@@ -71,10 +73,13 @@ function serializePost(
     likedByMe: likedIds.has(post._id.toString()),
     createdAt: post.get("createdAt") as Date,
     author: {
-      id: author._id.toString(),
+      id: authorId,
       name: author.name,
       username: author.username ?? null,
       avatarUrl: author.avatarUrl ?? "",
+      // Preenchidos onde há contexto de descoberta (ex.: explore) — senão false.
+      isMe: opts?.meId ? authorId === opts.meId : false,
+      isFollowing: opts?.followingIds ? opts.followingIds.has(authorId) : false,
     },
   };
 }
@@ -131,13 +136,21 @@ socialRouter.get(
 socialRouter.get(
   "/explore",
   asyncHandler(async (req, res) => {
+    const me = req.user!._id;
     const limit = Math.min(Number(req.query.limit) || 50, 50);
     const posts = await Post.find({})
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl");
-    const likedIds = await likedSetFor(req.user!._id, posts.map((p) => p._id));
-    res.json({ posts: posts.map((p) => serializePost(p, likedIds)) });
+
+    const authorIds = posts.map((p) => (p.author as unknown as { _id: mongoose.Types.ObjectId })._id);
+    const [likedIds, follows] = await Promise.all([
+      likedSetFor(me, posts.map((p) => p._id)),
+      Follow.find({ follower: me, following: { $in: authorIds } }).select("following"),
+    ]);
+    const followingIds = new Set(follows.map((f) => f.following.toString()));
+    const meId = me.toString();
+    res.json({ posts: posts.map((p) => serializePost(p, likedIds, { followingIds, meId })) });
   })
 );
 

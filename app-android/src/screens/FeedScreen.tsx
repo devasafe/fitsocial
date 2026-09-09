@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { getFeed, getExplore, type Post } from "../api/social";
+import { getFeed, getExplore, followUser, unfollowUser, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
 import { Txt, Button, ErrorState } from "../components/ui";
 import { SkeletonCard } from "../components/Skeleton";
@@ -45,6 +45,19 @@ export function FeedScreen({
     useCallback(() => {
       load();
     }, [load])
+  );
+
+  // Seguir/deixar de seguir direto do card (só no Explorar). Otimista no card;
+  // aqui reflete em todos os posts do mesmo autor e propaga erro para reverter.
+  const handleToggleFollow = useCallback(
+    async (authorId: string, next: boolean) => {
+      if (next) await followUser(token!, authorId);
+      else await unfollowUser(token!, authorId);
+      setPosts((prev) =>
+        prev.map((p) => (p.author.id === authorId ? { ...p, author: { ...p.author, isFollowing: next } } : p))
+      );
+    },
+    [token]
   );
 
   if (loading) {
@@ -125,6 +138,7 @@ export function FeedScreen({
             post={item}
             onPressAuthor={(id) => nav.navigate("UserProfile", { userId: id })}
             onPressComments={(post) => nav.navigate("PostDetail", { post })}
+            onToggleFollow={mode === "explore" ? handleToggleFollow : undefined}
           />
         )}
       />

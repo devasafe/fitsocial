@@ -193,6 +193,9 @@ describe("Rede social", () => {
     const found = explore.body.posts.find((p: { id: string }) => p.id === carlaPostId);
     expect(found).toBeTruthy();
     expect(found.author.name).toBe("Carla");
+    // Ana não segue a Carla e não é a autora → flags de descoberta corretas.
+    expect(found.author.isFollowing).toBe(false);
+    expect(found.author.isMe).toBe(false);
   });
 
   it("GET /social/search acha por username e por nome, excluindo você", async () => {
