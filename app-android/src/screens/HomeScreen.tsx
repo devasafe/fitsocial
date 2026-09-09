@@ -11,6 +11,7 @@ import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
+import { getWaterDay, addWater, type WaterDay } from "../api/water";
 import { listNotifications } from "../api/notifications";
 import { coachLine } from "../lib/coachContext";
 import { ApiHttpError } from "../api/client";
@@ -29,6 +30,7 @@ export function HomeScreen() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
   const [day, setDay] = useState<DaySummary | null>(null);
+  const [water, setWater] = useState<WaterDay | null>(null);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -41,6 +43,21 @@ export function HomeScreen() {
       .then(setDay)
       .catch(() => {});
   }, [token]);
+
+  const reloadWater = useCallback(() => {
+    getWaterDay(token!, todayStr())
+      .then(setWater)
+      .catch(() => {});
+  }, [token]);
+
+  async function quickWater(ml: number) {
+    try {
+      await addWater(token!, todayStr(), ml);
+      reloadWater();
+    } catch {
+      /* best-effort */
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +75,9 @@ export function HomeScreen() {
       .catch(() => {});
     getDay(token!, todayStr())
       .then(setDay)
+      .catch(() => {});
+    getWaterDay(token!, todayStr())
+      .then(setWater)
       .catch(() => {});
   }, [token]);
 
@@ -252,6 +272,9 @@ export function HomeScreen() {
             onRegister={() => setQuickAdd(true)}
           />
 
+          {/* Água de hoje */}
+          <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
+
           {/* Coach contextual */}
           <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
             <Card>
@@ -344,6 +367,32 @@ function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DayS
         </Txt>
         <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
           <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.lime }} />
+        </View>
+      </Card>
+    </TouchableOpacity>
+  );
+}
+
+// Card de água do dia: total vs meta + barra + atalho +250 ml. Toque abre a tela.
+function WaterToday({ water, onOpen, onAdd }: { water: WaterDay | null; onOpen: () => void; onAdd: (ml: number) => void }) {
+  const total = water?.total ?? 0;
+  const goal = water?.goalMl ?? 2000;
+  const pct = goal > 0 ? Math.min(1, total / goal) : 0;
+  return (
+    <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
+      <Card>
+        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
+          <Txt variant="titleCard">Água de hoje</Txt>
+          <TouchableOpacity onPress={() => onAdd(250)} hitSlop={8}>
+            <Txt variant="label" color={colors.info}>+ 250 ml</Txt>
+          </TouchableOpacity>
+        </View>
+        <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
+          {total}
+          <Txt variant="titleSection" color={colors.text2}> / {goal} ml</Txt>
+        </Txt>
+        <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
+          <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.info }} />
         </View>
       </Card>
     </TouchableOpacity>

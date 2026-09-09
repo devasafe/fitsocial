@@ -34,6 +34,7 @@ export type AppStackParams = {
   CriarDesafio: undefined;
   DesafioDetail: { id: string };
   Diario: undefined;
+  Agua: undefined;
   Notificacoes: undefined;
   Coach: undefined;
   BuscarPessoas: undefined;

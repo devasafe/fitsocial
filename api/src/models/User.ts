@@ -27,6 +27,8 @@ const userSchema = new Schema(
     tier: { type: String, enum: ["free", "premium"], default: "free" },
     // Marca se a pessoa já concluiu o onboarding conversacional (Fatia 2).
     onboardingComplete: { type: Boolean, default: false },
+    // Meta diária de água em ml (0 = não definida → app usa sugestão pelo peso).
+    waterGoalMl: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -13,6 +13,7 @@ import { prsRouter } from "./routes/prs.js";
 import { libraryRouter } from "./routes/library.js";
 import { challengesRouter } from "./routes/challenges.js";
 import { nutritionRouter } from "./routes/nutrition.js";
+import { waterRouter } from "./routes/water.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
@@ -44,6 +45,7 @@ export function createApp() {
   app.use("/library", libraryRouter);
   app.use("/challenges", challengesRouter);
   app.use("/nutrition", nutritionRouter);
+  app.use("/water", waterRouter);
   app.use("/notifications", notificationsRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);

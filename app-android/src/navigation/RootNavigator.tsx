@@ -40,6 +40,7 @@ import { DesafiosScreen } from "../screens/DesafiosScreen";
 import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
 import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
 import { DiarioScreen } from "../screens/DiarioScreen";
+import { AguaScreen } from "../screens/AguaScreen";
 import { NotificacoesScreen } from "../screens/NotificacoesScreen";
 import { BuscarPessoasScreen } from "../screens/BuscarPessoasScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
@@ -271,6 +272,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Diario"
             component={DiarioScreen}
             options={{ headerShown: true, title: "Diário alimentar", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Agua"
+            component={AguaScreen}
+            options={{ headerShown: true, title: "Água", ...headerStyle }}
           />
           <AppStack.Screen
             name="Notificacoes"
