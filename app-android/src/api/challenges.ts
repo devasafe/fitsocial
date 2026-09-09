@@ -71,7 +71,7 @@ export interface ChallengeComment {
   id: string;
   text: string;
   createdAt: string;
-  author: { id: string; name: string };
+  author: { id: string; name: string; avatarUrl?: string };
 }
 
 export async function listChallengePosts(token: string, id: string): Promise<ChallengePost[]> {

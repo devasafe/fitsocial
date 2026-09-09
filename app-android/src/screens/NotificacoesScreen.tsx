@@ -131,7 +131,7 @@ export function NotificacoesScreen() {
                 }}
               >
                 {!n.read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} /> : <View style={{ width: 8 }} />}
-                <Avatar name={n.actor.name} size={36} />
+                <Avatar uri={n.actor.avatarUrl} name={n.actor.name} size={36} />
                 <View style={{ flex: 1 }}>
                   <Txt variant="body">{n.text}</Txt>
                   <Txt variant="caption" color={colors.text3}>

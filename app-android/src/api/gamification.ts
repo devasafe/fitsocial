@@ -11,6 +11,7 @@ export interface Badge {
 export interface LeaderRow {
   userId: string;
   name: string;
+  avatarUrl?: string;
   week: number;
   isMe: boolean;
 }

@@ -56,11 +56,12 @@ gamificationRouter.get(
     ]);
     const weekMap = new Map(agg.map((a) => [a._id.toString(), a.week]));
 
-    const users = await User.find({ _id: { $in: ids } }).select("name");
+    const users = await User.find({ _id: { $in: ids } }).select("name avatarUrl");
     const leaderboard = users
       .map((u) => ({
         userId: u._id.toString(),
         name: u.name,
+        avatarUrl: u.avatarUrl ?? "",
         week: weekMap.get(u._id.toString()) ?? 0,
         isMe: u._id.toString() === me.toString(),
       }))

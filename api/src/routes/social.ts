@@ -433,7 +433,11 @@ function serializeComment(comment: InstanceType<typeof Comment>) {
     id: comment._id.toString(),
     text: comment.text,
     createdAt: comment.get("createdAt") as Date,
-    author: { id: author._id.toString(), name: author.name },
+    author: {
+      id: author._id.toString(),
+      name: author.name,
+      avatarUrl: author.avatarUrl ?? "",
+    },
   };
 }
 
@@ -458,7 +462,7 @@ socialRouter.post(
       targetId: post._id,
     });
 
-    await comment.populate("author", "name");
+    await comment.populate("author", "name avatarUrl");
     res.status(201).json({ comment: serializeComment(comment) });
   })
 );
@@ -471,7 +475,7 @@ socialRouter.get(
     const comments = await Comment.find({ post: req.params.id, hidden: { $ne: true } })
       .sort({ createdAt: 1 })
       .limit(200)
-      .populate("author", "name");
+      .populate("author", "name avatarUrl");
     res.json({ comments: comments.map(serializeComment) });
   })
 );
