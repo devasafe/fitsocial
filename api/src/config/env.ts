@@ -75,9 +75,13 @@ export const env = {
   adminSessionExpiresIn: process.env.ADMIN_SESSION_EXPIRES_IN ?? "12h",
   // Tetos diários por chave de IA, para o painel administrativo.
   aiDailyLimits: dailyLimits(process.env.AI_DAILY_LIMITS),
-  // Quanto esperar por uma resposta de IA antes de desistir. O caminho feliz do
-  // free tier leva de 14 a 20 segundos, então o prazo tem folga — mas existe.
-  aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 45000),
+  // Quanto esperar por uma resposta de IA antes de desistir.
+  //
+  // 25s vem de medição, não de chute: o Gemini responde em 17-20s quando está
+  // bom, e passa de 45s quando trava. O Groq entrega o mesmo plano em 9-12s.
+  // Esperar mais que isso é queimar tempo de quem está olhando a tela antes de
+  // chamar quem responde rápido.
+  aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 25000),
   // Quantas vezes insistir na MESMA chave quando a falha é passageira (5xx).
   aiRetries: Number(process.env.AI_RETRIES ?? 1),
   // Teto de tokens na resposta. Sem isto o Groq corta a saída no default dele e
