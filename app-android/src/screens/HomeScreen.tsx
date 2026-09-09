@@ -9,6 +9,7 @@ import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plan
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { listNotifications } from "../api/notifications";
+import { coachLine } from "../lib/coachContext";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -229,6 +230,11 @@ export function HomeScreen() {
                 <Txt variant="titleCard" color={colors.lime}>✦</Txt>
                 <Txt variant="titleCard">Seu coach</Txt>
               </View>
+              {stats && (
+                <Txt variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
+                  {coachLine(stats)}
+                </Txt>
+              )}
               <Txt variant="body" color={colors.text2}>
                 {plan.summary}
               </Txt>

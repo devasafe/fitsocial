@@ -267,7 +267,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="Coach"
             component={CoachScreen}
-            options={{ headerShown: true, title: "Seu coach", ...headerStyle }}
+            options={{ headerShown: true, title: "Seu coach", presentation: "modal", ...headerStyle }}
           />
         </>
       )}
