@@ -87,9 +87,14 @@ export function RegistrarScreen() {
 
   return (
     <Screen scroll>
-      <Txt variant="titleScreen" style={{ marginBottom: spacing.md }}>
-        Registrar
-      </Txt>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md }}>
+        <Txt variant="titleScreen">Registrar</Txt>
+        <TouchableOpacity onPress={() => nav.goBack()} hitSlop={10} activeOpacity={0.7}>
+          <Txt variant="label" color={colors.text2}>
+            Fechar
+          </Txt>
+        </TouchableOpacity>
+      </View>
 
       {/* Atalho: continuar no esporte que você já treina */}
       {recent.length > 0 && (
