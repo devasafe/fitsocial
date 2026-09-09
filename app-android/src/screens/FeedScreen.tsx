@@ -4,6 +4,7 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -27,11 +28,20 @@ export function FeedScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { posts } = await (mode === "explore" ? getExplore(token!) : getFeed(token!));
-      setPosts(posts);
+      if (mode === "explore") {
+        const res = await getExplore(token!);
+        setPosts(res.posts);
+        setNextBefore(res.nextBefore);
+      } else {
+        const { posts } = await getFeed(token!);
+        setPosts(posts);
+        setNextBefore(null);
+      }
       setError(false);
     } catch {
       setError(true);
@@ -40,6 +50,21 @@ export function FeedScreen({
       setRefreshing(false);
     }
   }, [token, mode]);
+
+  // Paginação do Explorar: carrega a próxima página ao chegar no fim.
+  const loadMore = useCallback(async () => {
+    if (mode !== "explore" || !nextBefore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await getExplore(token!, nextBefore);
+      setPosts((prev) => [...prev, ...res.posts]);
+      setNextBefore(res.nextBefore);
+    } catch {
+      /* silencioso — mantém o que já carregou */
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [mode, nextBefore, loadingMore, token]);
 
   useFocusEffect(
     useCallback(() => {
@@ -109,6 +134,15 @@ export function FeedScreen({
             }}
             tintColor={colors.lime}
           />
+        }
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={
+          loadingMore ? (
+            <View style={{ paddingVertical: spacing.lg }}>
+              <ActivityIndicator color={colors.lime} />
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           error ? (

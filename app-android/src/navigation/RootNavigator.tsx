@@ -39,6 +39,7 @@ import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
 import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
 import { DiarioScreen } from "../screens/DiarioScreen";
 import { NotificacoesScreen } from "../screens/NotificacoesScreen";
+import { BuscarPessoasScreen } from "../screens/BuscarPessoasScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
 import { colors } from "../theme";
 
@@ -268,6 +269,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Coach"
             component={CoachScreen}
             options={{ headerShown: true, title: "Seu coach", presentation: "modal", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="BuscarPessoas"
+            component={BuscarPessoasScreen}
+            options={{ headerShown: true, title: "Buscar pessoas", ...headerStyle }}
           />
         </>
       )}

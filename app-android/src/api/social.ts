@@ -54,8 +54,10 @@ export function getFeed(token: string) {
 }
 
 // Feed global (Explorar) — posts de todos, para descobrir e seguir gente nova.
-export function getExplore(token: string) {
-  return apiFetch<{ posts: Post[] }>("/social/explore", { token });
+// Paginação por cursor: passe `before` (ISO do último post) para a próxima página.
+export function getExplore(token: string, before?: string) {
+  const q = before ? `?before=${encodeURIComponent(before)}` : "";
+  return apiFetch<{ posts: Post[]; nextBefore: string | null }>(`/social/explore${q}`, { token });
 }
 
 export async function getPost(token: string, id: string): Promise<Post> {

@@ -34,6 +34,7 @@ export type AppStackParams = {
   Diario: undefined;
   Notificacoes: undefined;
   Coach: undefined;
+  BuscarPessoas: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
   RegisterActivity: {

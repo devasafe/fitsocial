@@ -1,14 +1,17 @@
 // Hub Comunidade — social + competição no mesmo lugar mental (Feed / Desafios / Ranking).
 // Não são telas novas: reusa as telas existentes com embedded, sob um header + segmented.
 import React, { useState } from "react";
-import { View } from "react-native";
+import { View, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Txt } from "../components/ui";
 import { SegmentedControl, type Segment } from "../components/SegmentedControl";
 import { FeedScreen } from "./FeedScreen";
 import { DesafiosScreen } from "./DesafiosScreen";
 import { LeaderboardScreen } from "./LeaderboardScreen";
 import { colors, spacing } from "../theme";
+import type { AppStackParams } from "../navigation/types";
 
 type Seg = "seguindo" | "explorar" | "desafios" | "ranking";
 
@@ -21,11 +24,17 @@ const SEGMENTS: Segment<Seg>[] = [
 
 export function ComunidadeScreen() {
   const insets = useSafeAreaInsets();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const [seg, setSeg] = useState<Seg>("seguindo");
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.gutter }}>
-        <Txt variant="titleScreen">Comunidade</Txt>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Txt variant="titleScreen">Comunidade</Txt>
+          <TouchableOpacity onPress={() => nav.navigate("BuscarPessoas")} activeOpacity={0.7} hitSlop={8}>
+            <Txt variant="titleCard">🔍</Txt>
+          </TouchableOpacity>
+        </View>
         <SegmentedControl
           segments={SEGMENTS}
           value={seg}

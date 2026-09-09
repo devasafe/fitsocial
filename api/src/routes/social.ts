@@ -138,7 +138,11 @@ socialRouter.get(
   asyncHandler(async (req, res) => {
     const me = req.user!._id;
     const limit = Math.min(Number(req.query.limit) || 50, 50);
-    const posts = await Post.find({})
+    // Paginação por cursor: ?before=<ISO do createdAt do último post da página anterior>.
+    const before = String(req.query.before ?? "");
+    const filter = before && !Number.isNaN(Date.parse(before)) ? { createdAt: { $lt: new Date(before) } } : {};
+
+    const posts = await Post.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl");
@@ -150,7 +154,9 @@ socialRouter.get(
     ]);
     const followingIds = new Set(follows.map((f) => f.following.toString()));
     const meId = me.toString();
-    res.json({ posts: posts.map((p) => serializePost(p, likedIds, { followingIds, meId })) });
+    // Só há próxima página se veio a página cheia.
+    const nextBefore = posts.length === limit ? (posts[posts.length - 1].get("createdAt") as Date).toISOString() : null;
+    res.json({ posts: posts.map((p) => serializePost(p, likedIds, { followingIds, meId })), nextBefore });
   })
 );
 
