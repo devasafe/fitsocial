@@ -8,6 +8,9 @@ export function getCoachMessages(token: string) {
 export interface CoachReply {
   reply: string;
   planAdjusted: boolean;
+  /** O coach concluiu que o plano precisa mudar. O ajuste em si é uma chamada
+   *  separada — fazer as duas no mesmo pedido dobrava a espera. */
+  adjustPending?: boolean;
   premiumRequired: boolean;
 }
 

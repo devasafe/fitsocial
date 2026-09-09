@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, TouchableOpacity, ActivityIndicator } from "react-native";
 import { notify } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -34,6 +34,8 @@ export function HomeScreen() {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [erroPlano, setErroPlano] = useState<string | null>(null);
+  const [passoDaEspera, setPassoDaEspera] = useState("Montando seu plano…");
   const [adjusting, setAdjusting] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -87,8 +89,31 @@ export function HomeScreen() {
     }, [load])
   );
 
+  // A geração leva cerca de meio minuto. Um texto que avança mostra que algo
+  // está acontecendo; um texto parado faz a tela parecer travada.
+  useEffect(() => {
+    if (!generating) {
+      setPassoDaEspera("Montando seu plano…");
+      return;
+    }
+    const passos = [
+      "Lendo sua ficha…",
+      "Montando seu treino…",
+      "Ajustando a dieta…",
+      "Terminando os detalhes…",
+    ];
+    let i = 0;
+    setPassoDaEspera(passos[0]);
+    const t = setInterval(() => {
+      i = Math.min(i + 1, passos.length - 1);
+      setPassoDaEspera(passos[i]);
+    }, 7000);
+    return () => clearInterval(t);
+  }, [generating]);
+
   async function handleGenerate() {
     setGenerating(true);
+    setErroPlano(null);
     try {
       const { plan } = await generatePlan(token!);
       setPlan(plan);
@@ -96,7 +121,9 @@ export function HomeScreen() {
       if (err instanceof ApiHttpError && err.status === 402) {
         navigation.navigate("Subscription");
       } else {
-        notify("Não foi possível gerar o plano", (err as Error).message);
+        // Fica na tela, com botão de tentar de novo, em vez de um alerta que
+        // some e deixa a pessoa sem saber o que fazer.
+        setErroPlano((err as Error).message);
       }
     } finally {
       setGenerating(false);
@@ -210,16 +237,26 @@ export function HomeScreen() {
         <Card level={2} style={{ marginTop: spacing.sm }}>
           <Txt variant="titleCard">Seu plano ainda não foi criado</Txt>
           <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
-            Seu coach monta um treino e uma dieta sob medida a partir do seu perfil. Leva alguns segundos.
+            Seu coach monta um treino e uma dieta sob medida a partir do seu perfil. Costuma levar
+            cerca de meio minuto.
           </Txt>
+          {erroPlano && !generating ? (
+            <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+              <Txt variant="body" color={colors.danger}>
+                {erroPlano}
+              </Txt>
+              <Button title="Tentar de novo" onPress={handleGenerate} size="lg" glow />
+            </View>
+          ) : null}
+
           {generating ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
               <ActivityIndicator color={colors.lime} />
               <Txt variant="body" color={colors.text2}>
-                Montando seu plano…
+                {passoDaEspera}
               </Txt>
             </View>
-          ) : (
+          ) : erroPlano ? null : (
             <>
               <Button title="Gerar meu plano" onPress={handleGenerate} size="lg" glow />
               <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7} style={{ paddingVertical: spacing.md, alignItems: "center" }}>

@@ -72,12 +72,12 @@ export function parseJson<S extends z.ZodTypeAny>(raw: string, schema: S): z.inf
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new AIError("A IA não retornou um JSON válido");
+    throw new AIError("A IA não retornou um JSON válido", false, "formato");
   }
 
   const result = schema.safeParse(parsed);
   if (!result.success) {
-    throw new AIError("A resposta da IA não bateu com o formato esperado");
+    throw new AIError("A resposta da IA não bateu com o formato esperado", false, "formato");
   }
   return result.data;
 }
