@@ -22,9 +22,14 @@ RUN npm ci --omit=dev && npm cache clean --force
 FROM node:20-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
+# curl: o healthcheck do Coolify precisa dele dentro do container.
+RUN apt-get update  && apt-get install -y --no-install-recommends curl  && rm -rf /var/lib/apt/lists/*
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+# services/storage/disk.ts cria ./uploads ja no import do modulo, mesmo quando
+# STORAGE_PROVIDER=s3. Sem este diretorio gravavel, o processo morre no boot.
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
 # Usuario sem privilegios que ja vem na imagem oficial do Node.
 USER node
 EXPOSE 4000
