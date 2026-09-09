@@ -1,0 +1,12 @@
+# Serve o export web do Expo como SPA: qualquer rota cai no index.html.
+:3000 {
+	root * /srv
+	encode zstd gzip
+	try_files {path} /index.html
+	file_server
+
+	# Cache longo para os assets com hash no nome; o index nunca e cacheado.
+	@hashed path_regexp \.[0-9a-f]{8,}\.(js|css|woff2?|png|jpg|svg)$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+	header /index.html Cache-Control "no-cache"
+}
