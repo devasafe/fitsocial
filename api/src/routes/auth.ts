@@ -1,13 +1,20 @@
 import { Router } from "express";
 import { z } from "zod";
-import { User, hashPassword, verifyPassword, publicUser } from "../models/User.js";
+import { User, hashPassword, verifyPassword, publicUser, type UserDoc } from "../models/User.js";
 import { signToken } from "../utils/token.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { requireAuth } from "../middleware/auth.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
+import { isFounder, founderMessage, ensureFounderPremium } from "../services/founders.js";
 
 export const authRouter = Router();
+
+// Resposta do usuário + flags de fundador (mensagem só para eles).
+function userPayload(user: UserDoc) {
+  const founder = isFounder(user.email);
+  return { ...publicUser(user), isFounder: founder, founderMessage: founder ? founderMessage() : null };
+}
 
 const registerSchema = z.object({
   name: z.string().min(2, "Nome muito curto").max(80),
@@ -50,8 +57,9 @@ authRouter.post(
       ...(username ? { username } : {}),
     });
 
+    await ensureFounderPremium(user); // amigo fundador já entra premium
     const token = signToken(user._id.toString());
-    res.status(201).json({ token, user: publicUser(user) });
+    res.status(201).json({ token, user: userPayload(user) });
   })
 );
 
@@ -65,8 +73,9 @@ authRouter.post(
       throw new HttpError(401, "E-mail ou senha inválidos");
     }
 
+    await ensureFounderPremium(user);
     const token = signToken(user._id.toString());
-    res.json({ token, user: publicUser(user) });
+    res.json({ token, user: userPayload(user) });
   })
 );
 
@@ -75,7 +84,8 @@ authRouter.get(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
-    res.json({ user: publicUser(req.user!) });
+    await ensureFounderPremium(req.user!);
+    res.json({ user: userPayload(req.user!) });
   })
 );
 
@@ -119,6 +129,6 @@ authRouter.patch(
     if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
 
     await user.save();
-    res.json({ user: publicUser(user) });
+    res.json({ user: userPayload(user) });
   })
 );

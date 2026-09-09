@@ -140,7 +140,11 @@ export function HomeScreen() {
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
         <View style={{ flex: 1 }}>
           <Txt variant="titleScreen">Olá, {user?.name?.split(" ")[0]}</Txt>
-          {user?.tier === "premium" ? (
+          {user?.isFounder && user?.founderMessage ? (
+            <Txt variant="label" color={colors.lime} style={{ marginTop: 2 }}>
+              ✦ {user.founderMessage}
+            </Txt>
+          ) : user?.tier === "premium" ? (
             <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>
               Plano Premium
             </Txt>

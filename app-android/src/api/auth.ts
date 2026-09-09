@@ -9,6 +9,9 @@ export interface AppUser {
   bio: string;
   tier: "free" | "premium";
   onboardingComplete: boolean;
+  // Amigo fundador (premium de presente) + mensagem pessoal, quando aplicável.
+  isFounder?: boolean;
+  founderMessage?: string | null;
 }
 
 interface AuthResponse {
