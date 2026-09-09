@@ -182,6 +182,23 @@ describe("Trocar de provedor", () => {
     await expect(cadeia.generate(PEDIDO)).resolves.toBe("salvo pelo groq");
   });
 
+  it("manda teto de saída — sem ele o JSON do plano chega cortado", async () => {
+    const fetchFalso = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: "{}" } }] }),
+    }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchFalso);
+
+    await new OpenAICompatibleProvider("groq", "https://x", "k", "m").generate({
+      ...PEDIDO,
+      jsonMode: true,
+    });
+
+    const corpo = JSON.parse(String(fetchFalso.mock.calls[0][1]?.body));
+    expect(corpo.max_completion_tokens).toBeGreaterThan(4000);
+  });
+
   it("credencial inválida (401) também tenta o próximo", async () => {
     let i = 0;
     vi.stubGlobal("fetch", vi.fn(async () => {

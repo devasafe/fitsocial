@@ -80,6 +80,10 @@ export const env = {
   aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 45000),
   // Quantas vezes insistir na MESMA chave quando a falha é passageira (5xx).
   aiRetries: Number(process.env.AI_RETRIES ?? 1),
+  // Teto de tokens na resposta. Sem isto o Groq corta a saída no default dele e
+  // o JSON do plano chega quebrado ("Failed to validate JSON"). Um plano
+  // completo gasta cerca de 2.800 tokens, então 8.000 dá folga larga.
+  aiMaxOutputTokens: Number(process.env.AI_MAX_OUTPUT_TOKENS ?? 8000),
   // Por quantos dias guardar o detalhe de cada chamada de IA (TTL da coleção).
   aiUsageRetentionDays: Number(process.env.AI_USAGE_RETENTION_DAYS ?? 180),
   isProd: process.env.NODE_ENV === "production",

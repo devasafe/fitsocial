@@ -1,3 +1,4 @@
+import { env } from "../../config/env.js";
 import { AIError, type AIProvider, type GenerateOptions } from "./provider.js";
 import {
   errorKindFromStatus,
@@ -73,6 +74,10 @@ export class OpenAICompatibleProvider implements AIProvider {
       model: this.model,
       messages,
       temperature: options.temperature ?? 0.7,
+      // Sem teto explícito, o serviço corta a resposta no default dele e o JSON
+      // chega pela metade — o erro que aparece é "Failed to validate JSON", que
+      // parece problema de prompt e não é.
+      max_completion_tokens: env.aiMaxOutputTokens,
       ...(options.jsonMode ? { response_format: { type: "json_object" } } : {}),
     };
 
