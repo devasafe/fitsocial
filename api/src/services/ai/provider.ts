@@ -1,3 +1,5 @@
+import type { AiFeature } from "./telemetry.js";
+
 // Contrato genérico da camada de IA. Nenhuma outra parte do sistema conhece
 // qual LLM está por trás — trocar de provider é criar outra implementação desta
 // interface e apontar o factory (services/ai/index.ts) para ela.
@@ -16,6 +18,10 @@ export interface GenerateOptions {
   jsonMode?: boolean;
   /** 0 = determinístico; ~0.7 = mais criativo. */
   temperature?: number;
+  /** Funcionalidade que originou a chamada — só para telemetria. */
+  feature?: AiFeature;
+  /** Quem disparou a chamada — só para telemetria. */
+  userId?: string;
 }
 
 export interface AIProvider {

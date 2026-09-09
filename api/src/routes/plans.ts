@@ -62,7 +62,7 @@ plansRouter.post(
 
     // Revalida a ficha antes de mandar para a IA.
     const profile = profileDataSchema.parse(profileDoc.toObject());
-    const data = await generatePlan(profile);
+    const data = await generatePlan(profile, user._id.toString());
 
     const plan = await Plan.create({
       user: user._id,
@@ -106,7 +106,7 @@ plansRouter.post(
     const activities = await Activity.find({ user: user._id }).sort({ startedAt: -1 }).limit(40);
     const adherence = buildAdherenceSummary(activities, currentData);
 
-    const data = await adjustPlan(profile, currentData, adherence);
+    const data = await adjustPlan(profile, currentData, adherence, user._id.toString());
     const plan = await Plan.create({
       user: user._id,
       version: current.version + 1,
@@ -131,7 +131,7 @@ plansRouter.post(
     const profileDoc = await Profile.findOne({ user: user._id });
     const profile = profileDoc ? profileDataSchema.parse(profileDoc.toObject()) : null;
 
-    const data = await importPlanFromText(text, profile);
+    const data = await importPlanFromText(text, profile, user._id.toString());
 
     const last = await Plan.findOne({ user: user._id }).sort({ version: -1 });
     const plan = await Plan.create({

@@ -74,7 +74,7 @@ coachRouter.post(
       content: m.content,
     }));
 
-    const turn = await runCoachTurn(aiHistory, ctx);
+    const turn = await runCoachTurn(aiHistory, ctx, user._id.toString());
 
     // Aplica a ação de reajuste (gating premium acontece aqui).
     let planAdjusted = false;
@@ -82,7 +82,7 @@ coachRouter.post(
     if (turn.action === "adjust_plan") {
       if (user.tier === "premium" && profile && planDoc) {
         const adherence = buildAdherenceSummary(activities, plan!);
-        const data = await adjustPlan(profile, plan!, adherence);
+        const data = await adjustPlan(profile, plan!, adherence, user._id.toString());
         await Plan.create({ user: user._id, version: planDoc.version + 1, ...data });
         planAdjusted = true;
       } else if (user.tier !== "premium") {

@@ -70,6 +70,7 @@ Responda SEMPRE apenas com um JSON válido:
 export async function runCoachTurn(
   history: AIMessage[],
   ctx: CoachContext,
+  userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<CoachTurn> {
   const raw = await provider.generate({
@@ -77,6 +78,8 @@ export async function runCoachTurn(
     messages: history,
     jsonMode: true,
     temperature: 0.7,
+    feature: "coach",
+    userId,
   });
 
   // Num chat, a IA nunca deve "quebrar": se não vier JSON válido, usamos o

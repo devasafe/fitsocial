@@ -53,6 +53,7 @@ FORMATO DE SAÍDA — responda SEMPRE apenas com um JSON válido, sem texto fora
 /** Executa um turno do onboarding: recebe o histórico e devolve reply + ficha + status. */
 export async function runOnboardingTurn(
   messages: AIMessage[],
+  userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<OnboardingTurn> {
   const raw = await provider.generate({
@@ -60,6 +61,8 @@ export async function runOnboardingTurn(
     messages,
     jsonMode: true,
     temperature: 0.6,
+    feature: "onboarding",
+    userId,
   });
 
   const turn = parseJson(raw, turnSchema);

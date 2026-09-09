@@ -24,6 +24,18 @@ function keyList(...names: string[]): string[] {
   return out;
 }
 
+// Teto diário de chamadas por chave, no formato "gemini#1=1500,groq#1=14400".
+// Serve só para o painel mostrar "quanto já queimei hoje" — não bloqueia nada.
+function dailyLimits(raw: string | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const par of (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+    const [chave, valor] = par.split("=").map((s) => s.trim());
+    const n = Number(valor);
+    if (chave && Number.isFinite(n) && n > 0) out[chave] = n;
+  }
+  return out;
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   mongoUri: required("MONGODB_URI", "mongodb://127.0.0.1:27017/fitsocial"),
@@ -54,5 +66,9 @@ export const env = {
   // Segredo esperado no header Authorization do webhook do RevenueCat (opcional).
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
+  // Tetos diários por chave de IA, para o painel administrativo.
+  aiDailyLimits: dailyLimits(process.env.AI_DAILY_LIMITS),
+  // Por quantos dias guardar o detalhe de cada chamada de IA (TTL da coleção).
+  aiUsageRetentionDays: Number(process.env.AI_USAGE_RETENTION_DAYS ?? 180),
   isProd: process.env.NODE_ENV === "production",
 };
