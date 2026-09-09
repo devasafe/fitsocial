@@ -22,3 +22,26 @@ export function sendOnboardingMessage(token: string, messages: ChatMessage[]) {
     body: { messages },
   });
 }
+
+// Ficha estruturada preenchida por formulário (sem IA).
+export interface ProfileForm {
+  goal: "perder_gordura" | "ganhar_massa" | "saude_geral" | "performance";
+  sex: "masculino" | "feminino" | "outro";
+  age: number;
+  heightCm: number;
+  weightKg: number;
+  experienceLevel: "iniciante" | "intermediario" | "avancado";
+  daysPerWeek: number;
+  sessionMinutes: number;
+  dietaryRestrictions: string[];
+  injuriesConditions: string[];
+  notes: string;
+}
+
+export function submitProfile(token: string, profile: ProfileForm) {
+  return apiFetch<{ onboardingComplete: boolean }>("/onboarding/profile", {
+    method: "POST",
+    token,
+    body: profile,
+  });
+}

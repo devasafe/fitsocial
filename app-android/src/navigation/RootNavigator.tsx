@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { HomeScreen } from "../screens/HomeScreen";
-import { OnboardingChat } from "../screens/OnboardingChat";
+import { OnboardingForm } from "../screens/OnboardingForm";
 import { WorkoutScreen } from "../screens/WorkoutScreen";
 import { DietScreen } from "../screens/DietScreen";
 import { ComunidadeScreen } from "../screens/ComunidadeScreen";
@@ -125,7 +125,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
   return (
     <AppStack.Navigator screenOptions={{ headerShown: false }}>
       {needsOnboarding ? (
-        <AppStack.Screen name="OnboardingChat" component={OnboardingChat} />
+        <AppStack.Screen name="Onboarding" component={OnboardingForm} />
       ) : (
         <>
           <AppStack.Screen name="Tabs" component={MainTabs} />

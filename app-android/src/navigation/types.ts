@@ -11,7 +11,7 @@ export type AuthStackParams = {
 // Stack principal (quando logado e com onboarding concluído).
 export type AppStackParams = {
   ChooseUsername: undefined;
-  OnboardingChat: undefined;
+  Onboarding: undefined;
   Tabs: undefined;
   TodayWorkout: undefined;
   Workout: { workout: Workout };

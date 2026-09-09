@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { Profile } from "../models/Profile.js";
+import { Profile, profileDataSchema } from "../models/Profile.js";
 import {
   runOnboardingTurn,
   ONBOARDING_GREETING,
@@ -27,6 +27,27 @@ const bodySchema = z.object({
 onboardingRouter.get("/greeting", requireAuth, (_req, res) => {
   res.json({ greeting: ONBOARDING_GREETING });
 });
+
+// Cadastro direto da ficha por formulário (sem IA) — rápido e determinístico.
+// Mesma persistência do turno de IA: upsert 1-por-usuário + libera o app.
+onboardingRouter.post(
+  "/profile",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const profile = profileDataSchema.parse(req.body);
+    const user = req.user!;
+    await Profile.findOneAndUpdate(
+      { user: user._id },
+      { user: user._id, ...profile },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (!user.onboardingComplete) {
+      user.onboardingComplete = true;
+      await user.save();
+    }
+    res.json({ onboardingComplete: user.onboardingComplete });
+  })
+);
 
 // Um turno da conversa. O app mantém o histórico e o envia inteiro a cada chamada.
 // Limite generoso o suficiente para uma conversa, mas que trava abuso.

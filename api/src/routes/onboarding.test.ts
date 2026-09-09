@@ -138,4 +138,37 @@ describe("Onboarding", () => {
     expect(res.status).toBe(502);
     expect(res.body.error).toBeTruthy();
   });
+
+  it("cadastra a ficha por FORMULÁRIO (POST /profile) e conclui o onboarding", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Carla", email: "carla@test.com", password: "senha12345" });
+    const t = reg.body.token as string;
+    const uid = reg.body.user.id as string;
+
+    const res = await request(app)
+      .post("/onboarding/profile")
+      .set("Authorization", `Bearer ${t}`)
+      .send({ ...fullProfile, goal: "perder_gordura" });
+    expect(res.status).toBe(200);
+    expect(res.body.onboardingComplete).toBe(true);
+
+    const profile = await Profile.findOne({ user: uid });
+    expect(profile?.goal).toBe("perder_gordura");
+
+    const me = await request(app).get("/auth/me").set("Authorization", `Bearer ${t}`);
+    expect(me.body.user.onboardingComplete).toBe(true);
+  });
+
+  it("POST /profile com ficha inválida retorna 400", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Dan", email: "dan@test.com", password: "senha12345" });
+    const t = reg.body.token as string;
+    const res = await request(app)
+      .post("/onboarding/profile")
+      .set("Authorization", `Bearer ${t}`)
+      .send({ goal: "ganhar_massa", age: 25 }); // faltam campos obrigatórios
+    expect(res.status).toBe(400);
+  });
 });
