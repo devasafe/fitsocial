@@ -231,6 +231,10 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     // Traz o dono para o cabeçalho do detalhe.
     expect(okB.body.data.owner).toBeTruthy();
     expect(typeof okB.body.data.owner.name).toBe("string");
+    // Traz o post do compartilhamento (para curtir/comentar no detalhe).
+    expect(okB.body.data.post).toBeTruthy();
+    expect(typeof okB.body.data.post.id).toBe("string");
+    expect(okB.body.data.post.likedByMe).toBe(false);
 
     // A registra um treino privado sem compartilhar → B não vê.
     const priv = await request(app)

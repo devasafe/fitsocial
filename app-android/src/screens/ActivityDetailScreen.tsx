@@ -3,6 +3,7 @@ import { View, ActivityIndicator, TouchableOpacity } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Txt, Screen, Card, ErrorState } from "../components/ui";
 import { Avatar } from "../components/Avatar";
+import { ActivityInteractions } from "../components/ActivityInteractions";
 import { RouteMap } from "../components/RouteMap";
 import { useAuth } from "../context/AuthContext";
 import { getActivity, type Activity } from "../api/activities";
@@ -227,6 +228,15 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
             {a.notes}
           </Txt>
         </Card>
+      ) : null}
+
+      {/* Curtir / comentar (quando o treino foi compartilhado) */}
+      {a.post ? (
+        <ActivityInteractions
+          postId={a.post.id}
+          initialLiked={a.post.likedByMe}
+          initialLikeCount={a.post.likeCount}
+        />
       ) : null}
     </Screen>
   );

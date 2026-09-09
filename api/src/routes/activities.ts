@@ -7,6 +7,7 @@ import { HttpError } from "../utils/httpError.js";
 import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
+import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
 import { createActivity } from "../services/activities.js";
 import { computeStrengthMetrics } from "../services/activityMetrics.js";
@@ -120,7 +121,19 @@ activitiesRouter.get(
     const owner = u
       ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
       : null;
-    res.json({ data: { ...serializeActivity(a), owner } });
+
+    // Post do compartilhamento (para curtir/comentar direto do detalhe).
+    const sharePost = await Post.findOne({ activity: a._id }).sort({ createdAt: 1 });
+    const post = sharePost
+      ? {
+          id: sharePost._id.toString(),
+          likeCount: sharePost.likeCount,
+          commentCount: sharePost.commentCount,
+          likedByMe: !!(await Like.exists({ user: me, post: sharePost._id })),
+        }
+      : null;
+
+    res.json({ data: { ...serializeActivity(a), owner, post } });
   })
 );
 

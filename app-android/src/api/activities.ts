@@ -74,6 +74,8 @@ export interface Activity {
   payload?: unknown;
   // Presente ao buscar por id (ex.: abrir treino de outra pessoa pelo feed).
   owner?: { id: string; name: string; username: string | null; avatarUrl: string } | null;
+  // Post do compartilhamento — para curtir/comentar direto do detalhe.
+  post?: { id: string; likeCount: number; commentCount: number; likedByMe: boolean } | null;
 }
 
 export async function getActivity(token: string, id: string): Promise<Activity> {
