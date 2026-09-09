@@ -12,6 +12,8 @@ const postSchema = new Schema(
     // Denormalizados para o feed não precisar contar a cada leitura.
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },
+    // Escondido pela moderação. Não é exclusão: desbanir devolve tudo.
+    hidden: { type: Boolean, default: false, index: true },
   },
   { timestamps: true }
 );

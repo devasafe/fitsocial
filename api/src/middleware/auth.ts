@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/token.js";
 import { User, type UserDoc } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
+import { assertAccountUsable } from "../services/moderation.js";
 
 // Anexa o usuário autenticado ao request.
 declare global {
@@ -30,10 +31,16 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       throw new HttpError(401, "Usuário não encontrado");
     }
 
+    // Banimento e suspensão valem para tokens JÁ emitidos: o usuário é lido do
+    // banco a cada requisição, então o corte é imediato.
+    await assertAccountUsable(user);
+
     req.user = user;
     req.tokenScope = payload.scope;
     next();
   } catch (err) {
+    // HttpError aqui já traz a mensagem certa (banida, suspensa até tal dia).
+    // Engolir em um 401 genérico deixaria a pessoa sem saber o que aconteceu.
     if (err instanceof HttpError) return next(err);
     next(new HttpError(401, "Token inválido ou expirado"));
   }

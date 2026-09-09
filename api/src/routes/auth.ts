@@ -7,6 +7,7 @@ import { HttpError } from "../utils/httpError.js";
 import { requireAuth } from "../middleware/auth.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
 import { isFounder, founderMessage, ensureFounderPremium } from "../services/founders.js";
+import { assertAccountUsable } from "../services/moderation.js";
 
 export const authRouter = Router();
 
@@ -72,6 +73,11 @@ authRouter.post(
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       throw new HttpError(401, "E-mail ou senha inválidos");
     }
+
+    // O login não passa por requireAuth (é ele que cria o token), então a
+    // checagem de conta banida/suspensa precisa acontecer aqui também. Sem
+    // isto, a pessoa entra no app e só descobre o bloqueio quando tudo falha.
+    await assertAccountUsable(user);
 
     await ensureFounderPremium(user);
     const token = signToken(user._id.toString());
