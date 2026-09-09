@@ -25,10 +25,14 @@ export interface AIProvider {
   generate(options: GenerateOptions): Promise<string>;
 }
 
-/** Erro específico da camada de IA, para o middleware tratar de forma amigável. */
+/** Erro específico da camada de IA, para o middleware tratar de forma amigável.
+ *  `retryable` = true quando trocar de chave/provider pode resolver (quota/429,
+ *  5xx, auth, rede). false quando não adianta (conteúdo bloqueado, JSON inválido). */
 export class AIError extends Error {
-  constructor(message: string) {
+  readonly retryable: boolean;
+  constructor(message: string, retryable = false) {
     super(message);
     this.name = "AIError";
+    this.retryable = retryable;
   }
 }

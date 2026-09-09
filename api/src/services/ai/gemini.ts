@@ -59,21 +59,24 @@ export class GeminiProvider implements AIProvider {
         body: JSON.stringify(body),
       });
     } catch (err) {
-      throw new AIError(`Falha de rede ao chamar o Gemini: ${(err as Error).message}`);
+      throw new AIError(`Falha de rede ao chamar o Gemini: ${(err as Error).message}`, true);
     }
 
     const data = (await res.json().catch(() => ({}))) as GeminiResponse;
 
     if (!res.ok) {
-      throw new AIError(data.error?.message ?? `Gemini respondeu ${res.status}`);
+      // 429 (quota), 5xx (instabilidade), 401/403 (chave) → vale trocar de chave.
+      const retryable = res.status === 429 || res.status >= 500 || res.status === 401 || res.status === 403;
+      throw new AIError(data.error?.message ?? `Gemini respondeu ${res.status}`, retryable);
     }
     if (data.promptFeedback?.blockReason) {
-      throw new AIError(`Conteúdo bloqueado pelo Gemini: ${data.promptFeedback.blockReason}`);
+      // Bloqueio de conteúdo não muda por chave — não adianta cair pra próxima.
+      throw new AIError(`Conteúdo bloqueado pelo Gemini: ${data.promptFeedback.blockReason}`, false);
     }
 
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("");
     if (!text) {
-      throw new AIError("Resposta vazia do Gemini");
+      throw new AIError("Resposta vazia do Gemini", true);
     }
     return text;
   }

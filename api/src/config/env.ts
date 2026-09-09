@@ -10,6 +10,20 @@ function required(name: string, fallback?: string): string {
   return value;
 }
 
+// Lê uma lista de chaves de várias envs (aceita CSV) e deduplica preservando ordem.
+// Ex.: GEMINI_API_KEYS="k1,k2,k3" + GEMINI_API_KEY="k0" → [k0? ...] na ordem lida.
+function keyList(...names: string[]): string[] {
+  const out: string[] = [];
+  for (const name of names) {
+    const raw = process.env[name];
+    if (!raw) continue;
+    for (const k of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!out.includes(k)) out.push(k);
+    }
+  }
+  return out;
+}
+
 export const env = {
   port: Number(process.env.PORT ?? 4000),
   mongoUri: required("MONGODB_URI", "mongodb://127.0.0.1:27017/fitsocial"),
@@ -19,6 +33,13 @@ export const env = {
   aiProvider: process.env.AI_PROVIDER ?? "gemini",
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+  // Fallback de IA: várias chaves grátis em cadeia. Quando uma estoura a quota
+  // (429) ou falha, cai pra próxima. Todas aceitam CSV (uma env com várias chaves).
+  geminiApiKeys: keyList("GEMINI_API_KEYS", "GEMINI_API_KEY"),
+  groqApiKeys: keyList("GROQ_API_KEYS", "GROQ_API_KEY"),
+  groqModel: process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
+  openrouterApiKeys: keyList("OPENROUTER_API_KEYS", "OPENROUTER_API_KEY"),
+  openrouterModel: process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free",
   // Chave da YouTube Data API v3 (opcional). Sem ela, os vídeos de exercício degradam graciosamente.
   youtubeApiKey: process.env.YOUTUBE_API_KEY ?? "",
   // Camada de storage plugável: "disk" (local, default) ou "s3" (S3/R2/MinIO).
