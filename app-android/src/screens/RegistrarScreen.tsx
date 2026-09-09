@@ -4,15 +4,24 @@ import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen } from "../components/ui";
+import { Txt, Screen, Button } from "../components/ui";
 import { listSports, type Sport } from "../api/sports";
+import { listActivities } from "../api/activities";
+import { sportLabel } from "../lib/sportLabel";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+
+interface RecentSport {
+  sportId: string;
+  kind: string;
+  label: string;
+}
 
 export function RegistrarScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [sports, setSports] = useState<Sport[]>([]);
+  const [recent, setRecent] = useState<RecentSport[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,37 +29,92 @@ export function RegistrarScreen() {
       .then(setSports)
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Esportes recentes (distintos, mais novo primeiro) — atalho de 1 toque.
+    listActivities(token!)
+      .then((res) => {
+        const seen = new Set<string>();
+        const out: RecentSport[] = [];
+        for (const a of res.data) {
+          if (seen.has(a.sportId)) continue;
+          seen.add(a.sportId);
+          out.push({ sportId: a.sportId, kind: a.kind, label: sportLabel(a.sportId) });
+          if (out.length >= 4) break;
+        }
+        setRecent(out);
+      })
+      .catch(() => {});
   }, [token]);
 
-  function pick(s: Sport) {
-    switch (s.kind) {
+  function route(kind: string, sportId: string, label: string) {
+    switch (kind) {
       case "strength":
-        nav.navigate("RegisterActivity", { sportId: s.id });
+        nav.navigate("RegisterActivity", { sportId });
         break;
       case "endurance":
-        nav.navigate("RegisterEndurance", { sportId: s.id });
+        nav.navigate("RegisterEndurance", { sportId });
         break;
       case "class":
-        nav.navigate("RegisterClass", { sportId: s.id });
+        nav.navigate("RegisterClass", { sportId });
         break;
       case "generic":
-        nav.navigate("RegisterGeneric", { sportId: s.id });
+        nav.navigate("RegisterGeneric", { sportId });
         break;
       case "wod":
-        nav.navigate("RegisterWod", { sportId: s.id });
+        nav.navigate("RegisterWod", { sportId });
         break;
       default:
-        notify("Em breve", `O registro de ${s.label} chega numa próxima atualização.`);
+        notify("Em breve", `O registro de ${label} chega numa próxima atualização.`);
     }
   }
 
   return (
     <Screen scroll>
-      <Txt variant="titleScreen" style={{ marginBottom: spacing.xs }}>
+      <Txt variant="titleScreen" style={{ marginBottom: spacing.md }}>
         Registrar
       </Txt>
-      <Txt variant="body" color={colors.text2} style={{ marginBottom: spacing.section }}>
-        Escolha o esporte que você treinou.
+
+      {/* Atalho: continuar no esporte que você já treina */}
+      {recent.length > 0 && (
+        <View style={{ marginBottom: spacing.section }}>
+          <Txt variant="label" color={colors.text2} style={{ marginBottom: spacing.sm }}>
+            Recentes
+          </Txt>
+          <Button
+            title={`Registrar ${recent[0].label}`}
+            onPress={() => route(recent[0].kind, recent[0].sportId, recent[0].label)}
+            size="lg"
+            glow
+          />
+          {recent.length > 1 && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md }}>
+              {recent.slice(1).map((r) => (
+                <TouchableOpacity
+                  key={r.sportId}
+                  onPress={() => route(r.kind, r.sportId, r.label)}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    borderRadius: radius.chip,
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    backgroundColor: colors.surface,
+                  }}
+                >
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(r.sportId) }} />
+                  <Txt variant="label">{r.label}</Txt>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      <Txt variant="label" color={colors.text2} style={{ marginBottom: spacing.md }}>
+        {recent.length > 0 ? "Todos os esportes" : "Escolha o esporte que você treinou"}
       </Txt>
 
       {loading ? (
@@ -60,7 +124,7 @@ export function RegistrarScreen() {
           {sports.map((s) => (
             <TouchableOpacity
               key={s.id}
-              onPress={() => pick(s)}
+              onPress={() => route(s.kind, s.id, s.label)}
               activeOpacity={0.85}
               style={{
                 width: "31%",
