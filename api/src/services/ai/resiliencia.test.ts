@@ -154,6 +154,58 @@ describe("Rede de segurança", () => {
   });
 });
 
+describe("Trocar de provedor", () => {
+  // Este caso escapou dos testes originais e só apareceu na verificação em
+  // produção: modelo inexistente devolve 404, e a regra antiga só trocava de
+  // provedor em 429/5xx/401/403. A cadeia parava no primeiro elo justamente
+  // quando trocar resolveria — o Groq tem outro modelo.
+  it("modelo inexistente (404) cai para o próximo em vez de virar erro", async () => {
+    let i = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      i++;
+      if (i === 1) return respostaErro(404);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: "salvo pelo groq" } }] }),
+      } as unknown as Response;
+    }));
+
+    const cadeia = new FallbackProvider([
+      new GeminiProvider("k", "modelo-que-nao-existe", { keyLabel: "gemini#1", chainIndex: 0 }),
+      new OpenAICompatibleProvider("groq", "https://x", "k2", "m", {}, {
+        keyLabel: "groq#1",
+        chainIndex: 1,
+      }),
+    ]);
+
+    await expect(cadeia.generate(PEDIDO)).resolves.toBe("salvo pelo groq");
+  });
+
+  it("credencial inválida (401) também tenta o próximo", async () => {
+    let i = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      i++;
+      if (i === 1) return respostaErro(401);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      } as unknown as Response;
+    }));
+
+    const cadeia = new FallbackProvider([
+      new GeminiProvider("chave-ruim", "m", { keyLabel: "gemini#1", chainIndex: 0 }),
+      new OpenAICompatibleProvider("groq", "https://x", "k2", "m", {}, {
+        keyLabel: "groq#1",
+        chainIndex: 1,
+      }),
+    ]);
+
+    await expect(cadeia.generate(PEDIDO)).resolves.toBe("ok");
+  });
+});
+
 describe("O que a pessoa lê", () => {
   it("nenhuma mensagem de erro entrega o provedor ou o status", async () => {
     const { errorHandler } = await import("../../middleware/error.js");

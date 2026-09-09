@@ -112,9 +112,12 @@ export class GeminiProvider implements AIProvider {
     const data = resposta.corpo as GeminiResponse;
 
     if (!resposta.ok) {
-      // 429 (quota), 5xx (instabilidade), 401/403 (chave) → vale trocar de chave.
+      // Qualquer recusa do provedor justifica tentar o próximo da cadeia: quota,
+      // instabilidade, credencial e até modelo inexistente (404) mudam de um
+      // provedor para outro. Só o bloqueio de conteúdo, tratado abaixo, daria o
+      // mesmo resultado em todos — e por isso é o único que interrompe.
       const s = resposta.status;
-      const retryable = s === 429 || s >= 500 || s === 401 || s === 403;
+      const retryable = true;
       registrar(false, { errorKind: errorKindFromStatus(s) });
       throw new AIError(
         data.error?.message ?? `Gemini respondeu ${s}`,

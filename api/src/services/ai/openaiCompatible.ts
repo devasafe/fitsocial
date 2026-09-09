@@ -100,8 +100,10 @@ export class OpenAICompatibleProvider implements AIProvider {
     const data = resposta.corpo as ChatResponse;
 
     if (!resposta.ok) {
+      // Mesma regra do Gemini: recusa do provedor sempre permite tentar o
+      // próximo elo. Ver o comentário em gemini.ts.
       const s = resposta.status;
-      const retryable = s === 429 || s >= 500 || s === 401 || s === 403;
+      const retryable = true;
       registrar(false, { errorKind: errorKindFromStatus(s) });
       throw new AIError(
         data.error?.message ?? `${this.name} respondeu ${s}`,
