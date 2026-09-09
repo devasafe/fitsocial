@@ -73,6 +73,11 @@ export const env = {
   adminSessionExpiresIn: process.env.ADMIN_SESSION_EXPIRES_IN ?? "12h",
   // Tetos diários por chave de IA, para o painel administrativo.
   aiDailyLimits: dailyLimits(process.env.AI_DAILY_LIMITS),
+  // Quanto esperar por uma resposta de IA antes de desistir. O caminho feliz do
+  // free tier leva de 14 a 20 segundos, então o prazo tem folga — mas existe.
+  aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 45000),
+  // Quantas vezes insistir na MESMA chave quando a falha é passageira (5xx).
+  aiRetries: Number(process.env.AI_RETRIES ?? 1),
   // Por quantos dias guardar o detalhe de cada chamada de IA (TTL da coleção).
   aiUsageRetentionDays: Number(process.env.AI_USAGE_RETENTION_DAYS ?? 180),
   isProd: process.env.NODE_ENV === "production",

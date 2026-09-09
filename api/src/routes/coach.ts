@@ -7,9 +7,8 @@ import { CoachMessage } from "../models/CoachMessage.js";
 import { Profile, profileDataSchema, type ProfileData } from "../models/Profile.js";
 import { Plan, type PlanData } from "../models/Plan.js";
 import { Activity } from "../models/Activity.js";
-import { computeStats, buildAdherenceSummary } from "../services/adherence.js";
+import { computeStats } from "../services/adherence.js";
 import { runCoachTurn, COACH_GREETING, type CoachContext } from "../services/ai/coach.js";
-import { adjustPlan } from "../services/ai/planGenerator.js";
 import type { AIMessage } from "../services/ai/provider.js";
 
 export const coachRouter = Router();
@@ -76,15 +75,16 @@ coachRouter.post(
 
     const turn = await runCoachTurn(aiHistory, ctx, user._id.toString());
 
-    // Aplica a ação de reajuste (gating premium acontece aqui).
-    let planAdjusted = false;
+    // O reajuste NÃO acontece aqui. Fazer a segunda chamada de IA dentro desta
+    // requisição obrigava a pessoa a esperar as duas em sequência — e, com o
+    // prazo de cada uma, o total passava do que o app aguarda. Agora a conversa
+    // responde na hora e o app dispara o ajuste em POST /plans/adjust, que já
+    // existe e tem o próprio gating premium.
+    let adjustPending = false;
     let premiumRequired = false;
     if (turn.action === "adjust_plan") {
       if (user.tier === "premium" && profile && planDoc) {
-        const adherence = buildAdherenceSummary(activities, plan!);
-        const data = await adjustPlan(profile, plan!, adherence, user._id.toString());
-        await Plan.create({ user: user._id, version: planDoc.version + 1, ...data });
-        planAdjusted = true;
+        adjustPending = true;
       } else if (user.tier !== "premium") {
         premiumRequired = true;
       }
@@ -93,6 +93,8 @@ coachRouter.post(
     // Persiste a resposta do coach.
     await CoachMessage.create({ user: user._id, role: "assistant", content: turn.reply });
 
-    res.json({ reply: turn.reply, planAdjusted, premiumRequired });
+    // planAdjusted continua no corpo por compatibilidade: uma versão antiga do
+    // app instalada no celular de alguém ainda lê esse campo.
+    res.json({ reply: turn.reply, planAdjusted: false, adjustPending, premiumRequired });
   })
 );

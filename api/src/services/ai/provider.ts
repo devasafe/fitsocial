@@ -31,14 +31,30 @@ export interface AIProvider {
   generate(options: GenerateOptions): Promise<string>;
 }
 
+/** O que deu errado, em termos que a borda consegue traduzir para o usuário.
+ *  A mensagem crua ("Gemini respondeu 503") serve para o log e para o painel,
+ *  nunca para quem está tentando montar um treino. */
+export type AIErrorKind =
+  | "timeout"
+  | "quota"
+  | "indisponivel"
+  | "credencial"
+  | "bloqueado"
+  | "rede"
+  | "vazio"
+  | "formato"
+  | "outro";
+
 /** Erro específico da camada de IA, para o middleware tratar de forma amigável.
  *  `retryable` = true quando trocar de chave/provider pode resolver (quota/429,
  *  5xx, auth, rede). false quando não adianta (conteúdo bloqueado, JSON inválido). */
 export class AIError extends Error {
   readonly retryable: boolean;
-  constructor(message: string, retryable = false) {
+  readonly kind: AIErrorKind;
+  constructor(message: string, retryable = false, kind: AIErrorKind = "outro") {
     super(message);
     this.name = "AIError";
     this.retryable = retryable;
+    this.kind = kind;
   }
 }

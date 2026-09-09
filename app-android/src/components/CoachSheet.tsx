@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { notify, confirmDialog } from "../lib/notify";
 import { getCoachMessages, sendCoachMessage } from "../api/coach";
+import { adjustPlan } from "../api/plans";
 import type { ChatMessage } from "../api/onboarding";
 import { Txt, ErrorState } from "./ui";
 import { DisclaimerBanner } from "./DisclaimerBanner";
@@ -62,8 +63,25 @@ export function CoachSheet({
     try {
       const res = await sendCoachMessage(token, text);
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
-      if (res.planAdjusted) {
-        notify("Plano atualizado", "Seu coach ajustou o plano com base na conversa.");
+      if (res.adjustPending || res.planAdjusted) {
+        // O reajuste é uma segunda conversa com a IA e leva o seu tempo; avisa
+        // que está acontecendo em vez de deixar a tela quieta.
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Estou reajustando seu plano, um instante…" },
+        ]);
+        try {
+          await adjustPlan(token!);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "Pronto, seu plano foi atualizado." },
+          ]);
+        } catch (err) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Não consegui reajustar agora: ${(err as Error).message}` },
+          ]);
+        }
       } else if (res.premiumRequired) {
         confirmDialog(
           "Recurso do plano Fundador",

@@ -86,7 +86,7 @@ describe("Coach chat", () => {
     expect(res.body.planAdjusted).toBe(false);
   });
 
-  it("premium reajusta o plano pela conversa", async () => {
+  it("premium: o coach sinaliza o reajuste em vez de fazer na mesma requisição", async () => {
     await Profile.create({
       user: userId, goal: "ganhar_massa", sex: "masculino", age: 25, heightCm: 178, weightKg: 74,
       experienceLevel: "iniciante", daysPerWeek: 3, sessionMinutes: 60,
@@ -100,16 +100,25 @@ describe("Coach chat", () => {
     });
     await auth(request(app).post("/billing/dev-upgrade")); // vira premium
 
-    // 1ª resposta: coach decide reajustar. 2ª: JSON do plano gerado.
-    mock.queue = [
-      JSON.stringify({ reply: "Fechado, reajustei seu plano!", action: "adjust_plan" }),
-      planJson,
-    ];
+    // Uma resposta só: o coach decide reajustar, mas não gera o plano aqui.
+    mock.queue = [JSON.stringify({ reply: "Fechado, vou reajustar!", action: "adjust_plan" })];
     const res = await auth(request(app).post("/coach/messages").send({ content: "tá difícil, ajusta" }));
-    expect(res.body.planAdjusted).toBe(true);
 
+    // Fazer a segunda chamada de IA dentro deste pedido dobrava a espera de
+    // quem está conversando. Agora o app dispara POST /plans/adjust em seguida.
+    expect(res.body.adjustPending).toBe(true);
+    expect(res.body.reply).toContain("reajustar");
+
+    // Nenhuma versão nova foi criada nesta requisição.
     const plan = await Plan.findOne({ user: userId }).sort({ version: -1 });
-    expect(plan?.version).toBe(2);
-    expect(plan?.summary).toContain("progressão");
+    expect(plan?.version).toBe(1);
+
+    // E o ajuste de verdade continua funcionando, na chamada própria.
+    mock.queue = [planJson];
+    await auth(request(app).post("/plans/adjust")).expect(201);
+
+    const depois = await Plan.findOne({ user: userId }).sort({ version: -1 });
+    expect(depois?.version).toBe(2);
+    expect(depois?.summary).toContain("progressão");
   });
 });

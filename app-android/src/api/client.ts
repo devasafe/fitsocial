@@ -16,6 +16,10 @@ export class ApiHttpError extends Error {
 }
 
 /** Cliente HTTP fino: injeta o token, envia/recebe JSON e normaliza erros. */
+/** Prazo máximo de uma requisição. Maior que o do servidor, para o erro dele
+ *  (mais específico) chegar primeiro quando a IA é a causa. */
+const TEMPO_LIMITE_MS = 60_000;
+
 export async function apiFetch<T>(
   path: string,
   options: { method?: string; body?: unknown; token?: string | null } = {}
@@ -31,8 +35,15 @@ export async function apiFetch<T>(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      // Sem prazo, uma requisição travada deixa a tela girando para sempre. A
+      // folga sobre o prazo do servidor (45s) é de propósito: assim o erro
+      // costuma vir de lá, já explicado, em vez deste genérico.
+      signal: AbortSignal.timeout(TEMPO_LIMITE_MS),
     });
-  } catch {
+  } catch (err) {
+    if ((err as Error)?.name === "TimeoutError" || (err as Error)?.name === "AbortError") {
+      throw new ApiHttpError(0, "O servidor demorou demais para responder. Tente de novo.");
+    }
     // fetch só lança em falha de rede (offline, servidor fora do ar, etc.).
     throw new ApiHttpError(0, "Sem conexão com o servidor. Verifique sua internet.");
   }

@@ -5,6 +5,7 @@ import {
   type AiErrorKind,
   type AiProviderMeta,
 } from "./telemetry.js";
+import { chamarProvedor } from "./http.js";
 
 interface ChatResponse {
   choices?: { message?: { content?: string } }[];
@@ -75,34 +76,44 @@ export class OpenAICompatibleProvider implements AIProvider {
       ...(options.jsonMode ? { response_format: { type: "json_object" } } : {}),
     };
 
-    let res: Response;
+    let resposta;
     try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
-          ...this.extraHeaders,
+      resposta = await chamarProvedor(
+        `${this.baseUrl}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+            ...this.extraHeaders,
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        this.name
+      );
     } catch (err) {
-      registrar(false, { errorKind: "network" });
-      throw new AIError(`Falha de rede (${this.name}): ${(err as Error).message}`, true);
+      const kind = err instanceof AIError && err.kind === "timeout" ? "timeout" : "network";
+      registrar(false, { errorKind: kind });
+      throw err;
     }
 
-    const data = (await res.json().catch(() => ({}))) as ChatResponse;
+    const data = resposta.corpo as ChatResponse;
 
-    if (!res.ok) {
-      const retryable = res.status === 429 || res.status >= 500 || res.status === 401 || res.status === 403;
-      registrar(false, { errorKind: errorKindFromStatus(res.status) });
-      throw new AIError(data.error?.message ?? `${this.name} respondeu ${res.status}`, retryable);
+    if (!resposta.ok) {
+      const s = resposta.status;
+      const retryable = s === 429 || s >= 500 || s === 401 || s === 403;
+      registrar(false, { errorKind: errorKindFromStatus(s) });
+      throw new AIError(
+        data.error?.message ?? `${this.name} respondeu ${s}`,
+        retryable,
+        s === 429 ? "quota" : s >= 500 ? "indisponivel" : s === 401 || s === 403 ? "credencial" : "outro"
+      );
     }
 
     const text = data.choices?.[0]?.message?.content;
     if (!text) {
       registrar(false, { errorKind: "empty", usage: data.usage });
-      throw new AIError(`Resposta vazia (${this.name})`, true);
+      throw new AIError(`Resposta vazia (${this.name})`, true, "vazio");
     }
 
     registrar(true, { usage: data.usage });

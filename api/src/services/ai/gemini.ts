@@ -6,6 +6,7 @@ import {
   type AiErrorKind,
   type AiProviderMeta,
 } from "./telemetry.js";
+import { chamarProvedor } from "./http.js";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -87,39 +88,54 @@ export class GeminiProvider implements AIProvider {
       body.systemInstruction = { parts: [{ text: options.system }] };
     }
 
-    let res: Response;
+    // O helper cuida do prazo e de insistir quando a falha é passageira.
+    let resposta;
     try {
-      res = await fetch(`${BASE_URL}/${this.model}:generateContent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": this.apiKey,
+      resposta = await chamarProvedor(
+        `${BASE_URL}/${this.model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": this.apiKey,
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+        "o Gemini"
+      );
     } catch (err) {
-      registrar(false, { errorKind: "network" });
-      throw new AIError(`Falha de rede ao chamar o Gemini: ${(err as Error).message}`, true);
+      const kind = err instanceof AIError && err.kind === "timeout" ? "timeout" : "network";
+      registrar(false, { errorKind: kind });
+      throw err;
     }
 
-    const data = (await res.json().catch(() => ({}))) as GeminiResponse;
+    const data = resposta.corpo as GeminiResponse;
 
-    if (!res.ok) {
+    if (!resposta.ok) {
       // 429 (quota), 5xx (instabilidade), 401/403 (chave) → vale trocar de chave.
-      const retryable = res.status === 429 || res.status >= 500 || res.status === 401 || res.status === 403;
-      registrar(false, { errorKind: errorKindFromStatus(res.status) });
-      throw new AIError(data.error?.message ?? `Gemini respondeu ${res.status}`, retryable);
+      const s = resposta.status;
+      const retryable = s === 429 || s >= 500 || s === 401 || s === 403;
+      registrar(false, { errorKind: errorKindFromStatus(s) });
+      throw new AIError(
+        data.error?.message ?? `Gemini respondeu ${s}`,
+        retryable,
+        s === 429 ? "quota" : s >= 500 ? "indisponivel" : s === 401 || s === 403 ? "credencial" : "outro"
+      );
     }
     if (data.promptFeedback?.blockReason) {
       // Bloqueio de conteúdo não muda por chave — não adianta cair pra próxima.
       registrar(false, { errorKind: "blocked", usage: data.usageMetadata });
-      throw new AIError(`Conteúdo bloqueado pelo Gemini: ${data.promptFeedback.blockReason}`, false);
+      throw new AIError(
+        `Conteúdo bloqueado pelo Gemini: ${data.promptFeedback.blockReason}`,
+        false,
+        "bloqueado"
+      );
     }
 
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("");
     if (!text) {
       registrar(false, { errorKind: "empty", usage: data.usageMetadata });
-      throw new AIError("Resposta vazia do Gemini", true);
+      throw new AIError("Resposta vazia do Gemini", true, "vazio");
     }
 
     registrar(true, { usage: data.usageMetadata });

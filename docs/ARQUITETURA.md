@@ -35,7 +35,17 @@ Detalhes operacionais, coordenadas e armadilhas: [`INFRA.md`](./INFRA.md).
 - **Web (Expo export)** → `https://fit.satriz.club` (Dockerfile em `app-android/Dockerfile`).
 - **Fotos** → MinIO, leitura pública em `https://fitcdn.satriz.club/fotos`.
 - **Banco** → MongoDB self-hosted na própria VPS, **fechado para a internet** (só rede Docker).
-- **IA** → Google Gemini free tier (`gemini-2.5-flash` é o modelo que funciona no free tier).
+- **IA** → Google Gemini free tier. O modelo em produção é `gemini-3.5-flash`; a chave
+  também enxerga `2.5-flash`, `3-flash-preview`, `3.6/3.7/3.8-flash` e `gemini-flash-latest`.
+
+> **Latência medida (09/09/2026):** o free tier leva **14 a 20 segundos** mesmo para um
+> prompt trivial, e a geração de plano completa leva ~20s. Isso não é lentidão do nosso
+> código — é o tier. Toda decisão de prazo e de espera na interface parte daí.
+>
+> **Cadeia de fallback:** Gemini → Groq. Cada chamada tem prazo (`AI_TIMEOUT_MS`, 45s) e
+> insiste uma vez na mesma chave quando o erro é passageiro (5xx). Prazo estourado **não** é
+> repetido: cair para o Groq (1-2s) é mais rápido do que gastar outro prazo inteiro.
+> Ver `api/src/services/ai/http.ts`.
 
 > **Migração executada em 09/09/2026.** Render e Vercel foram aposentados; o Atlas deixou de
 > ser a origem dos dados (88 documentos migrados). O domínio `satriz.club` é **provisório** —

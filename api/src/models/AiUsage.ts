@@ -25,7 +25,7 @@ const aiUsageSchema = new Schema(
     ok: { type: Boolean, required: true },
     errorKind: {
       type: String,
-      enum: ["quota", "auth", "server", "network", "blocked", "empty", "other"],
+      enum: ["quota", "auth", "server", "network", "timeout", "blocked", "empty", "other"],
       default: null,
     },
   },

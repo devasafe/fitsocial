@@ -11,7 +11,17 @@ export type AiFeature =
   | "plan_import";
 
 /** Motivo da falha, já classificado — o painel agrupa por isto. */
-export type AiErrorKind = "quota" | "auth" | "server" | "network" | "blocked" | "empty" | "other";
+export type AiErrorKind =
+  | "quota"
+  | "auth"
+  | "server"
+  | "network"
+  /** Estourou o prazo de espera. Distinto de "network": a conexão existia, o
+   *  serviço é que não respondeu a tempo — é o sintoma de free tier lento. */
+  | "timeout"
+  | "blocked"
+  | "empty"
+  | "other";
 
 /** Identifica a posição de um provider na cadeia de fallback. */
 export interface AiProviderMeta {
