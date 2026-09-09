@@ -7,6 +7,7 @@ import { HttpError } from "../utils/httpError.js";
 import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
+import { User } from "../models/User.js";
 import { createActivity } from "../services/activities.js";
 import { computeStrengthMetrics } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
@@ -114,7 +115,12 @@ activitiesRouter.get(
         }
       }
     }
-    res.json({ data: serializeActivity(a) });
+    // Dono do treino (para o cabeçalho do detalhe ao ver de outra pessoa).
+    const u = await User.findById(a.user).select("name username avatarUrl");
+    const owner = u
+      ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
+      : null;
+    res.json({ data: { ...serializeActivity(a), owner } });
   })
 );
 

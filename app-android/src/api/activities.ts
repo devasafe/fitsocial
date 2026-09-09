@@ -72,6 +72,8 @@ export interface Activity {
   notes: string;
   metrics: Record<string, number>;
   payload?: unknown;
+  // Presente ao buscar por id (ex.: abrir treino de outra pessoa pelo feed).
+  owner?: { id: string; name: string; username: string | null; avatarUrl: string } | null;
 }
 
 export async function getActivity(token: string, id: string): Promise<Activity> {

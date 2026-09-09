@@ -228,6 +228,9 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     const okB = await request(app).get(`/activities/${sharedId}`).set("Authorization", `Bearer ${tokenB}`);
     expect(okB.status).toBe(200);
     expect(okB.body.data.id).toBe(sharedId);
+    // Traz o dono para o cabeçalho do detalhe.
+    expect(okB.body.data.owner).toBeTruthy();
+    expect(typeof okB.body.data.owner.name).toBe("string");
 
     // A registra um treino privado sem compartilhar → B não vê.
     const priv = await request(app)

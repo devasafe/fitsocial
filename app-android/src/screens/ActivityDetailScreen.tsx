@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, TouchableOpacity } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Txt, Screen, Card, ErrorState } from "../components/ui";
+import { Avatar } from "../components/Avatar";
 import { RouteMap } from "../components/RouteMap";
 import { useAuth } from "../context/AuthContext";
 import { getActivity, type Activity } from "../api/activities";
@@ -49,7 +50,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ActivityDetailScreen({ route }: Props) {
+export function ActivityDetailScreen({ route, navigation }: Props) {
   const { token } = useAuth();
   const passed = route.params.activity ?? null;
   const activityId = route.params.activityId;
@@ -99,6 +100,25 @@ export function ActivityDetailScreen({ route }: Props) {
 
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+      {/* Dono do treino (ao ver de outra pessoa) */}
+      {a.owner ? (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("UserProfile", { userId: a.owner!.id })}
+          activeOpacity={0.7}
+          style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}
+        >
+          <Avatar uri={a.owner.avatarUrl} name={a.owner.name} size={36} />
+          <View>
+            <Txt variant="bodyStrong">{a.owner.name}</Txt>
+            {a.owner.username ? (
+              <Txt variant="caption" color={colors.text3}>
+                @{a.owner.username}
+              </Txt>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
         <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: stroke }} />
         <View>
