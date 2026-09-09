@@ -198,6 +198,52 @@ describe("Rede social", () => {
     expect(found.author.isMe).toBe(false);
   });
 
+  it("post pode ter só foto (sem texto); post vazio é 400", async () => {
+    const soFoto = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({ imageUrl: "https://exemplo.com/foto.jpg" });
+    expect(soFoto.status).toBe(201);
+    expect(soFoto.body.post.text).toBe("");
+
+    const vazio = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({});
+    expect(vazio.status).toBe(400);
+  });
+
+  it("post com treino anexado (activityId) mostra o resumo no feed", async () => {
+    const act = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 1800, payload: { distanceM: 5000 } });
+    expect(act.status).toBe(201);
+    const activityId = act.body.data.id;
+
+    const post = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({ text: "corrida boa", activityId });
+    expect(post.status).toBe(201);
+    expect(post.body.post.activity).toBeTruthy();
+    expect(post.body.post.activity.kind).toBe("endurance");
+    expect(Array.isArray(post.body.post.activity.stats)).toBe(true);
+  });
+
+  it("não deixa anexar treino de outra pessoa", async () => {
+    const act = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${ana.token}`)
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 600, payload: { distanceM: 1000 } });
+    const alheio = act.body.data.id;
+    const res = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({ activityId: alheio });
+    expect(res.status).toBe(404);
+  });
+
   it("WOD compartilhado traz os movimentos no feed", async () => {
     const create = await request(app)
       .post("/activities")
@@ -224,7 +270,7 @@ describe("Rede social", () => {
     const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
     const wodPost = feed.body.posts.find((p: { activity?: { kind?: string } }) => p.activity?.kind === "wod");
     expect(wodPost).toBeTruthy();
-    expect(wodPost.activity.name).toBe("Cindy");
+    expect(wodPost.activity.title).toBe("Cindy");
     expect(wodPost.activity.movements).toHaveLength(3);
     expect(wodPost.activity.movements[0].name).toBe("Pull-ups");
   });

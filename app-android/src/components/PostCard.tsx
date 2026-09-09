@@ -3,7 +3,7 @@ import { View, StyleSheet, Image, TouchableOpacity } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useAuth } from "../context/AuthContext";
 import { likePost, unlikePost, type Post } from "../api/social";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, sportColor } from "../theme";
 import { Card, Txt, Button } from "./ui";
 import { Avatar } from "./Avatar";
 
@@ -157,28 +157,38 @@ export function PostCard({
       {post.text ? <Txt variant="body">{post.text}</Txt> : null}
       {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.image} /> : null}
 
-      {/* Movimentos do WOD (quando é um CrossFit compartilhado) */}
-      {post.activity?.kind === "wod" && post.activity.movements && post.activity.movements.length > 0 ? (
-        <View style={styles.wodBox}>
-          {post.activity.name ? (
-            <Txt variant="label" color={colors.lime} style={{ marginBottom: 2 }}>
-              ✦ {post.activity.name}
+      {/* Card do treino (qualquer atividade compartilhada) */}
+      {post.activity ? (
+        <View style={[styles.wodBox, { borderLeftColor: sportColor(post.activity.sportId) }]}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: post.activity.stats.length ? 2 : 0 }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(post.activity.sportId) }} />
+            <Txt variant="bodyStrong" color={colors.text}>
+              {post.activity.title}
+            </Txt>
+          </View>
+          {post.activity.stats.length ? (
+            <Txt variant="caption" color={colors.text2} tabular>
+              {post.activity.stats.join(" · ")}
             </Txt>
           ) : null}
-          {post.activity.movements.slice(0, 6).map((mv, i) => (
-            <View key={i} style={styles.wodRow}>
-              <Txt variant="caption" color={colors.text} style={{ flex: 1 }}>
-                {mv.name}
-              </Txt>
-              <Txt variant="caption" color={colors.text2} tabular>
-                {movLabel(mv)}
-              </Txt>
+          {post.activity.movements && post.activity.movements.length > 0 ? (
+            <View style={{ marginTop: spacing.sm, gap: 3 }}>
+              {post.activity.movements.slice(0, 6).map((mv, i) => (
+                <View key={i} style={styles.wodRow}>
+                  <Txt variant="caption" color={colors.text} style={{ flex: 1 }}>
+                    {mv.name}
+                  </Txt>
+                  <Txt variant="caption" color={colors.text2} tabular>
+                    {movLabel(mv)}
+                  </Txt>
+                </View>
+              ))}
+              {post.activity.movements.length > 6 ? (
+                <Txt variant="caption" color={colors.text3}>
+                  +{post.activity.movements.length - 6} movimento(s)
+                </Txt>
+              ) : null}
             </View>
-          ))}
-          {post.activity.movements.length > 6 ? (
-            <Txt variant="caption" color={colors.text3}>
-              +{post.activity.movements.length - 6} movimento(s)
-            </Txt>
           ) : null}
         </View>
       ) : null}

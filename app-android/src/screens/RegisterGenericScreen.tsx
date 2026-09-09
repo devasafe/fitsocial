@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Switch } from "react-native";
+import { View } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -19,8 +19,6 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState("");
   const [metricLabel, setMetricLabel] = useState("");
   const [metricValue, setMetricValue] = useState("");
-  const [share, setShare] = useState(false);
-  const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -36,7 +34,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
 
     setSaving(true);
     try {
-      await createActivity(token!, {
+      const res = await createActivity(token!, {
         sportId,
         kind: "generic",
         durationSec: Math.round(minN * 60),
@@ -45,10 +43,8 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
           description: description.trim() || undefined,
           customMetrics,
         },
-        shareToFeed: share,
-        caption: share ? caption.trim() || undefined : undefined,
       });
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -80,12 +76,6 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
           </View>
         </View>
       </Card>
-
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: spacing.md }}>
-        <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-        <Switch value={share} onValueChange={setShare} trackColor={{ true: colors.lime, false: colors.line }} thumbColor={colors.text} />
-      </View>
-      {share ? <Field value={caption} onChangeText={setCaption} placeholder="Escreva uma legenda (opcional)" multiline /> : null}
 
       <Button title="Salvar atividade" onPress={save} loading={saving} size="lg" glow />
     </Screen>

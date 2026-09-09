@@ -3,7 +3,8 @@ import mongoose, { Schema, type InferSchemaType, type HydratedDocument } from "m
 const postSchema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    text: { type: String, required: true, trim: true, maxlength: 2000 },
+    // Opcional: um post pode ser só foto ou só treino (validação de "ao menos um" na rota).
+    text: { type: String, default: "", trim: true, maxlength: 2000 },
     // MVP: URL da imagem (upload real de arquivo fica para uma etapa posterior).
     imageUrl: { type: String, default: "" },
     // Quando o post é o compartilhamento de uma atividade registrada (opcional).

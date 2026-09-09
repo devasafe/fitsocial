@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Switch } from "react-native";
+import { View } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -31,8 +31,6 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
   const label = sportLabel(sportId);
   const [km, setKm] = useState("");
   const [min, setMin] = useState("");
-  const [share, setShare] = useState(false);
-  const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
 
   const kmN = Number(km.replace(",", ".")) || 0;
@@ -50,11 +48,9 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         kind: "endurance",
         durationSec: Math.round(minN * 60),
         payload: { distanceM: Math.round(kmN * 1000) },
-        shareToFeed: share,
-        caption: share ? caption.trim() || undefined : undefined,
       });
       celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -100,12 +96,6 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
           {paceLabel(kmN, minN)}
         </Txt>
       </Card>
-
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.md }}>
-        <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-        <Switch value={share} onValueChange={setShare} trackColor={{ true: colors.lime, false: colors.line }} thumbColor={colors.text} />
-      </View>
-      {share ? <Field value={caption} onChangeText={setCaption} placeholder="Escreva uma legenda (opcional)" multiline /> : null}
 
       <Button title="Salvar treino" onPress={save} loading={saving} size="lg" glow />
     </Screen>

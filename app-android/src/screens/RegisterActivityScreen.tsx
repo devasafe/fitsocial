@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { View, TextInput, TouchableOpacity, Switch } from "react-native";
+import { View, TextInput, TouchableOpacity } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { Txt, Screen, Card, Button, Field } from "../components/ui";
+import { Txt, Screen, Card, Button } from "../components/ui";
 import { SuggestField } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
 import { searchExercises } from "../api/library";
@@ -65,8 +65,6 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
   const [exercises, setExercises] = useState<ExerciseForm[]>(
     prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
   );
-  const [share, setShare] = useState(false);
-  const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
 
   function setExercise(i: number, patch: Partial<ExerciseForm>) {
@@ -112,11 +110,9 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
         sportId,
         kind: "strength",
         payload: { variant, exercises: payloadExercises },
-        shareToFeed: share,
-        caption: share ? caption.trim() || undefined : undefined,
       });
       celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -163,31 +159,6 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
       ))}
 
       <Button title="+ Adicionar exercício" variant="secondary" onPress={addExercise} style={{ marginBottom: spacing.section }} />
-
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: spacing.md,
-        }}
-      >
-        <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-        <Switch
-          value={share}
-          onValueChange={setShare}
-          trackColor={{ true: colors.lime, false: colors.line }}
-          thumbColor={colors.text}
-        />
-      </View>
-      {share ? (
-        <Field
-          value={caption}
-          onChangeText={setCaption}
-          placeholder="Escreva uma legenda (opcional)"
-          multiline
-        />
-      ) : null}
 
       <Button title="Salvar treino" onPress={save} loading={saving} size="lg" glow />
     </Screen>

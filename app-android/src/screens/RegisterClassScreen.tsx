@@ -28,8 +28,6 @@ export function RegisterClassScreen({ route, navigation }: Props) {
   const [min, setMin] = useState("");
   const [sessionType, setSessionType] = useState<string | null>("aula_completa");
   const [gi, setGi] = useState(true);
-  const [share, setShare] = useState(false);
-  const [caption, setCaption] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -45,11 +43,9 @@ export function RegisterClassScreen({ route, navigation }: Props) {
         kind: "class",
         durationSec: Math.round(minN * 60),
         payload: { modality: sportId, sessionType: sessionType ?? undefined, gi },
-        shareToFeed: share,
-        caption: share ? caption.trim() || undefined : undefined,
       });
       celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -86,12 +82,6 @@ export function RegisterClassScreen({ route, navigation }: Props) {
           <Switch value={gi} onValueChange={setGi} trackColor={{ true: colors.lime, false: colors.line }} thumbColor={colors.text} />
         </View>
       </Card>
-
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: spacing.md }}>
-        <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-        <Switch value={share} onValueChange={setShare} trackColor={{ true: colors.lime, false: colors.line }} thumbColor={colors.text} />
-      </View>
-      {share ? <Field value={caption} onChangeText={setCaption} placeholder="Escreva uma legenda (opcional)" multiline /> : null}
 
       <Button title="Salvar treino" onPress={save} loading={saving} size="lg" glow />
     </Screen>

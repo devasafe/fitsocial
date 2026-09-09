@@ -119,7 +119,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
         payload: { distanceM: 0, points: points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ele: p.ele })) },
       });
       celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {

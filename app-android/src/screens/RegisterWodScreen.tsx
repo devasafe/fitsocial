@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Switch, TextInput, TouchableOpacity } from "react-native";
+import { View, TextInput, TouchableOpacity } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -74,8 +74,6 @@ export function RegisterWodScreen({ route, navigation }: Props) {
   const [prescription, setPrescription] = useState("");
   const [movements, setMovements] = useState<MovForm[]>([]);
   const [saving, setSaving] = useState(false);
-  const [share, setShare] = useState(false);
-  const [caption, setCaption] = useState("");
 
   function setMov(i: number, patch: Partial<MovForm>) {
     setMovements((prev) => prev.map((mv, idx) => (idx === i ? { ...mv, ...patch } : mv)));
@@ -127,11 +125,9 @@ export function RegisterWodScreen({ route, navigation }: Props) {
         sportId,
         kind: "wod",
         payload,
-        shareToFeed: share,
-        caption: share ? caption.trim() || undefined : undefined,
       });
       celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("Tabs");
+      navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -248,12 +244,6 @@ export function RegisterWodScreen({ route, navigation }: Props) {
 
         <Button title="+ Adicionar movimento" variant="secondary" onPress={addMov} />
       </Card>
-
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: spacing.md }}>
-        <Txt variant="bodyStrong">Compartilhar no feed</Txt>
-        <Switch value={share} onValueChange={setShare} trackColor={{ true: colors.lime, false: colors.line }} thumbColor={colors.text} />
-      </View>
-      {share ? <Field value={caption} onChangeText={setCaption} placeholder="Escreva uma legenda (opcional)" multiline /> : null}
 
       <Button title="Salvar WOD" onPress={save} loading={saving} size="lg" glow />
     </Screen>

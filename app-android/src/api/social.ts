@@ -19,7 +19,8 @@ export interface PostAuthor {
 export interface PostActivity {
   kind: string;
   sportId: string;
-  name: string | null; // nome do WOD, quando aplicável
+  title: string;
+  stats: string[]; // ex.: ["5,2 km", "27:30", "5:18 /km"]
   movements: { name: string; loadKg: number | null; reps: number | null; timeSec: number | null }[] | null;
 }
 export interface Post {
@@ -49,12 +50,9 @@ export interface UserProfile {
   posts: Post[];
 }
 
-export function createPost(token: string, text: string, imageUrl?: string) {
-  return apiFetch<{ post: Post }>("/social/posts", {
-    method: "POST",
-    token,
-    body: { text, ...(imageUrl ? { imageUrl } : {}) },
-  });
+// Post: qualquer combinação de texto, foto e treino anexado (ao menos um).
+export function createPost(token: string, input: { text?: string; imageUrl?: string; activityId?: string }) {
+  return apiFetch<{ post: Post }>("/social/posts", { method: "POST", token, body: input });
 }
 
 export function getFeed(token: string) {

@@ -10,21 +10,57 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { notify } from "../lib/notify";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
 import { createPost } from "../api/social";
 import { uploadImage } from "../api/uploads";
+import type { Activity } from "../api/activities";
 import { Button, Txt } from "../components/ui";
-import { colors, radius, spacing, type as typeScale } from "../theme";
+import { sportLabel } from "../lib/sportLabel";
+import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
+import type { AppStackParams } from "../navigation/types";
+
+function mmss(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+// Prévia enxuta do treino anexado no compositor.
+function workoutTitle(a: Activity): string {
+  const pl = (a.payload ?? {}) as { name?: string; activityName?: string };
+  if (a.kind === "wod" && pl.name) return pl.name;
+  if (a.kind === "generic" && pl.activityName) return pl.activityName;
+  return a.title?.trim() || sportLabel(a.sportId);
+}
+function workoutStats(a: Activity): string[] {
+  const m = a.metrics ?? {};
+  const out: string[] = [];
+  if (a.kind === "strength" && m.volumeTotalKg) out.push(`${Math.round(m.volumeTotalKg)} kg`);
+  if (a.kind === "endurance" && m.distanceKm) out.push(`${Math.round(m.distanceKm * 100) / 100} km`);
+  if (a.durationSec) out.push(mmss(a.durationSec));
+  return out;
+}
 
 export function CreatePostScreen() {
-  const nav = useNavigation();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const route = useRoute<RouteProp<AppStackParams, "CreatePost">>();
   const { token } = useAuth();
+  const fromWorkout = route.params?.activity; // veio de um treino finalizado
+  const [attached, setAttached] = useState<Activity | null>(fromWorkout ?? null);
   const [text, setText] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const canPost = !!(text.trim() || imageUrl || attached);
+
+  function done() {
+    // Veio do fluxo de treino → volta pra navegação principal; senão volta atrás.
+    if (fromWorkout) nav.navigate("Tabs");
+    else nav.goBack();
+  }
 
   async function pickImage() {
     // Em nativo, pede permissão da galeria (no web não é necessário).
@@ -67,12 +103,15 @@ export function CreatePostScreen() {
   }
 
   async function handlePost() {
-    const body = text.trim();
-    if (!body) return;
+    if (!canPost) return;
     setSaving(true);
     try {
-      await createPost(token!, body, imageUrl ?? undefined);
-      nav.goBack();
+      await createPost(token!, {
+        text: text.trim() || undefined,
+        imageUrl: imageUrl ?? undefined,
+        activityId: attached?.id,
+      });
+      done();
     } catch (err) {
       notify("Não foi possível postar", (err as Error).message);
     } finally {
@@ -87,19 +126,42 @@ export function CreatePostScreen() {
     >
       <View style={styles.inner}>
         <Txt variant="titleScreen" style={styles.title}>
-          Compartilhe sua evolução
+          {attached ? "Compartilhar treino" : "Compartilhe sua evolução"}
         </Txt>
+
+        {/* Treino anexado (quando veio de um registro) — pode remover */}
+        {attached ? (
+          <View style={styles.workoutCard}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(attached.sportId) }} />
+              <View style={{ flex: 1 }}>
+                <Txt variant="bodyStrong">{workoutTitle(attached)}</Txt>
+                {workoutStats(attached).length ? (
+                  <Txt variant="caption" color={colors.text2} tabular>
+                    {workoutStats(attached).join(" · ")}
+                  </Txt>
+                ) : null}
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => setAttached(null)} hitSlop={8}>
+              <Txt variant="label" color={colors.text3}>
+                Remover
+              </Txt>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <Txt variant="label" color={colors.text2} style={styles.label}>
-          Como foi seu treino de hoje?
+          {attached ? "Escreva algo (opcional)" : "O que você quer compartilhar?"}
         </Txt>
         <TextInput
           style={styles.textArea}
           value={text}
           onChangeText={setText}
-          placeholder="Conte o que você treinou, como se sentiu e o que veio de novo."
+          placeholder="Conte como foi o treino, como se sentiu… (opcional)"
           placeholderTextColor={colors.text3}
           multiline
-          autoFocus
+          autoFocus={!attached}
         />
 
         {imageUrl ? (
@@ -129,9 +191,16 @@ export function CreatePostScreen() {
           size="lg"
           onPress={handlePost}
           loading={saving}
-          disabled={!text.trim() || uploading}
+          disabled={!canPost || uploading}
           glow
         />
+        {fromWorkout ? (
+          <TouchableOpacity onPress={done} activeOpacity={0.7} style={{ paddingVertical: spacing.md, alignItems: "center" }}>
+            <Txt variant="label" color={colors.text2}>
+              Agora não
+            </Txt>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );
@@ -141,6 +210,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   inner: { flex: 1, padding: spacing.gutter },
   title: { marginTop: spacing.sm, marginBottom: spacing.lg },
+  workoutCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
   label: { marginBottom: spacing.sm },
   textArea: {
     backgroundColor: colors.surface2,

@@ -6,10 +6,12 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User } from "../models/User.js";
 import { Post } from "../models/Post.js";
+import { Activity } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
 import { Comment } from "../models/Comment.js";
 import { createNotification } from "../services/notifications.js";
+import { getSport } from "../services/sports.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -87,32 +89,95 @@ function serializePost(
   };
 }
 
+function mmss(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = Math.round(totalSec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+interface WodMovement {
+  name: string;
+  loadKg?: number | null;
+  reps?: number | null;
+  timeSec?: number | null;
+}
+interface ActivityPayload {
+  name?: string;
+  level?: string;
+  activityName?: string;
+  sessionType?: string;
+  exercises?: unknown[];
+  movements?: WodMovement[];
+  resultTimeSec?: number | null;
+  resultRounds?: number | null;
+  resultReps?: number | null;
+  resultLoadKg?: number | null;
+}
 interface PopulatedActivity {
   kind: string;
   sportId: string;
-  payload?: { name?: string; movements?: { name: string; loadKg?: number | null; reps?: number | null; timeSec?: number | null }[] };
+  durationSec?: number;
+  metrics?: Record<string, number>;
+  payload?: ActivityPayload;
 }
 
+// Resumo do treino para o card do feed — genérico por kind (title + stats + movimentos do WOD).
 function activitySummary(post: InstanceType<typeof Post>) {
   const act = post.activity as unknown;
   if (!act || typeof act !== "object" || !("kind" in act)) return null;
   const a = act as PopulatedActivity;
   const pl = a.payload ?? {};
-  const isWod = a.kind === "wod";
-  return {
-    kind: a.kind,
-    sportId: a.sportId,
-    name: isWod ? pl.name ?? null : null,
-    movements:
-      isWod && Array.isArray(pl.movements)
-        ? pl.movements.map((mv) => ({
-            name: mv.name,
-            loadKg: mv.loadKg ?? null,
-            reps: mv.reps ?? null,
-            timeSec: mv.timeSec ?? null,
-          }))
-        : null,
-  };
+  const m = a.metrics ?? {};
+  const dur = a.durationSec ?? 0;
+  const label = getSport(a.sportId)?.label ?? a.sportId;
+
+  let title = label;
+  const stats: string[] = [];
+  let movements: WodMovement[] | null = null;
+
+  if (a.kind === "strength") {
+    const n = Array.isArray(pl.exercises) ? pl.exercises.length : 0;
+    if (n) stats.push(`${n} exercício${n > 1 ? "s" : ""}`);
+    if (m.volumeTotalKg) stats.push(`${Math.round(m.volumeTotalKg)} kg`);
+    if (dur) stats.push(mmss(dur));
+  } else if (a.kind === "endurance") {
+    if (m.distanceKm) stats.push(`${Math.round(m.distanceKm * 100) / 100} km`);
+    if (dur) stats.push(mmss(dur));
+    if (m.avgPaceSecPerKm) stats.push(`${mmss(m.avgPaceSecPerKm)} /km`);
+  } else if (a.kind === "class") {
+    if (m.minutes) stats.push(`${Math.round(m.minutes)} min`);
+    else if (dur) stats.push(mmss(dur));
+    if (pl.sessionType) stats.push(String(pl.sessionType));
+  } else if (a.kind === "wod") {
+    title = pl.name || label;
+    if (pl.level) stats.push(String(pl.level).toUpperCase());
+    const result =
+      pl.resultTimeSec != null
+        ? mmss(pl.resultTimeSec)
+        : pl.resultRounds != null
+          ? `${pl.resultRounds} rounds`
+          : pl.resultReps != null
+            ? `${pl.resultReps} reps`
+            : pl.resultLoadKg != null
+              ? `${pl.resultLoadKg} kg`
+              : null;
+    if (result) stats.push(result);
+    movements = Array.isArray(pl.movements)
+      ? pl.movements.map((mv) => ({
+          name: mv.name,
+          loadKg: mv.loadKg ?? null,
+          reps: mv.reps ?? null,
+          timeSec: mv.timeSec ?? null,
+        }))
+      : null;
+  } else {
+    // generic
+    if (pl.activityName) title = String(pl.activityName);
+    if (m.minutes) stats.push(`${Math.round(m.minutes)} min`);
+    else if (dur) stats.push(mmss(dur));
+  }
+
+  return { kind: a.kind, sportId: a.sportId, title, stats, movements };
 }
 
 /** Dado um conjunto de posts, retorna o set de ids que o usuário curtiu. */
@@ -127,17 +192,38 @@ function assertObjectId(id: string) {
 
 // ---- posts ----
 
-const createPostSchema = z.object({
-  text: z.string().min(1, "Escreva algo").max(2000),
-  imageUrl: z.string().url("URL de imagem inválida").optional(),
-});
+const createPostSchema = z
+  .object({
+    text: z.string().max(2000).optional(),
+    imageUrl: z.string().url("URL de imagem inválida").optional(),
+    activityId: z.string().optional(),
+  })
+  .refine((b) => !!(b.text?.trim() || b.imageUrl || b.activityId), {
+    message: "Escreva algo, adicione uma foto ou anexe um treino",
+  });
 
 socialRouter.post(
   "/posts",
   asyncHandler(async (req, res) => {
-    const { text, imageUrl } = createPostSchema.parse(req.body);
-    const post = await Post.create({ author: req.user!._id, text, imageUrl: imageUrl ?? "" });
+    const { text, imageUrl, activityId } = createPostSchema.parse(req.body);
+
+    // Anexo de treino: precisa existir e ser do próprio usuário.
+    let activity: mongoose.Types.ObjectId | undefined;
+    if (activityId) {
+      assertObjectId(activityId);
+      const act = await Activity.findOne({ _id: activityId, user: req.user!._id }).select("_id");
+      if (!act) throw new HttpError(404, "Treino não encontrado");
+      activity = act._id;
+    }
+
+    const post = await Post.create({
+      author: req.user!._id,
+      text: text?.trim() ?? "",
+      imageUrl: imageUrl ?? "",
+      ...(activity ? { activity } : {}),
+    });
     await post.populate("author", "name username avatarUrl");
+    if (activity) await post.populate("activity", "kind sportId payload metrics durationSec title");
     res.status(201).json({ post: serializePost(post, new Set()) });
   })
 );
@@ -156,7 +242,7 @@ socialRouter.get(
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl")
-      .populate("activity", "kind sportId payload");
+      .populate("activity", "kind sportId payload metrics durationSec title");
 
     const likedIds = await likedSetFor(me, posts.map((p) => p._id));
     res.json({ posts: posts.map((p) => serializePost(p, likedIds)) });
@@ -178,7 +264,7 @@ socialRouter.get(
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl")
-      .populate("activity", "kind sportId payload");
+      .populate("activity", "kind sportId payload metrics durationSec title");
 
     const authorIds = posts.map((p) => (p.author as unknown as { _id: mongoose.Types.ObjectId })._id);
     const [likedIds, follows] = await Promise.all([
@@ -199,7 +285,7 @@ socialRouter.get(
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
     const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl")
-      .populate("activity", "kind sportId payload");
+      .populate("activity", "kind sportId payload metrics durationSec title");
     if (!post) throw new HttpError(404, "Post não encontrado");
     const likedIds = await likedSetFor(req.user!._id, [post._id]);
     res.json({ post: serializePost(post, likedIds) });
@@ -305,7 +391,7 @@ socialRouter.get(
 
     const [posts, followers, following, isFollowing] = await Promise.all([
       Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
-      .populate("activity", "kind sportId payload"),
+      .populate("activity", "kind sportId payload metrics durationSec title"),
       Follow.countDocuments({ following: user._id }),
       Follow.countDocuments({ follower: user._id }),
       Follow.exists({ follower: me, following: user._id }),
