@@ -1,25 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import { createApp } from "../app.js";
-import { setAIProvider } from "../services/ai/index.js";
 import { Profile } from "../models/Profile.js";
-import type { AIProvider } from "../services/ai/provider.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
 let token: string;
-
-// Provider fake: devolve, em ordem, as respostas JSON enfileiradas.
-class MockProvider implements AIProvider {
-  readonly name = "mock";
-  queue: string[] = [];
-  async generate(): Promise<string> {
-    return this.queue.shift() ?? "{}";
-  }
-}
-const mock = new MockProvider();
 
 const fullProfile = {
   goal: "ganhar_massa",
@@ -38,8 +26,6 @@ const fullProfile = {
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
-  setAIProvider(mock);
-
   const reg = await request(app)
     .post("/auth/register")
     .send({ name: "Asafe", email: "asafe@test.com", password: "senha12345" });
@@ -47,128 +33,41 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  setAIProvider(null);
   await mongoose.disconnect();
   await mongod.stop();
 });
 
-beforeEach(() => {
-  mock.queue = [];
-});
-
-const auth = (r: request.Test) => r.set("Authorization", `Bearer ${token}`);
-
-describe("Onboarding", () => {
+describe("Onboarding (formulário)", () => {
   it("exige autenticação", async () => {
-    const res = await request(app).post("/onboarding/message").send({ messages: [] });
+    const res = await request(app).post("/onboarding/profile").send(fullProfile);
     expect(res.status).toBe(401);
   });
 
-  it("retorna a saudação inicial", async () => {
-    const res = await auth(request(app).get("/onboarding/greeting"));
-    expect(res.status).toBe(200);
-    expect(res.body.greeting).toContain("coach");
-  });
-
-  it("turno incompleto não conclui o onboarding nem cria ficha", async () => {
-    mock.queue = [
-      JSON.stringify({ reply: "Qual seu objetivo?", complete: false, profile: null }),
-    ];
-    const res = await auth(
-      request(app).post("/onboarding/message").send({ messages: [{ role: "user", content: "oi" }] })
-    );
-    expect(res.status).toBe(200);
-    expect(res.body.complete).toBe(false);
-    expect(res.body.onboardingComplete).toBe(false);
-    expect(await Profile.countDocuments()).toBe(0);
-  });
-
-  it("turno completo persiste a ficha e conclui o onboarding", async () => {
-    mock.queue = [
-      JSON.stringify({ reply: "Tudo pronto! 🎉", complete: true, profile: fullProfile }),
-    ];
-    const res = await auth(
-      request(app)
-        .post("/onboarding/message")
-        .send({ messages: [{ role: "user", content: "respostas..." }] })
-    );
-    expect(res.status).toBe(200);
-    expect(res.body.complete).toBe(true);
-    expect(res.body.onboardingComplete).toBe(true);
-
-    const profile = await Profile.findOne();
-    expect(profile?.goal).toBe("ganhar_massa");
-    expect(profile?.experienceLevel).toBe("iniciante");
-
-    // /auth/me deve refletir onboardingComplete
-    const me = await auth(request(app).get("/auth/me"));
-    expect(me.body.user.onboardingComplete).toBe(true);
-  });
-
-  it("complete=true com ficha inválida NÃO conclui (trata como incompleto)", async () => {
-    await Profile.deleteMany({});
-    // Novo usuário para não herdar o estado do teste anterior.
-    const reg = await request(app)
-      .post("/auth/register")
-      .send({ name: "Bruno", email: "b@test.com", password: "senha12345" });
-    const t2 = reg.body.token as string;
-
-    mock.queue = [
-      JSON.stringify({
-        reply: "quase lá",
-        complete: true,
-        profile: { goal: "ganhar_massa", age: 25 }, // faltam campos obrigatórios
-      }),
-    ];
-    const res = await request(app)
-      .post("/onboarding/message")
-      .set("Authorization", `Bearer ${t2}`)
-      .send({ messages: [{ role: "user", content: "x" }] });
-
-    expect(res.status).toBe(200);
-    expect(res.body.complete).toBe(false);
-    expect(res.body.onboardingComplete).toBe(false);
-  });
-
-  it("JSON inválido da IA vira erro tratado (500 com mensagem)", async () => {
-    mock.queue = ["isso não é json"];
-    const res = await auth(
-      request(app).post("/onboarding/message").send({ messages: [{ role: "user", content: "x" }] })
-    );
-    expect(res.status).toBe(502);
-    expect(res.body.error).toBeTruthy();
-  });
-
-  it("cadastra a ficha por FORMULÁRIO (POST /profile) e conclui o onboarding", async () => {
-    const reg = await request(app)
-      .post("/auth/register")
-      .send({ name: "Carla", email: "carla@test.com", password: "senha12345" });
-    const t = reg.body.token as string;
-    const uid = reg.body.user.id as string;
-
+  it("cadastra a ficha por formulário e conclui o onboarding", async () => {
     const res = await request(app)
       .post("/onboarding/profile")
-      .set("Authorization", `Bearer ${t}`)
+      .set("Authorization", `Bearer ${token}`)
       .send({ ...fullProfile, goal: "perder_gordura" });
     expect(res.status).toBe(200);
     expect(res.body.onboardingComplete).toBe(true);
 
-    const profile = await Profile.findOne({ user: uid });
+    const profile = await Profile.findOne();
     expect(profile?.goal).toBe("perder_gordura");
+    expect(profile?.experienceLevel).toBe("iniciante");
 
-    const me = await request(app).get("/auth/me").set("Authorization", `Bearer ${t}`);
+    const me = await request(app).get("/auth/me").set("Authorization", `Bearer ${token}`);
     expect(me.body.user.onboardingComplete).toBe(true);
   });
 
-  it("POST /profile com ficha inválida retorna 400", async () => {
+  it("ficha inválida (faltam campos) retorna 400", async () => {
     const reg = await request(app)
       .post("/auth/register")
-      .send({ name: "Dan", email: "dan@test.com", password: "senha12345" });
-    const t = reg.body.token as string;
+      .send({ name: "Bruno", email: "b@test.com", password: "senha12345" });
+    const t2 = reg.body.token as string;
     const res = await request(app)
       .post("/onboarding/profile")
-      .set("Authorization", `Bearer ${t}`)
-      .send({ goal: "ganhar_massa", age: 25 }); // faltam campos obrigatórios
+      .set("Authorization", `Bearer ${t2}`)
+      .send({ goal: "ganhar_massa", age: 25 });
     expect(res.status).toBe(400);
   });
 });
