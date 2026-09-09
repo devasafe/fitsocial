@@ -114,6 +114,7 @@ interface ActivityPayload {
   resultLoadKg?: number | null;
 }
 interface PopulatedActivity {
+  _id: mongoose.Types.ObjectId;
   kind: string;
   sportId: string;
   durationSec?: number;
@@ -177,7 +178,7 @@ function activitySummary(post: InstanceType<typeof Post>) {
     else if (dur) stats.push(mmss(dur));
   }
 
-  return { kind: a.kind, sportId: a.sportId, title, stats, movements };
+  return { id: a._id.toString(), kind: a.kind, sportId: a.sportId, title, stats, movements };
 }
 
 /** Dado um conjunto de posts, retorna o set de ids que o usuário curtiu. */

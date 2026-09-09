@@ -9,7 +9,8 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
-import { useFocusEffect, useRoute, type RouteProp } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getComments, createComment, type Comment } from "../api/social";
 import { PostCard } from "../components/PostCard";
@@ -36,6 +37,7 @@ function timeAgo(iso: string): string {
 
 export function PostDetailScreen() {
   const route = useRoute<RouteProp<AppStackParams, "PostDetail">>();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const { post } = route.params;
 
@@ -85,7 +87,11 @@ export function PostDetailScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
-            <PostCard post={post} />
+            <PostCard
+              post={post}
+              onPressAuthor={(id) => nav.navigate("UserProfile", { userId: id })}
+              onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
+            />
             <Txt variant="titleSection" style={styles.sectionTitle}>
               Comentários
             </Txt>

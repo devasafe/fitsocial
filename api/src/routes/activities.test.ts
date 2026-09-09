@@ -217,6 +217,27 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     expect(res.body.data.payload.movements[0].loadKg).toBe(100);
     expect(res.body.data.payload.movements[2].timeSec).toBe(200);
   });
+
+  it("outro usuário abre a atividade COMPARTILHADA, mas não a privada não compartilhada", async () => {
+    // A compartilha um treino no feed → B consegue abrir.
+    const shared = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ shareToFeed: true }));
+    const sharedId = shared.body.data.id;
+    const okB = await request(app).get(`/activities/${sharedId}`).set("Authorization", `Bearer ${tokenB}`);
+    expect(okB.status).toBe(200);
+    expect(okB.body.data.id).toBe(sharedId);
+
+    // A registra um treino privado sem compartilhar → B não vê.
+    const priv = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ visibility: "private" }));
+    const privId = priv.body.data.id;
+    const denyB = await request(app).get(`/activities/${privId}`).set("Authorization", `Bearer ${tokenB}`);
+    expect(denyB.status).toBe(404);
+  });
 });
 
 describe("Recordes de força (PR)", () => {

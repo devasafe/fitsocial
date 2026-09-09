@@ -77,12 +77,15 @@ export function PostCard({
   onPressAuthor,
   onPressComments,
   onToggleFollow,
+  onPressActivity,
 }: {
   post: Post;
   onPressAuthor?: (authorId: string) => void;
   onPressComments?: (post: Post) => void;
   // Presente só no Explorar: mostra "Seguir/Seguindo" no card (descoberta em 1 toque).
   onToggleFollow?: (authorId: string, next: boolean) => Promise<void>;
+  // Toque no card de treino → abre o treino completo.
+  onPressActivity?: (activityId: string) => void;
 }) {
   const { token } = useAuth();
   // Estado otimista da curtida (atualiza a UI antes da resposta do servidor).
@@ -157,9 +160,14 @@ export function PostCard({
       {post.text ? <Txt variant="body">{post.text}</Txt> : null}
       {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.image} /> : null}
 
-      {/* Card do treino (qualquer atividade compartilhada) */}
+      {/* Card do treino (qualquer atividade compartilhada) — toque abre o detalhe */}
       {post.activity ? (
-        <View style={[styles.wodBox, { borderLeftColor: sportColor(post.activity.sportId) }]}>
+        <TouchableOpacity
+          activeOpacity={onPressActivity ? 0.8 : 1}
+          disabled={!onPressActivity}
+          onPress={() => post.activity && onPressActivity?.(post.activity.id)}
+          style={[styles.wodBox, { borderLeftColor: sportColor(post.activity.sportId) }]}
+        >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: post.activity.stats.length ? 2 : 0 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(post.activity.sportId) }} />
             <Txt variant="bodyStrong" color={colors.text}>
@@ -190,7 +198,7 @@ export function PostCard({
               ) : null}
             </View>
           ) : null}
-        </View>
+        </TouchableOpacity>
       ) : null}
 
       <View style={styles.footer}>

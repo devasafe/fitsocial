@@ -6,6 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
+import { Post } from "../models/Post.js";
 import { createActivity } from "../services/activities.js";
 import { computeStrengthMetrics } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
@@ -103,10 +104,14 @@ activitiesRouter.get(
     const me = req.user!._id;
     const isOwner = a.user.toString() === me.toString();
     if (!isOwner) {
-      if (a.visibility === "private") throw new HttpError(404, "Atividade não encontrada");
-      if (a.visibility === "followers") {
-        const follows = await Follow.exists({ follower: me, following: a.user });
-        if (!follows) throw new HttpError(404, "Atividade não encontrada");
+      // Se foi compartilhada no feed (tem post), qualquer um pode abrir o treino.
+      const shared = await Post.exists({ activity: a._id });
+      if (!shared) {
+        if (a.visibility === "private") throw new HttpError(404, "Atividade não encontrada");
+        if (a.visibility === "followers") {
+          const follows = await Follow.exists({ follower: me, following: a.user });
+          if (!follows) throw new HttpError(404, "Atividade não encontrada");
+        }
       }
     }
     res.json({ data: serializeActivity(a) });

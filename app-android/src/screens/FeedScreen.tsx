@@ -173,6 +173,7 @@ export function FeedScreen({
             onPressAuthor={(id) => nav.navigate("UserProfile", { userId: id })}
             onPressComments={(post) => nav.navigate("PostDetail", { post })}
             onToggleFollow={mode === "explore" ? handleToggleFollow : undefined}
+            onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
           />
         )}
       />

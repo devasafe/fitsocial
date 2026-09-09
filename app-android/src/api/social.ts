@@ -17,6 +17,7 @@ export interface PostAuthor {
   isFollowing?: boolean;
 }
 export interface PostActivity {
+  id: string;
   kind: string;
   sportId: string;
   title: string;

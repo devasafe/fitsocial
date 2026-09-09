@@ -222,7 +222,11 @@ export function ProfileScreen() {
         </View>
       }
       renderItem={({ item }) => (
-        <PostCard post={item} onPressComments={(post) => nav.navigate("PostDetail", { post })} />
+        <PostCard
+          post={item}
+          onPressComments={(post) => nav.navigate("PostDetail", { post })}
+          onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
+        />
       )}
     />
   );

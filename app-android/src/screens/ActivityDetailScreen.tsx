@@ -1,8 +1,10 @@
-import React from "react";
-import { View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ActivityIndicator } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Txt, Screen, Card } from "../components/ui";
+import { Txt, Screen, Card, ErrorState } from "../components/ui";
 import { RouteMap } from "../components/RouteMap";
+import { useAuth } from "../context/AuthContext";
+import { getActivity, type Activity } from "../api/activities";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import { clock, type GeoPoint } from "../lib/geo";
@@ -48,7 +50,43 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 export function ActivityDetailScreen({ route }: Props) {
-  const { activity: a } = route.params;
+  const { token } = useAuth();
+  const passed = route.params.activity ?? null;
+  const activityId = route.params.activityId;
+  const [fetched, setFetched] = useState<Activity | null>(null);
+  const [loading, setLoading] = useState(!passed && !!activityId);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (passed || !activityId) return;
+    let alive = true;
+    setLoading(true);
+    getActivity(token!, activityId)
+      .then((res) => alive && (setFetched(res), setError(false)))
+      .catch(() => alive && setError(true))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [passed, activityId, token]);
+
+  const a = passed ?? fetched;
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={colors.lime} size="large" />
+      </View>
+    );
+  }
+  if (error || !a) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", paddingHorizontal: spacing.gutter }}>
+        <ErrorState message="Não foi possível abrir este treino." />
+      </View>
+    );
+  }
+
   const p = (a.payload ?? {}) as Payload;
   const m = a.metrics ?? {};
   const stroke = sportColor(a.sportId);

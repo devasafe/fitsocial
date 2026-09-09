@@ -27,7 +27,7 @@ export type AppStackParams = {
   History: undefined;
   MeusPRs: undefined;
   MinhasAtividades: undefined;
-  ActivityDetail: { activity: Activity };
+  ActivityDetail: { activity?: Activity; activityId?: string };
   Desafios: undefined;
   CriarDesafio: undefined;
   DesafioDetail: { id: string };
