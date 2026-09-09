@@ -15,6 +15,8 @@ COPY . .
 RUN npx expo export --platform web --output-dir dist
 
 FROM caddy:2-alpine AS runtime
+# curl: o healthcheck do Coolify o executa dentro do container.
+RUN apk add --no-cache curl
 COPY --from=build /app/dist /srv
 COPY Caddyfile /etc/caddy/Caddyfile
 EXPOSE 3000
