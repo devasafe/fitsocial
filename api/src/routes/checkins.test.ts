@@ -154,6 +154,20 @@ describe("Check-ins + reajuste", () => {
     expect(res.body.exercises.find((e: any) => e.name === "Esteira")).toBeUndefined();
   });
 
+  it("last-entries devolve a última carga/reps por exercício", async () => {
+    await auth(
+      request(app).post("/checkins").send({
+        sessionDay: "Dia Perna",
+        entries: [{ exerciseName: "Agachamento", weightKg: 80, reps: 8 }],
+      })
+    );
+    const res = await auth(request(app).post("/checkins/last-entries").send({ names: ["Agachamento", "Nunca feito"] }));
+    expect(res.status).toBe(200);
+    expect(res.body.entries.Agachamento.weightKg).toBe(80);
+    expect(res.body.entries.Agachamento.reps).toBe(8);
+    expect(res.body.entries["Nunca feito"]).toBeUndefined();
+  });
+
   it("persiste durationMin/distanceKm numa entry de cardio", async () => {
     const res = await auth(
       request(app).post("/checkins").send({

@@ -30,6 +30,22 @@ export function createCheckIn(
   );
 }
 
+export interface LastEntry {
+  weightKg: number;
+  reps: number;
+  durationMin: number;
+  distanceKm: number;
+}
+// Última carga/reps por exercício (para pré-preencher o próximo treino).
+export async function lastEntries(token: string, names: string[]): Promise<Record<string, LastEntry>> {
+  const res = await apiFetch<{ entries: Record<string, LastEntry> }>("/checkins/last-entries", {
+    method: "POST",
+    token,
+    body: { names },
+  });
+  return res.entries;
+}
+
 export function getCheckInStats(token: string) {
   return apiFetch<{ stats: CheckInStats }>("/checkins/stats", { token });
 }

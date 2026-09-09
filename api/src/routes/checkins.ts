@@ -96,6 +96,37 @@ checkinsRouter.post(
   })
 );
 
+// Última carga/reps registrada por exercício — para pré-preencher o próximo treino
+// ("da última vez você pegou 80kg × 10"). Recebe os nomes dos exercícios da sessão.
+checkinsRouter.post(
+  "/last-entries",
+  asyncHandler(async (req, res) => {
+    const names: string[] = Array.isArray(req.body?.names)
+      ? req.body.names.filter((n: unknown): n is string => typeof n === "string")
+      : [];
+    if (names.length === 0) return res.json({ entries: {} });
+
+    const want = new Set(names);
+    const acts = await Activity.find({ user: req.user!._id }).sort({ startedAt: -1 }).limit(50);
+    const entries: Record<string, { weightKg: number; reps: number; durationMin: number; distanceKm: number }> = {};
+
+    for (const a of acts) {
+      for (const ex of exercisesOf(a)) {
+        if (!want.has(ex.name) || entries[ex.name]) continue;
+        const s = ex.sets?.[0] ?? {};
+        entries[ex.name] = {
+          weightKg: s.weightKg ?? 0,
+          reps: s.reps ?? 0,
+          durationMin: s.durationMin ?? 0,
+          distanceKm: s.distanceKm ?? 0,
+        };
+      }
+      if (Object.keys(entries).length === want.size) break;
+    }
+    res.json({ entries });
+  })
+);
+
 // Estatísticas de acompanhamento (streak, semana, total) — qualquer treino conta.
 checkinsRouter.get(
   "/stats",

@@ -12,7 +12,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
-import { createCheckIn, type CheckInEntry } from "../api/checkins";
+import { createCheckIn, lastEntries, type CheckInEntry, type LastEntry } from "../api/checkins";
 import { usePRCelebration } from "../components/PRCelebration";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing, motion } from "../theme";
@@ -35,6 +35,19 @@ function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Rótulo "última vez" a partir do último registro do exercício.
+function lastLabel(le: LastEntry | undefined, kind: "strength" | "cardio"): string | null {
+  if (!le) return null;
+  if (kind === "cardio") {
+    const parts: string[] = [];
+    if (le.durationMin) parts.push(`${le.durationMin} min`);
+    if (le.distanceKm) parts.push(`${le.distanceKm} km`);
+    return parts.length ? parts.join(" · ") : null;
+  }
+  if (!le.weightKg && !le.reps) return null;
+  return `${le.weightKg || 0} kg × ${le.reps || 0}`;
 }
 
 function paceLabel(row: { duration: string; distance: string }): string | null {
@@ -72,6 +85,9 @@ export function CheckInScreen() {
   const [rows, setRows] = useState<Row[]>(makeRows);
   const [saving, setSaving] = useState(false);
   const loaded = useRef(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [last, setLast] = useState<Record<string, LastEntry>>({}); // última vez por exercício
+  const prefilled = useRef(false);
   const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [rest, setRest] = useState<number | null>(null); // segundos de descanso restantes
@@ -143,8 +159,45 @@ export function CheckInScreen() {
         /* rascunho inválido — ignora */
       }
       loaded.current = true;
+      setDraftLoaded(true);
     })();
   }, [storageKey]);
+
+  // Busca a última carga/reps de cada exercício (para dica + pré-preenchimento).
+  useEffect(() => {
+    const names = session.exercises.map((e) => e.name);
+    let alive = true;
+    lastEntries(token!, names)
+      .then((e) => alive && setLast(e))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [session, token]);
+
+  // Pré-preenche os campos vazios com a última vez (sem sobrescrever rascunho/edição).
+  useEffect(() => {
+    if (!draftLoaded || prefilled.current || Object.keys(last).length === 0) return;
+    prefilled.current = true;
+    setRows((prev) =>
+      prev.map((r) => {
+        const le = last[r.name];
+        if (!le) return r;
+        if (r.weight !== "" || r.reps !== "" || r.duration !== "" || r.distance !== "") return r;
+        return r.kind === "cardio"
+          ? {
+              ...r,
+              duration: le.durationMin ? String(le.durationMin) : "",
+              distance: le.distanceKm ? String(le.distanceKm) : "",
+            }
+          : {
+              ...r,
+              weight: le.weightKg ? String(le.weightKg) : "",
+              reps: le.reps ? String(le.reps) : "",
+            };
+      })
+    );
+  }, [draftLoaded, last]);
 
   // Auto-salva a cada mudança (depois de carregar o rascunho).
   useEffect(() => {
@@ -287,6 +340,11 @@ export function CheckInScreen() {
                       </Txt>
                     ) : null}
                   </View>
+                  {lastLabel(last[row.name], row.kind) ? (
+                    <Txt variant="caption" color={colors.lime} style={{ marginTop: 2 }}>
+                      última vez: {lastLabel(last[row.name], row.kind)}
+                    </Txt>
+                  ) : null}
                 </View>
               </TouchableOpacity>
 
