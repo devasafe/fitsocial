@@ -198,6 +198,37 @@ describe("Rede social", () => {
     expect(found.author.isMe).toBe(false);
   });
 
+  it("WOD compartilhado traz os movimentos no feed", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "crossfit",
+        kind: "wod",
+        payload: {
+          name: "Cindy",
+          scoreType: "amrap",
+          level: "rx",
+          resultRounds: 20,
+          movements: [
+            { name: "Pull-ups", reps: 5 },
+            { name: "Push-ups", reps: 10 },
+            { name: "Air Squats", reps: 15 },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    // Ana segue o Bruno (setup anterior) → vê o post com a atividade populada.
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const wodPost = feed.body.posts.find((p: { activity?: { kind?: string } }) => p.activity?.kind === "wod");
+    expect(wodPost).toBeTruthy();
+    expect(wodPost.activity.name).toBe("Cindy");
+    expect(wodPost.activity.movements).toHaveLength(3);
+    expect(wodPost.activity.movements[0].name).toBe("Pull-ups");
+  });
+
   it("GET /social/search acha por username e por nome, excluindo você", async () => {
     const byUsername = await request(app)
       .get("/social/search?q=brun")

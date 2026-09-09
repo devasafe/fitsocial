@@ -81,6 +81,37 @@ function serializePost(
       isMe: opts?.meId ? authorId === opts.meId : false,
       isFollowing: opts?.followingIds ? opts.followingIds.has(authorId) : false,
     },
+    // Resumo da atividade vinculada (quando o post é um compartilhamento e a
+    // query populou `activity`) — hoje carrega os movimentos do WOD para o card.
+    activity: activitySummary(post),
+  };
+}
+
+interface PopulatedActivity {
+  kind: string;
+  sportId: string;
+  payload?: { name?: string; movements?: { name: string; loadKg?: number | null; reps?: number | null; timeSec?: number | null }[] };
+}
+
+function activitySummary(post: InstanceType<typeof Post>) {
+  const act = post.activity as unknown;
+  if (!act || typeof act !== "object" || !("kind" in act)) return null;
+  const a = act as PopulatedActivity;
+  const pl = a.payload ?? {};
+  const isWod = a.kind === "wod";
+  return {
+    kind: a.kind,
+    sportId: a.sportId,
+    name: isWod ? pl.name ?? null : null,
+    movements:
+      isWod && Array.isArray(pl.movements)
+        ? pl.movements.map((mv) => ({
+            name: mv.name,
+            loadKg: mv.loadKg ?? null,
+            reps: mv.reps ?? null,
+            timeSec: mv.timeSec ?? null,
+          }))
+        : null,
   };
 }
 
@@ -124,7 +155,8 @@ socialRouter.get(
     const posts = await Post.find({ author: { $in: authorIds } })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("author", "name username avatarUrl");
+      .populate("author", "name username avatarUrl")
+      .populate("activity", "kind sportId payload");
 
     const likedIds = await likedSetFor(me, posts.map((p) => p._id));
     res.json({ posts: posts.map((p) => serializePost(p, likedIds)) });
@@ -145,7 +177,8 @@ socialRouter.get(
     const posts = await Post.find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate("author", "name username avatarUrl");
+      .populate("author", "name username avatarUrl")
+      .populate("activity", "kind sportId payload");
 
     const authorIds = posts.map((p) => (p.author as unknown as { _id: mongoose.Types.ObjectId })._id);
     const [likedIds, follows] = await Promise.all([
@@ -165,7 +198,8 @@ socialRouter.get(
   "/posts/:id",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl");
+    const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl")
+      .populate("activity", "kind sportId payload");
     if (!post) throw new HttpError(404, "Post não encontrado");
     const likedIds = await likedSetFor(req.user!._id, [post._id]);
     res.json({ post: serializePost(post, likedIds) });
@@ -270,7 +304,8 @@ socialRouter.get(
     if (!user) throw new HttpError(404, "Usuário não encontrado");
 
     const [posts, followers, following, isFollowing] = await Promise.all([
-      Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl"),
+      Post.find({ author: user._id }).sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
+      .populate("activity", "kind sportId payload"),
       Follow.countDocuments({ following: user._id }),
       Follow.countDocuments({ follower: user._id }),
       Follow.exists({ follower: me, following: user._id }),

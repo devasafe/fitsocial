@@ -16,6 +16,12 @@ export interface PostAuthor {
   isMe?: boolean;
   isFollowing?: boolean;
 }
+export interface PostActivity {
+  kind: string;
+  sportId: string;
+  name: string | null; // nome do WOD, quando aplicável
+  movements: { name: string; loadKg: number | null; reps: number | null; timeSec: number | null }[] | null;
+}
 export interface Post {
   id: string;
   text: string;
@@ -25,6 +31,8 @@ export interface Post {
   likedByMe: boolean;
   createdAt: string;
   author: PostAuthor;
+  // Resumo da atividade compartilhada (ex.: movimentos do WOD). Null em posts só de texto.
+  activity?: PostActivity | null;
 }
 
 export interface Comment {
