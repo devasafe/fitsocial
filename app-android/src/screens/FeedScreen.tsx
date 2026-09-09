@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   FlatList,
-  ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import { getFeed, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
 import { Txt, Button, ErrorState } from "../components/ui";
+import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -46,8 +46,9 @@ export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={{ flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.gutter, paddingTop: (embedded ? 0 : insets.top) + spacing.md, gap: spacing.card }}>
+        <SkeletonCard lines={3} height={180} />
+        <SkeletonCard lines={3} height={180} />
       </View>
     );
   }

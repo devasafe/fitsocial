@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Animated,
 } from "react-native";
 import { notify, confirmDialog } from "../lib/notify";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -14,7 +15,7 @@ import { useAuth } from "../context/AuthContext";
 import { createCheckIn, type CheckInEntry } from "../api/checkins";
 import { usePRCelebration } from "../components/PRCelebration";
 import { Txt, Button, Card } from "../components/ui";
-import { colors, radius, spacing } from "../theme";
+import { colors, radius, spacing, motion } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
 import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
@@ -76,6 +77,7 @@ export function CheckInScreen() {
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [rest, setRest] = useState<number | null>(null); // segundos de descanso restantes
   const restRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const barAnim = useRef(new Animated.Value(0)).current; // preenchimento suave da barra
 
   const doneCount = useMemo(() => rows.filter((r) => r.done).length, [rows]);
 
@@ -221,6 +223,10 @@ export function CheckInScreen() {
   const pct = rows.length ? (doneCount / rows.length) * 100 : 0;
   const currentIdx = rows.findIndex((r) => !r.done); // exercício "Agora"
 
+  useEffect(() => {
+    Animated.timing(barAnim, { toValue: pct, duration: motion.base, useNativeDriver: false }).start();
+  }, [pct, barAnim]);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -240,7 +246,9 @@ export function CheckInScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.barTrack}>
-          <View style={[styles.barFill, { width: `${pct}%` }]} />
+          <Animated.View
+            style={[styles.barFill, { width: barAnim.interpolate({ inputRange: [0, 100], outputRange: ["0%", "100%"] }) }]}
+          />
         </View>
         <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
           Progresso salvo automaticamente. Pode fechar e voltar.

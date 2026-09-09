@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
+import { Skeleton, SkeletonCard } from "../components/Skeleton";
 import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
@@ -112,9 +113,22 @@ export function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.lime} size="large" />
-      </View>
+      <Screen scroll contentStyle={{ gap: spacing.md }}>
+        <Skeleton width="55%" height={26} />
+        <SkeletonCard lines={1} height={120} />
+        <View style={{ flexDirection: "row", gap: spacing.card }}>
+          <View style={{ flex: 1 }}>
+            <SkeletonCard lines={1} height={72} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SkeletonCard lines={1} height={72} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SkeletonCard lines={1} height={72} />
+          </View>
+        </View>
+        <SkeletonCard lines={2} />
+      </Screen>
     );
   }
 

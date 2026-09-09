@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, ErrorState } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
 import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
 import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
+import type { AppStackParams } from "../navigation/types";
 
 const TYPE_ORDER: Record<string, number> = {
   carga_max: 0,
@@ -17,6 +21,7 @@ const TYPE_ORDER: Record<string, number> = {
 };
 
 export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [prs, setPRs] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,12 +68,13 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
       {error && byExercise.length === 0 ? (
         <ErrorState message="Não foi possível carregar seus recordes." onRetry={load} />
       ) : byExercise.length === 0 ? (
-        <Card level={2} style={{ marginTop: spacing.md }}>
-          <Txt variant="titleCard">Você ainda não tem recordes</Txt>
-          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-            Registre um treino de força e seus recordes de carga e 1RM aparecem aqui.
-          </Txt>
-        </Card>
+        <EmptyState
+          icon="🏆"
+          title="Nenhum recorde ainda"
+          description="Registre um treino de força e seus recordes de carga e 1RM aparecem aqui."
+          actionLabel="Registrar treino"
+          onAction={() => nav.navigate("Registrar")}
+        />
       ) : (
         byExercise.map(([exercise, records]) => {
           const header = sportLabel(exercise);

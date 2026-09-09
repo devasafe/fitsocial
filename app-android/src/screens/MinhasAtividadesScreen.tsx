@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
 import { listActivities, type Activity } from "../api/activities";
 import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -89,12 +90,13 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
           }}
         />
       ) : items.length === 0 ? (
-        <Card level={2} style={{ marginTop: spacing.md }}>
-          <Txt variant="titleCard">Nenhuma atividade ainda</Txt>
-          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-            Registre um treino pelo botão + e ele aparece aqui.
-          </Txt>
-        </Card>
+        <EmptyState
+          icon="🏋️"
+          title="Nenhuma atividade ainda"
+          description="Registre seu primeiro treino e ele aparece aqui, com métricas e histórico."
+          actionLabel="Registrar treino"
+          onAction={() => nav.navigate("Registrar")}
+        />
       ) : (
         items.map((a) => (
           <TouchableOpacity key={a.id} activeOpacity={0.85} onPress={() => nav.navigate("ActivityDetail", { activity: a })}>

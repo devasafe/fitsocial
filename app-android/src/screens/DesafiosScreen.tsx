@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Chip, ErrorState } from "../components/ui";
+import { EmptyState } from "../components/EmptyState";
 import { notify } from "../lib/notify";
 import { listMyChallenges, discoverChallenges, joinChallenge, scoreModeName, type Challenge } from "../api/challenges";
 import { colors, spacing, radius } from "../theme";
@@ -86,13 +87,23 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
       ) : error && items.length === 0 ? (
         <ErrorState message="Não foi possível carregar os desafios." onRetry={load} />
       ) : items.length === 0 ? (
-        <Card level={2}>
-          <Txt variant="body" color={colors.text2}>
-            {tab === "mine"
-              ? "Você ainda não participa de nenhum desafio. Crie um ou entre por um código."
-              : "Nenhum desafio público em aberto agora."}
-          </Txt>
-        </Card>
+        tab === "mine" ? (
+          <EmptyState
+            icon="🏁"
+            title="Nenhum desafio ainda"
+            description="Crie um desafio para você e seus amigos, ou entre por um código de convite."
+            actionLabel="Criar desafio"
+            onAction={() => nav.navigate("CriarDesafio")}
+          />
+        ) : (
+          <EmptyState
+            icon="🔎"
+            title="Nada em aberto agora"
+            description="Ainda não há desafios públicos. Que tal criar o primeiro?"
+            actionLabel="Criar desafio"
+            onAction={() => nav.navigate("CriarDesafio")}
+          />
+        )
       ) : (
         items.map((c) => (
           <TouchableOpacity key={c.id} activeOpacity={0.85} onPress={() => nav.navigate("DesafioDetail", { id: c.id })}>
