@@ -174,6 +174,27 @@ describe("Rede social", () => {
     expect(res.status).toBe(404);
   });
 
+  it("explore mostra posts de quem você NÃO segue; o feed não", async () => {
+    // Carla é uma terceira pessoa que a Ana não segue.
+    const carla = await registerUser("Carla", "carla@test.com", "carla");
+    const post = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${carla.token}`)
+      .send({ text: "Bora treinar, galera nova! 🚀" });
+    const carlaPostId = post.body.post.id as string;
+
+    // Feed da Ana (só quem ela segue) NÃO tem o post da Carla.
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    expect(feed.body.posts.find((p: { id: string }) => p.id === carlaPostId)).toBeUndefined();
+
+    // Explore mostra pra todo mundo.
+    const explore = await request(app).get("/social/explore").set("Authorization", `Bearer ${ana.token}`);
+    expect(explore.status).toBe(200);
+    const found = explore.body.posts.find((p: { id: string }) => p.id === carlaPostId);
+    expect(found).toBeTruthy();
+    expect(found.author.name).toBe("Carla");
+  });
+
   it("GET /social/search acha por username e por nome, excluindo você", async () => {
     const byUsername = await request(app)
       .get("/social/search?q=brun")

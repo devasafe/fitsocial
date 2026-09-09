@@ -126,6 +126,21 @@ socialRouter.get(
   })
 );
 
+// Explorar: posts de TODOS (descoberta), mais novos primeiro. Post só existe
+// quando o usuário publica/compartilha, então o timeline global é seguro.
+socialRouter.get(
+  "/explore",
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 50, 50);
+    const posts = await Post.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("author", "name username avatarUrl");
+    const likedIds = await likedSetFor(req.user!._id, posts.map((p) => p._id));
+    res.json({ posts: posts.map((p) => serializePost(p, likedIds)) });
+  })
+);
+
 // Post único (usado pelo deep-link das notificações, que só carrega o id).
 socialRouter.get(
   "/posts/:id",

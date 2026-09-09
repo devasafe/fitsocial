@@ -10,17 +10,18 @@ import { DesafiosScreen } from "./DesafiosScreen";
 import { LeaderboardScreen } from "./LeaderboardScreen";
 import { colors, spacing } from "../theme";
 
-type Seg = "feed" | "desafios" | "ranking";
+type Seg = "seguindo" | "explorar" | "desafios" | "ranking";
 
 const SEGMENTS: Segment<Seg>[] = [
-  { key: "feed", label: "Feed" },
+  { key: "seguindo", label: "Seguindo" },
+  { key: "explorar", label: "Explorar" },
   { key: "desafios", label: "Desafios" },
   { key: "ranking", label: "Ranking" },
 ];
 
 export function ComunidadeScreen() {
   const insets = useSafeAreaInsets();
-  const [seg, setSeg] = useState<Seg>("feed");
+  const [seg, setSeg] = useState<Seg>("seguindo");
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.gutter }}>
@@ -33,7 +34,8 @@ export function ComunidadeScreen() {
         />
       </View>
       <View style={{ flex: 1 }}>
-        {seg === "feed" && <FeedScreen embedded />}
+        {seg === "seguindo" && <FeedScreen embedded mode="following" />}
+        {seg === "explorar" && <FeedScreen embedded mode="explore" />}
         {seg === "desafios" && <DesafiosScreen embedded />}
         {seg === "ranking" && <LeaderboardScreen embedded />}
       </View>

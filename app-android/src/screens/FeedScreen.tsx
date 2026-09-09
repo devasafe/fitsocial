@@ -9,14 +9,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { getFeed, type Post } from "../api/social";
+import { getFeed, getExplore, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
 import { Txt, Button, ErrorState } from "../components/ui";
 import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
-export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
+export function FeedScreen({
+  embedded,
+  mode = "following",
+}: { embedded?: boolean; mode?: "following" | "explore" } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
@@ -27,7 +30,7 @@ export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
 
   const load = useCallback(async () => {
     try {
-      const { posts } = await getFeed(token!);
+      const { posts } = await (mode === "explore" ? getExplore(token!) : getFeed(token!));
       setPosts(posts);
       setError(false);
     } catch {
@@ -36,7 +39,7 @@ export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [token, mode]);
 
   useFocusEffect(
     useCallback(() => {
@@ -102,10 +105,12 @@ export function FeedScreen({ embedded }: { embedded?: boolean } = {}) {
           ) : (
             <View style={styles.empty}>
               <Txt variant="titleSection" style={styles.emptyTitle}>
-                Seu feed está tranquilo por enquanto
+                {mode === "explore" ? "Ainda não tem posts por aqui" : "Seu feed está tranquilo por enquanto"}
               </Txt>
               <Txt variant="body" color={colors.text2} style={styles.emptyText}>
-                Publique seu treino de hoje ou siga outras pessoas para acompanhar a evolução delas por aqui.
+                {mode === "explore"
+                  ? "Seja um dos primeiros a publicar — seu treino aparece pra toda a comunidade."
+                  : "Publique seu treino de hoje ou siga outras pessoas para acompanhar a evolução delas por aqui."}
               </Txt>
               <Button
                 title="Publicar treino"

@@ -49,6 +49,11 @@ export function getFeed(token: string) {
   return apiFetch<{ posts: Post[] }>("/social/feed", { token });
 }
 
+// Feed global (Explorar) — posts de todos, para descobrir e seguir gente nova.
+export function getExplore(token: string) {
+  return apiFetch<{ posts: Post[] }>("/social/explore", { token });
+}
+
 export async function getPost(token: string, id: string): Promise<Post> {
   const res = await apiFetch<{ post: Post }>(`/social/posts/${id}`, { token });
   return res.post;
