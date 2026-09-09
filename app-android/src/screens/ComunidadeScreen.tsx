@@ -25,7 +25,7 @@ const SEGMENTS: Segment<Seg>[] = [
 export function ComunidadeScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const [seg, setSeg] = useState<Seg>("seguindo");
+  const [seg, setSeg] = useState<Seg>("explorar"); // abre na descoberta, não em "Seguindo"
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.gutter }}>

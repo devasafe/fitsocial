@@ -20,7 +20,7 @@ function periodLabel(endAt: string): string {
 export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
-  const [tab, setTab] = useState<"mine" | "discover">("mine");
+  const [tab, setTab] = useState<"mine" | "discover">("discover"); // abre em Descobrir
   const [items, setItems] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
