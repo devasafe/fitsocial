@@ -83,6 +83,13 @@ export async function getActivity(token: string, id: string): Promise<Activity> 
   return res.data;
 }
 
+// Última atividade do usuário num esporte (para pré-preencher o próximo registro).
+export async function getLastActivity(token: string, sportId: string, kind?: string): Promise<Activity | null> {
+  const q = new URLSearchParams({ sportId, ...(kind ? { kind } : {}) }).toString();
+  const res = await apiFetch<{ data: Activity | null }>(`/activities/last?${q}`, { token });
+  return res.data;
+}
+
 export interface NewPR {
   type: "carga_max" | "rm_estimado" | "carga_faixa" | "best_dist" | "best_time" | "aulas" | "horas";
   exerciseName: string;

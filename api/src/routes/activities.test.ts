@@ -218,6 +218,27 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     expect(res.body.data.payload.movements[2].timeSec).toBe(200);
   });
 
+  it("GET /activities/last devolve a última atividade do esporte (ou null)", async () => {
+    await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ sportId: "ciclismo", kind: "endurance", durationSec: 3600, payload: { distanceM: 20000 } });
+
+    const res = await request(app)
+      .get("/activities/last?sportId=ciclismo&kind=endurance")
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeTruthy();
+    expect(res.body.data.sportId).toBe("ciclismo");
+    expect(res.body.data.metrics.distanceKm).toBe(20);
+
+    const vazio = await request(app)
+      .get("/activities/last?sportId=natacao&kind=endurance")
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(vazio.status).toBe(200);
+    expect(vazio.body.data).toBeNull();
+  });
+
   it("outro usuário abre a atividade COMPARTILHADA, mas não a privada não compartilhada", async () => {
     // A compartilha um treino no feed → B consegue abrir.
     const shared = await request(app)

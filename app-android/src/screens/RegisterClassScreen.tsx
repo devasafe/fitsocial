@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Switch } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
-import { createActivity } from "../api/activities";
+import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { usePRCelebration } from "../components/PRCelebration";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -28,7 +28,25 @@ export function RegisterClassScreen({ route, navigation }: Props) {
   const [min, setMin] = useState("");
   const [sessionType, setSessionType] = useState<string | null>("aula_completa");
   const [gi, setGi] = useState(true);
+  const [lastMin, setLastMin] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  // Última vez neste esporte: dica + pré-preenchimento da duração se vazia.
+  useEffect(() => {
+    let alive = true;
+    getLastActivity(token!, sportId, "class")
+      .then((a: Activity | null) => {
+        if (!alive || !a) return;
+        const m = a.metrics?.minutes ? Math.round(a.metrics.minutes) : a.durationSec ? Math.round(a.durationSec / 60) : 0;
+        if (!m) return;
+        setLastMin(m);
+        setMin((prev) => (prev === "" ? String(m) : prev));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sportId, token]);
 
   async function save() {
     const minN = Number(min.replace(",", ".")) || 0;
@@ -61,6 +79,11 @@ export function RegisterClassScreen({ route, navigation }: Props) {
       </View>
 
       <Card style={{ marginBottom: spacing.md }}>
+        {lastMin ? (
+          <Txt variant="caption" color={colors.lime} style={{ marginBottom: spacing.sm }}>
+            última vez: {lastMin} min
+          </Txt>
+        ) : null}
         <Field label="Duração (min)" value={min} onChangeText={setMin} keyboardType="numeric" placeholder="60" />
 
         <Txt variant="label" color={colors.text2} style={{ marginBottom: spacing.sm }}>

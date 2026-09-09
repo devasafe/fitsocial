@@ -95,6 +95,21 @@ activitiesRouter.get(
   })
 );
 
+// Última atividade do usuário num esporte (para pré-preencher o próximo registro:
+// última distância/tempo de bike/natação/corrida, etc.). Antes de "/:id".
+activitiesRouter.get(
+  "/last",
+  asyncHandler(async (req, res) => {
+    const filter: mongoose.FilterQuery<typeof Activity> = { user: req.user!._id };
+    const sportId = String(req.query.sportId ?? "");
+    if (sportId) filter.sportId = sportId;
+    const kind = String(req.query.kind ?? "");
+    if (kind) filter.kind = kind;
+    const a = await Activity.findOne(filter).sort({ startedAt: -1 });
+    res.json({ data: a ? serializeActivity(a) : null });
+  })
+);
+
 // Detalhe — respeita a visibilidade (dono sempre; público; seguidores).
 activitiesRouter.get(
   "/:id",

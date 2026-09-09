@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
-import { createActivity } from "../api/activities";
+import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -19,7 +19,25 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState("");
   const [metricLabel, setMetricLabel] = useState("");
   const [metricValue, setMetricValue] = useState("");
+  const [lastMin, setLastMin] = useState(0);
   const [saving, setSaving] = useState(false);
+
+  // Última vez neste esporte: dica + pré-preenchimento da duração se vazia.
+  useEffect(() => {
+    let alive = true;
+    getLastActivity(token!, sportId, "generic")
+      .then((a: Activity | null) => {
+        if (!alive || !a) return;
+        const m = a.metrics?.minutes ? Math.round(a.metrics.minutes) : a.durationSec ? Math.round(a.durationSec / 60) : 0;
+        if (!m) return;
+        setLastMin(m);
+        setMin((prev) => (prev === "" ? String(m) : prev));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sportId, token]);
 
   async function save() {
     if (!name.trim()) {
@@ -60,6 +78,11 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
       </View>
 
       <Card style={{ marginBottom: spacing.md }}>
+        {lastMin ? (
+          <Txt variant="caption" color={colors.lime} style={{ marginBottom: spacing.sm }}>
+            última vez: {lastMin} min
+          </Txt>
+        ) : null}
         <Field label="O que você fez?" value={name} onChangeText={setName} placeholder="Surf, skate, escalada…" />
         <Field label="Duração (min)" value={min} onChangeText={setMin} keyboardType="numeric" placeholder="45" />
         <Field label="Descrição (opcional)" value={description} onChangeText={setDescription} placeholder="Como foi?" multiline />

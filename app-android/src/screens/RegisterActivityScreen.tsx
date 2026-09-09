@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button } from "../components/ui";
 import { SuggestField } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
 import { searchExercises } from "../api/library";
+import { lastEntries, type LastEntry } from "../api/checkins";
 import { usePRCelebration } from "../components/PRCelebration";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -65,7 +66,32 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
   const [exercises, setExercises] = useState<ExerciseForm[]>(
     prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
   );
+  const [last, setLast] = useState<Record<string, LastEntry>>({}); // última vez por exercício
   const [saving, setSaving] = useState(false);
+
+  // Ao escolher um exercício, mostra a última vez e pré-preenche a 1ª série se vazia.
+  async function pickExercise(ei: number, name: string) {
+    setExercise(ei, { name });
+    if (last[name]) return;
+    try {
+      const e = await lastEntries(token!, [name]);
+      const le = e[name];
+      if (!le) return;
+      setLast((prev) => ({ ...prev, [name]: le }));
+      setExercises((prev) =>
+        prev.map((ex, idx) => {
+          if (idx !== ei) return ex;
+          const s0 = ex.sets[0];
+          if (!s0 || s0.weightKg !== "" || s0.reps !== "") return ex;
+          const sets = [...ex.sets];
+          sets[0] = { weightKg: le.weightKg ? String(le.weightKg) : "", reps: le.reps ? String(le.reps) : "" };
+          return { ...ex, sets };
+        })
+      );
+    } catch {
+      /* sem dado da última vez — segue normal */
+    }
+  }
 
   function setExercise(i: number, patch: Partial<ExerciseForm>) {
     setExercises((prev) => prev.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
@@ -139,8 +165,13 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
                 list.map((e) => ({ id: e.id, label: e.name, sub: `${e.muscle} · ${e.equipment}` }))
               )
             }
-            onPick={(s) => setExercise(ei, { name: s.label })}
+            onPick={(s) => pickExercise(ei, s.label)}
           />
+          {last[ex.name] && (last[ex.name].weightKg || last[ex.name].reps) ? (
+            <Txt variant="caption" color={colors.lime} style={{ marginTop: -6, marginBottom: 6 }}>
+              última vez: {last[ex.name].weightKg || 0} kg × {last[ex.name].reps || 0}
+            </Txt>
+          ) : null}
           <Txt variant="label" color={colors.text2} style={{ marginBottom: 6 }}>
             Séries — carga (kg) e repetições
           </Txt>
