@@ -15,6 +15,8 @@ import {
 import { PostCard } from "../components/PostCard";
 import { TreinoCard } from "../components/TreinoCard";
 import { SegmentedControl } from "../components/SegmentedControl";
+import { DenunciarSheet } from "../components/DenunciarSheet";
+import { useAcoesDePost } from "../lib/acoesDePost";
 import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
@@ -41,6 +43,7 @@ export function ProfileScreen() {
   const route = useRoute<RouteProp<AppStackParams, "UserProfile">>();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { user: me, token, logout } = useAuth();
+  const { propsDoCard, denunciando, fecharDenuncia } = useAcoesDePost(() => void load());
   // Sem param => perfil próprio (aba); com param => perfil de outra pessoa.
   const targetId = route.params?.userId ?? me!.id;
 
@@ -277,8 +280,12 @@ export function ProfileScreen() {
             post={item as Post}
             onPressComments={(post) => nav.navigate("PostDetail", { post })}
             onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
+            {...propsDoCard(item as Post, (post) => nav.navigate("EditarPost", { post }))}
           />
         )
+      }
+      ListFooterComponent={
+        <DenunciarSheet postId={denunciando} visivel={!!denunciando} aoFechar={fecharDenuncia} />
       }
     />
   );

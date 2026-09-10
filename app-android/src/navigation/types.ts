@@ -24,6 +24,7 @@ export type AppStackParams = {
   UserProfile: { userId: string };
   Subscription: undefined;
   Leaderboard: undefined;
+  EditarPost: { post: Post };
   PostDetail: { post: Post };
   ImportPlan: undefined;
   History: undefined;

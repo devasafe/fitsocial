@@ -15,6 +15,7 @@ import { EditDietScreen } from "../screens/EditDietScreen";
 import { ComunidadeScreen } from "../screens/ComunidadeScreen";
 import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
+import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
@@ -198,6 +199,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             component={CreatePostScreen}
             options={{ headerShown: true, title: "Novo post", ...headerStyle }}
           />
+          <AppStack.Screen name="EditarPost" component={EditarPostScreen} />
           <AppStack.Screen
             name="EditProfile"
             component={EditProfileScreen}

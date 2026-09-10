@@ -26,6 +26,8 @@ export interface PostActivity {
 }
 export interface Post {
   id: string;
+  /** Preenchido quando o texto foi alterado — a tela mostra "(editado)". */
+  editedAt?: string | null;
   text: string;
   imageUrl: string;
   likeCount: number;
@@ -143,4 +145,32 @@ export function createComment(token: string, postId: string, text: string) {
 
 export function searchUsers(token: string, q: string) {
   return apiFetch<{ users: SearchUser[] }>(`/social/search?q=${encodeURIComponent(q)}`, { token });
+}
+
+/* ---------- controle do próprio post e denúncia ---------- */
+
+export const MOTIVOS_DE_DENUNCIA = [
+  { chave: "spam", rotulo: "Spam" },
+  { chave: "ofensivo", rotulo: "Conteúdo ofensivo" },
+  { chave: "assedio", rotulo: "Assédio" },
+  { chave: "improprio", rotulo: "Conteúdo impróprio" },
+  { chave: "odio", rotulo: "Discurso de ódio" },
+  { chave: "enganoso", rotulo: "Informação enganosa" },
+  { chave: "outro", rotulo: "Outro motivo" },
+] as const;
+
+export function editarPost(token: string, id: string, text: string) {
+  return apiFetch<{ data: Post }>(`/social/posts/${id}`, { method: "PATCH", token, body: { text } });
+}
+
+export function excluirPost(token: string, id: string) {
+  return apiFetch<{ data: { excluido: boolean } }>(`/social/posts/${id}`, { method: "DELETE", token });
+}
+
+export function denunciarPost(token: string, id: string, reason: string, details?: string) {
+  return apiFetch<{ data: { enviada: boolean } }>(`/social/posts/${id}/report`, {
+    method: "POST",
+    token,
+    body: { reason, details },
+  });
 }

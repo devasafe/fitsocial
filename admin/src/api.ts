@@ -222,3 +222,34 @@ export interface Panorama {
 
 export const buscarPanorama = (token: string, dias: number) =>
   api<Panorama>(`/admin/metrics/overview?dias=${dias}`, { token });
+
+/* ---------- denúncias ---------- */
+
+export interface DenunciaAgrupada {
+  reportId: string;
+  targetKind: string;
+  targetId: string;
+  denuncias: number;
+  motivos: string[];
+  primeira: string;
+  ultima: string;
+  conteudo: { texto: string; imageUrl: string; autorLabel: string };
+  /** false quando o autor apagou antes de alguém analisar. */
+  aindaNoAr: boolean;
+  autor: { id: string; nome: string; username: string | null; status: string } | null;
+}
+
+export const buscarDenuncias = (token: string, status: string) =>
+  api<DenunciaAgrupada[]>(`/admin/reports?status=${status}`, { token });
+
+export const resolverDenuncia = (
+  token: string,
+  reportId: string,
+  decision: "removido" | "mantido",
+  reason: string
+) =>
+  api<{ decision: string; denunciasFechadas: number }>(`/admin/reports/${reportId}/resolve`, {
+    method: "POST",
+    body: { decision, reason },
+    token,
+  });
