@@ -138,6 +138,24 @@ describe("O APK antigo continua funcionando", () => {
     expect(lista.body.data[0].crossfit.blocos).toHaveLength(1);
   });
 
+  it("post sem dimensao de imagem continua sendo criado e servido", async () => {
+    const u = await registrar();
+
+    // O APK antigo manda só imageUrl. Se o servidor passasse a exigir tamanho,
+    // publicar foto pararia de funcionar para quem não atualiza.
+    const criado = await request(app)
+      .post("/social/posts")
+      .set(auth(u.token))
+      .send({ text: "foto sem tamanho", imageUrl: "https://exemplo.com/f.jpg" })
+      .expect(201);
+
+    expect(criado.body.post.imageWidth).toBeNull();
+    expect(criado.body.post.imageHeight).toBeNull();
+
+    const feed = await request(app).get("/social/feed").set(auth(u.token)).expect(200);
+    expect(feed.body.posts[0].imageUrl).toBe("https://exemplo.com/f.jpg");
+  });
+
   it("plano sem treino devolve forma VAZIA, nunca null", async () => {
     const u = await registrar();
     await Plan.create({

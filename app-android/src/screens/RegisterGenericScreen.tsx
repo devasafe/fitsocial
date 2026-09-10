@@ -92,17 +92,21 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
         <Field label="Duração (min)" value={min} onChangeText={setMin} keyboardType="numeric" placeholder="45" />
         <Field label="Descrição (opcional)" value={description} onChangeText={setDescription} placeholder="Como foi?" multiline />
 
-        <Txt variant="label" color={colors.text2} style={{ marginBottom: 6 }}>
-          Sua métrica (opcional)
-        </Txt>
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <View style={{ flex: 1.4 }}>
-            <Field value={metricLabel} onChangeText={setMetricLabel} placeholder="ondas, pegadas…" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field value={metricValue} onChangeText={setMetricValue} placeholder="12" />
-          </View>
-        </View>
+        {/* Um embaixo do outro: em 1,4/1 o campo do número ficava com 99px numa
+            tela de 320, e o rótulo agregado escondia o que cada um queria. */}
+        <Field
+          label="Sua métrica (opcional)"
+          value={metricLabel}
+          onChangeText={setMetricLabel}
+          placeholder="ondas, pegadas…"
+        />
+        <Field
+          label="Quanto"
+          value={metricValue}
+          onChangeText={setMetricValue}
+          keyboardType="numeric"
+          placeholder="12"
+        />
       </Card>
 
       <Button title="Salvar atividade" onPress={save} loading={saving} size="lg" glow />

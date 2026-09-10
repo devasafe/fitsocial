@@ -7,6 +7,7 @@ import { colors, radius, spacing, sportColor } from "../theme";
 import { Card, Txt, Button } from "./ui";
 import { Avatar } from "./Avatar";
 import { MenuSheet, type AcaoDoMenu } from "./MenuSheet";
+import { useProporcaoDaFoto } from "../lib/proporcaoDaFoto";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
 function timeAgo(iso: string): string {
@@ -136,6 +137,8 @@ export function PostCard({
 
   const when = timeAgo(post.createdAt);
   const [menuAberto, setMenuAberto] = useState(false);
+  // Posts antigos não trazem o tamanho da foto; aí ele é medido na hora.
+  const proporcao = useProporcaoDaFoto(post.imageUrl, post.imageWidth, post.imageHeight);
 
   // O menu mostra só o que a tela permitiu: editar e excluir chegam apenas nos
   // posts próprios, denunciar apenas nos alheios. É a permissão virando
@@ -207,7 +210,9 @@ export function PostCard({
       </View>
 
       {post.text ? <Txt variant="body">{post.text}</Txt> : null}
-      {post.imageUrl ? <Image source={{ uri: post.imageUrl }} style={styles.image} /> : null}
+      {post.imageUrl ? (
+        <Image source={{ uri: post.imageUrl }} style={[styles.image, { aspectRatio: proporcao }]} />
+      ) : null}
 
       {/* Card do treino (qualquer atividade compartilhada) — toque abre o detalhe */}
       {post.activity ? (
@@ -287,8 +292,10 @@ const styles = StyleSheet.create({
   authorTap: { flex: 1, flexDirection: "row", alignItems: "center", gap: spacing.s12 },
   headerText: { flex: 1 },
   image: {
+    // A altura vem do aspectRatio calculado a partir da própria foto — ver
+    // lib/proporcaoDaFoto.ts. Altura fixa aqui era o que fazia a mesma foto
+    // aparecer cortada de um jeito diferente em cada tamanho de tela.
     width: "100%",
-    height: 240,
     borderRadius: radius.media,
     backgroundColor: colors.surface2,
   },

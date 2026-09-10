@@ -44,6 +44,15 @@ describe("processImage", () => {
     expect(meta.height).toBe(240);
   });
 
+  it("devolve as dimensões finais, que é o que o app usa para a proporção", async () => {
+    const out = await processImage(await jpegComExif(2000, 1000));
+
+    // Sem isto o app não sabe a proporção e a foto do feed volta a dar zoom
+    // diferente em cada tamanho de tela.
+    expect(out.width).toBe(1600);
+    expect(out.height).toBe(800);
+  });
+
   it("lança erro para um buffer que não é imagem válida", async () => {
     await expect(processImage(Buffer.from("isso não é imagem"))).rejects.toThrow();
   });

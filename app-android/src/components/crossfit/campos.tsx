@@ -3,6 +3,12 @@
 // Registrar treino acontece no box, cansado, de celular na mão. Então: teclado
 // numérico onde é número, campos curtos lado a lado em vez de empilhados, e
 // nada obrigatório além do que define o bloco.
+//
+// "Lado a lado" vale enquanto couber. Abaixo de uma largura mínima a Linha
+// quebra sozinha e os campos passam a empilhar — o que antes acontecia era o
+// contrário: cada campo era espremido até o texto não caber, e no navegador a
+// linha estourava para fora da tela, porque campo de texto não encolhe abaixo
+// da largura que o conteúdo pede.
 
 import React from "react";
 import { View, TextInput, TouchableOpacity, type KeyboardTypeOptions } from "react-native";
@@ -20,7 +26,10 @@ export const entradaBase = {
   fontSize: 16,
 } as const;
 
-/** Campo com rótulo curto em cima. `largura` deixa colocar vários numa linha. */
+/** Largura abaixo da qual não vale a pena espremer: a Linha quebra antes. */
+const LARGURA_MINIMA = 128;
+
+/** Campo com rótulo curto em cima. `flex` deixa colocar vários numa linha. */
 export function Campo({
   rotulo,
   valor,
@@ -39,7 +48,17 @@ export function Campo({
   autoFocus?: boolean;
 }) {
   return (
-    <View style={{ flex }}>
+    // flexGrow/Shrink/Basis explícitos em vez do atalho `flex`: o atalho já
+    // define a base como 0, e depender da ordem em que as duas coisas são
+    // aplicadas dá resultado diferente no nativo e no navegador.
+    <View
+      style={{
+        flexGrow: flex,
+        flexShrink: 1,
+        flexBasis: LARGURA_MINIMA,
+        minWidth: LARGURA_MINIMA,
+      }}
+    >
       {rotulo ? (
         <Txt variant="label" color={colors.text2} style={{ marginBottom: 4 }}>
           {rotulo}
@@ -59,7 +78,9 @@ export function Campo({
 }
 
 export function Linha({ children }: { children: React.ReactNode }) {
-  return <View style={{ flexDirection: "row", gap: spacing.sm }}>{children}</View>;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>{children}</View>
+  );
 }
 
 /** Botão de escolha única. Usado para formato, escala, tipo de resultado. */

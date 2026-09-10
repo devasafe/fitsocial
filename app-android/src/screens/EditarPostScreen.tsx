@@ -7,6 +7,7 @@ import { editarPost } from "../api/social";
 import { Screen, Txt, Button, Card } from "../components/ui";
 import { notify } from "../lib/notify";
 import { colors, radius, spacing } from "../theme";
+import { useProporcaoDaFoto } from "../lib/proporcaoDaFoto";
 import type { AppStackParams } from "../navigation/types";
 
 // Editar altera só o texto. A imagem fica: trocá-la depois de curtidas e
@@ -18,6 +19,7 @@ export function EditarPostScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const post = route.params.post;
+  const proporcao = useProporcaoDaFoto(post.imageUrl, post.imageWidth, post.imageHeight);
 
   const [texto, setTexto] = useState(post.text ?? "");
   const [salvando, setSalvando] = useState(false);
@@ -66,7 +68,11 @@ export function EditarPostScreen() {
         <Card style={{ marginTop: spacing.md }}>
           <Image
             source={{ uri: post.imageUrl }}
-            style={{ borderRadius: radius.media, height: 180, width: "100%" }}
+            style={{
+              borderRadius: radius.media,
+              width: "100%",
+              aspectRatio: proporcao,
+            }}
           />
           <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.sm }}>
             A foto continua a mesma. Para trocar a imagem, publique de novo.

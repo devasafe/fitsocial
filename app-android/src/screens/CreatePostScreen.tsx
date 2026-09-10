@@ -31,6 +31,7 @@ import {
 } from "../components/CenaContext";
 import { sportLabel } from "../lib/sportLabel";
 import { legendaSugerida } from "../lib/crossfitResumo";
+import { proporcaoDaFoto } from "../lib/proporcaoDaFoto";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -70,6 +71,9 @@ export function CreatePostScreen() {
     fromWorkout?.crossfit ? legendaSugerida(fromWorkout.crossfit, fromWorkout.perceivedEffort) : ""
   );
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  // Guardado para o feed poder reservar a proporção certa sem esperar a
+  // imagem carregar — e para o preview aqui ser o mesmo recorte de lá.
+  const [imagem, setImagem] = useState<{ width: number; height: number } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -112,8 +116,9 @@ export function CreatePostScreen() {
           type: asset.mimeType ?? "image/jpeg",
         } as unknown as Blob);
       }
-      const { url } = await uploadImage(token!, form);
+      const { url, width, height } = await uploadImage(token!, form);
       setImageUrl(url);
+      setImagem(width && height ? { width, height } : null);
     } catch (err) {
       notify("Não foi possível enviar a foto", (err as Error).message);
     } finally {
@@ -139,6 +144,8 @@ export function CreatePostScreen() {
         createPost(token!, {
           text: text.trim() || undefined,
           imageUrl: imageUrl ?? undefined,
+          imageWidth: imagem?.width,
+          imageHeight: imagem?.height,
           activityId: attached?.id,
         }),
         esperar(COBERTURA_MS),
@@ -246,8 +253,17 @@ export function CreatePostScreen() {
 
         {imageUrl ? (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: imageUrl }} style={styles.preview} />
-            <TouchableOpacity style={styles.removeBtn} onPress={() => setImageUrl(null)} activeOpacity={0.7}>
+            <Image
+              source={{ uri: imageUrl }}
+              style={[
+                styles.preview,
+                { aspectRatio: proporcaoDaFoto(imagem?.width, imagem?.height) },
+              ]}
+            />
+            <TouchableOpacity style={styles.removeBtn} onPress={() => {
+              setImageUrl(null);
+              setImagem(null);
+            }} activeOpacity={0.7}>
               <Txt variant="bodyStrong" color={colors.danger}>
                 Remover foto
               </Txt>
@@ -334,7 +350,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   previewWrap: { marginTop: spacing.md },
-  preview: { width: "100%", height: 260, borderRadius: radius.media, backgroundColor: colors.surface2 },
+  // Sem altura fixa: o recorte aqui tem que ser o mesmo do feed, senão a
+  // pessoa publica uma foto e recebe outra.
+  preview: { width: "100%", borderRadius: radius.media, backgroundColor: colors.surface2 },
   removeBtn: { alignSelf: "center", paddingVertical: spacing.s12 },
   rodape: {
     paddingHorizontal: spacing.gutter,

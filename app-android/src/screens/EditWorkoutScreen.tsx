@@ -199,17 +199,12 @@ export function EditWorkoutScreen() {
                 </TouchableOpacity>
               </View>
               <Field value={e.name} onChangeText={(t) => setEx(si, ei, { name: t })} placeholder="Nome do exercício" />
-              <View style={{ flexDirection: "row", gap: spacing.sm }}>
-                <View style={{ flex: 1 }}>
-                  <Field label="Séries" value={e.sets} onChangeText={(t) => setEx(si, ei, { sets: t })} keyboardType="numeric" placeholder="3" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Field label="Reps" value={e.reps} onChangeText={(t) => setEx(si, ei, { reps: t })} placeholder="8-12" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Field label="Descanso (s)" value={e.restSeconds} onChangeText={(t) => setEx(si, ei, { restSeconds: t })} keyboardType="numeric" placeholder="60" />
-                </View>
-              </View>
+              {/* Um embaixo do outro: em três colunas sobravam uns 48px de
+                  texto por campo, "Descanso (s)" quebrava em duas linhas e
+                  desalinhava tudo — e no navegador a linha estourava a tela. */}
+              <Field label="Séries" value={e.sets} onChangeText={(t) => setEx(si, ei, { sets: t })} keyboardType="numeric" placeholder="3" />
+              <Field label="Reps" value={e.reps} onChangeText={(t) => setEx(si, ei, { reps: t })} placeholder="8-12" />
+              <Field label="Descanso (s)" value={e.restSeconds} onChangeText={(t) => setEx(si, ei, { restSeconds: t })} keyboardType="numeric" placeholder="60" />
               <Field label="Observações (opcional)" value={e.notes} onChangeText={(t) => setEx(si, ei, { notes: t })} placeholder="cadência, técnica…" />
             </Card>
           ))}

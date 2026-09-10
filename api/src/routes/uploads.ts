@@ -54,6 +54,11 @@ uploadsRouter.post(
       ext: processed.ext,
     });
 
-    res.status(201).json({ url: toAbsolute(req, saved.url) });
+    // width/height são aditivos: o APK antigo lê só `url` e ignora o resto.
+    res.status(201).json({
+      url: toAbsolute(req, saved.url),
+      width: processed.width,
+      height: processed.height,
+    });
   })
 );

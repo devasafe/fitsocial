@@ -31,6 +31,10 @@ export interface Post {
   editedAt?: string | null;
   text: string;
   imageUrl: string;
+  /** Tamanho da foto. Null nos posts anteriores a isto — aí o app usa o
+   *  tamanho que o próprio carregamento informa. */
+  imageWidth?: number | null;
+  imageHeight?: number | null;
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
@@ -74,7 +78,16 @@ export interface TreinoPublico {
 }
 
 // Post: qualquer combinação de texto, foto e treino anexado (ao menos um).
-export function createPost(token: string, input: { text?: string; imageUrl?: string; activityId?: string }) {
+export function createPost(
+  token: string,
+  input: {
+    text?: string;
+    imageUrl?: string;
+    imageWidth?: number;
+    imageHeight?: number;
+    activityId?: string;
+  }
+) {
   return apiFetch<{ post: Post }>("/social/posts", { method: "POST", token, body: input });
 }
 

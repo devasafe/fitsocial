@@ -144,17 +144,10 @@ export function EditDietScreen() {
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       <Field label="Calorias por dia" value={kcal} onChangeText={setKcal} keyboardType="numeric" placeholder="2000" />
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
-        <View style={{ flex: 1 }}>
-          <Field label="Proteína (g)" value={protein} onChangeText={setProtein} keyboardType="numeric" placeholder="150" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Field label="Carbo (g)" value={carbs} onChangeText={setCarbs} keyboardType="numeric" placeholder="200" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Field label="Gordura (g)" value={fat} onChangeText={setFat} keyboardType="numeric" placeholder="60" />
-        </View>
-      </View>
+      {/* Empilhados: "Proteína (g)" não cabia num terço da largura. */}
+      <Field label="Proteína (g)" value={protein} onChangeText={setProtein} keyboardType="numeric" placeholder="150" />
+      <Field label="Carbo (g)" value={carbs} onChangeText={setCarbs} keyboardType="numeric" placeholder="200" />
+      <Field label="Gordura (g)" value={fat} onChangeText={setFat} keyboardType="numeric" placeholder="60" />
 
       {meals.map((m, mi) => (
         <Card key={mi} level={2}>

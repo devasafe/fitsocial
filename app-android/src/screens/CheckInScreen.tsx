@@ -497,8 +497,12 @@ const styles = StyleSheet.create({
   exNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.s8 },
   exName: { flexShrink: 1 },
   exNameDone: { textDecorationLine: "line-through" },
-  inputsRow: { flexDirection: "row", gap: spacing.s12, marginTop: spacing.s16 },
-  inputWrap: { flex: 1 },
+  // Um campo embaixo do outro. Lado a lado sobravam ~132px por campo: com
+  // fontSize 24, uma carga de "102.5" já não cabia, e rótulos como
+  // "Distância (km)" quebravam em duas linhas. No navegador a linha estourava
+  // a tela, porque campo de texto não encolhe abaixo do que o conteúdo pede.
+  inputsRow: { gap: spacing.s12, marginTop: spacing.s16 },
+  inputWrap: {},
   inputLabel: { marginBottom: spacing.xs },
   input: {
     backgroundColor: colors.surface2,
