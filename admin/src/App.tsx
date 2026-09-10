@@ -4,6 +4,7 @@ import { Entrar } from "./pages/Entrar";
 import { Ia } from "./pages/Ia";
 import { Usuarios } from "./pages/Usuarios";
 import { Denuncias } from "./pages/Denuncias";
+import { MARCA } from "./marca";
 
 // O Painel carrega o Recharts, que sozinho pesa mais que o resto do app
 // inteiro. Separado, a tela de login e a de usuários não pagam por ele.
@@ -84,7 +85,7 @@ export function App() {
           tabulação e a leitura por leitor de tela seguem o DOM, não o visual. */}
       <aside className="lateral">
         <div className="marca">
-          <b>FitSocial</b>
+          <b>{MARCA}</b>
           <span>painel</span>
         </div>
 
@@ -111,7 +112,7 @@ export function App() {
       {/* O título da seção não vem aqui: cada página já imprime o próprio h1. */}
       <header className="cab-movel">
         <div className="marca">
-          <b>FitSocial</b>
+          <b>{MARCA}</b>
           <span>painel</span>
         </div>
         <span className="quem">{admin.name}</span>

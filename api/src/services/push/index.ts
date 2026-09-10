@@ -4,6 +4,7 @@ import { preferenciasDe } from "../notifications.js";
 import { naoVistosNoFeed } from "../readState.js";
 import { Follow } from "../../models/Follow.js";
 import { enviarParaExpo, type MensagemPush, type ResultadoDoEnvio } from "./expo.js";
+import { env } from "../../config/env.js";
 
 type Id = mongoose.Types.ObjectId;
 
@@ -133,7 +134,7 @@ export async function avisarSeguidoresDePost(autor: Id, nomeDoAutor: string): Pr
         : `${nomeDoAutor} publicou um treino`;
 
     enviados += await enviarPush(f.follower, "posts_novos", {
-      title: "FitSocial",
+      title: env.appName,
       body,
       data: { tela: "feed" },
     });

@@ -3,6 +3,7 @@ import { getAIProvider, parseJson, type AIMessage, type AIProvider } from "./ind
 import type { ProfileData } from "../../models/Profile.js";
 import type { PlanParts } from "../../models/Plan.js";
 import type { CheckInStats } from "../adherence.js";
+import { env } from "../../config/env.js";
 
 // A cada turno o coach devolve a resposta + uma possível ação a executar.
 const coachTurnSchema = z.object({
@@ -102,7 +103,7 @@ function buildContextBlock(ctx: CoachContext): string {
 }
 
 function buildSystemPrompt(ctx: CoachContext): string {
-  return `Você é o coach pessoal do FitSocial: um treinador e nutricionista virtual, empático e motivador, que acompanha a pessoa na jornada fitness. Fale em português do Brasil, de forma calorosa, prática e encorajadora.
+  return `Você é o coach pessoal do ${env.appName}: um treinador e nutricionista virtual, empático e motivador, que acompanha a pessoa na jornada fitness. Fale em português do Brasil, de forma calorosa, prática e encorajadora.
 
 CONTEXTO ATUAL DO USUÁRIO:
 ${buildContextBlock(ctx)}
@@ -170,4 +171,4 @@ function extractReplyFallback(raw: string): string {
 }
 
 export const COACH_GREETING =
-  "E aí! 👋 Sou seu coach aqui no FitSocial. Como você está se sentindo com os treinos e a dieta? Pode desabafar comigo — se tá difícil, se bateu preguiça, se algo doeu, ou se tá voando. Bora ajustar juntos o que precisar. 💪";
+  `E aí! 👋 Sou seu coach aqui no ${env.appName}. Como você está se sentindo com os treinos e a dieta? Pode desabafar comigo — se tá difícil, se bateu preguiça, se algo doeu, ou se tá voando. Bora ajustar juntos o que precisar. 💪`;

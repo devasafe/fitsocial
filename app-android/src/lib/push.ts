@@ -15,6 +15,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { registrarAparelho, removerAparelho } from "../api/push";
+import { MARCA } from "../marca";
 
 /** Guardado para conseguir cancelar o registro na saída da conta. */
 let tokenAtual: string | null = null;
@@ -65,7 +66,7 @@ export async function ligarPush(authToken: string): Promise<EstadoDaPermissao> {
     // muda e sem vibrar.
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
-        name: "Avisos do FitSocial",
+        name: `Avisos do ${MARCA}`,
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     }

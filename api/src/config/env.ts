@@ -37,6 +37,21 @@ function dailyLimits(raw: string | undefined): Record<string, number> {
 }
 
 export const env = {
+  /** O nome do produto, num lugar só.
+   *
+   *  Tudo que a pessoa lê — e-mail de senha, título de push, as falas do coach
+   *  — sai daqui. Trocar o nome do app é mudar esta linha (ou a env APP_NAME) e
+   *  as constantes equivalentes em app-android/src/marca.ts e
+   *  admin/src/marca.ts. São três porque os três Dockerfiles copiam só a
+   *  própria pasta: um arquivo compartilhado na raiz não existiria dentro do
+   *  build.
+   *
+   *  O que NÃO sai daqui, de propósito: o package Android, o slug do Expo, o
+   *  projeto no Firebase, o nome do banco e as chaves "fitsocial.*" de
+   *  armazenamento local. Mexer neles faz quem já tem o app instalar um app
+   *  separado, ou perder a sessão. */
+  appName: process.env.APP_NAME ?? "FitSocial",
+
   port: Number(process.env.PORT ?? 4000),
   mongoUri: required("MONGODB_URI", "mongodb://127.0.0.1:27017/fitsocial"),
   jwtSecret: required("JWT_SECRET"),
@@ -86,9 +101,13 @@ export const env = {
   // um "esqueci a senha" que promete um e-mail que nunca chega.
   brevoApiKey: process.env.BREVO_API_KEY ?? "",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
-  mailFrom: process.env.MAIL_FROM ?? "FitSocial <nao-responda@satriz.club>",
   mailFromEmail: process.env.MAIL_FROM_EMAIL ?? "nao-responda@satriz.club",
-  mailFromName: process.env.MAIL_FROM_NAME ?? "FitSocial",
+  get mailFrom(): string {
+    return process.env.MAIL_FROM ?? `${this.appName} <${this.mailFromEmail}>`;
+  },
+  get mailFromName(): string {
+    return process.env.MAIL_FROM_NAME ?? this.appName;
+  },
   mailTimeoutMs: Number(process.env.MAIL_TIMEOUT_MS ?? 10000),
 
   // Push. O envio funciona sem token, com limite mais apertado; com ele, o

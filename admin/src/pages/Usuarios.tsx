@@ -8,6 +8,7 @@ import { Dialogo } from "../components/Dialogo";
 import { Selo } from "../components/Selo";
 import { useEhCelular } from "../hooks/useEhCelular";
 import { empilharCamada, useCamada } from "../hooks/useCamada";
+import { MARCA } from "../marca";
 
 type Acao = "banir" | "desbanir" | "suspender" | "premium" | "tirarPremium";
 
@@ -184,7 +185,7 @@ export function Usuarios({ token }: { token: string }) {
         <div>
           <h1>Usuários</h1>
           <p>
-            {total > 0 ? total + " contas" : "Nenhuma conta"} no FitSocial. Toda ação daqui pede
+            {total > 0 ? total + " contas" : "Nenhuma conta"} no {MARCA}. Toda ação daqui pede
             um motivo e fica registrada.
           </p>
         </div>

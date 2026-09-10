@@ -3,6 +3,7 @@ import { User, hashPassword, verifyPassword, type UserDoc } from "../models/User
 import { PasswordReset } from "../models/PasswordReset.js";
 import { getMailer } from "./mail/index.js";
 import { HttpError } from "../utils/httpError.js";
+import { env } from "../config/env.js";
 
 /** Curto de propósito: o código vive no e-mail de alguém, e e-mail vaza. */
 export const VALIDADE_MS = 15 * 60_000;
@@ -18,7 +19,7 @@ function corpoDoEmail(nome: string, codigo: string): { texto: string; html: stri
   const minutos = VALIDADE_MS / 60_000;
   const texto =
     `Oi, ${nome}.\n\n` +
-    `Seu código para criar uma senha nova no FitSocial:\n\n` +
+    `Seu código para criar uma senha nova no ${env.appName}:\n\n` +
     `    ${codigo}\n\n` +
     `Ele vale por ${minutos} minutos e só pode ser usado uma vez.\n\n` +
     `Se não foi você que pediu, ignore este e-mail — sua senha atual continua valendo ` +
@@ -26,7 +27,7 @@ function corpoDoEmail(nome: string, codigo: string): { texto: string; html: stri
 
   const html =
     `<p>Oi, ${nome}.</p>` +
-    `<p>Seu código para criar uma senha nova no FitSocial:</p>` +
+    `<p>Seu código para criar uma senha nova no ${env.appName}:</p>` +
     `<p style="font-size:28px;letter-spacing:6px;font-weight:700">${codigo}</p>` +
     `<p>Ele vale por ${minutos} minutos e só pode ser usado uma vez.</p>` +
     `<p>Se não foi você que pediu, ignore este e-mail — sua senha atual continua ` +
@@ -63,7 +64,7 @@ export async function pedirRedefinicao(email: string): Promise<void> {
   const { texto, html } = corpoDoEmail(user.name.split(" ")[0], codigo);
   await getMailer().enviar({
     para: user.email,
-    assunto: `${codigo} é seu código do FitSocial`,
+    assunto: `${codigo} é seu código do ${env.appName}`,
     texto,
     html,
   });

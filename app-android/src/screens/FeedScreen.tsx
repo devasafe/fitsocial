@@ -20,6 +20,7 @@ import { Txt, Button, ErrorState } from "../components/ui";
 import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { MARCA } from "../marca";
 
 export function FeedScreen({
   embedded,
@@ -107,7 +108,7 @@ export function FeedScreen({
       {!embedded && (
         <View style={[styles.topBar, { paddingTop: insets.top + spacing.s12 }]}>
           <Txt variant="titleScreen" color={colors.lime}>
-            FitSocial
+            {MARCA}
           </Txt>
           <Button
             title="Publicar"

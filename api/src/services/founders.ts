@@ -1,10 +1,11 @@
 import type { UserDoc } from "../models/User.js";
+import { env } from "../config/env.js";
 
 // "Fundadores": amigos que ganham premium de presente. Configurado por env
 // (FOUNDER_EMAILS = lista CSV) + uma mensagem pessoal (FOUNDER_MESSAGE).
 // Lê o env ao vivo — mudar no Render (e reiniciar) já reflete, e é testável.
 
-const DEFAULT_MESSAGE = "Você é fundador do FitSocial 🖤 Obrigado por estar aqui desde o começo.";
+const DEFAULT_MESSAGE = `Você é fundador do ${env.appName} 🖤 Obrigado por estar aqui desde o começo.`;
 
 function founderEmails(): string[] {
   return (process.env.FOUNDER_EMAILS ?? "")

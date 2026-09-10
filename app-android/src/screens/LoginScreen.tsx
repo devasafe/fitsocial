@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Field, Button, Txt } from "../components/ui";
 import { colors, spacing } from "../theme";
 import type { AuthStackParams } from "../navigation/types";
+import { MARCA } from "../marca";
 
 type Props = NativeStackScreenProps<AuthStackParams, "Login">;
 
@@ -33,7 +34,7 @@ export function LoginScreen({ navigation }: Props) {
     >
       <View style={styles.inner}>
         <Txt variant="metricLg" color={colors.lime} style={styles.logo}>
-          FitSocial
+          {MARCA}
         </Txt>
         <Txt variant="body" color={colors.text2} style={styles.subtitle}>
           Seu treino, sua evolução e sua comunidade num só lugar.
