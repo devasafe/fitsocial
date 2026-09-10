@@ -20,6 +20,8 @@ import { createPost } from "../api/social";
 import { uploadImage } from "../api/uploads";
 import type { Activity } from "../api/activities";
 import { Button, Txt } from "../components/ui";
+import { PASSOS } from "../components/Espera";
+import { useCena, COBERTURA_MS, esperar } from "../components/CenaContext";
 import { sportLabel } from "../lib/sportLabel";
 import { legendaSugerida } from "../lib/crossfitResumo";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
@@ -51,6 +53,7 @@ export function CreatePostScreen() {
   const route = useRoute<RouteProp<AppStackParams, "CreatePost">>();
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+  const cena = useCena();
   const fromWorkout = route.params?.activity; // veio de um treino finalizado
   const [attached, setAttached] = useState<Activity | null>(fromWorkout ?? null);
   // O texto de um treino de CrossFit já vem pronto — e editável. Escrever do
@@ -111,17 +114,45 @@ export function CreatePostScreen() {
     }
   }
 
-  async function handlePost() {
+  async function handlePost(evento?: { nativeEvent: { pageX: number; pageY: number } }) {
     if (!canPost) return;
     setSaving(true);
+    cena.abrir({
+      passos: PASSOS.publicando,
+      origem: evento
+        ? { x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY }
+        : null,
+    });
+
     try {
-      await createPost(token!, {
-        text: text.trim() || undefined,
-        imageUrl: imageUrl ?? undefined,
-        activityId: attached?.id,
+      // O mínimo de espera é da CENA, não da rede: se o post voltar em 200ms,
+      // a troca de tela aconteceria com a gota ainda crescendo e a pessoa veria
+      // o compositor sumir por baixo dela.
+      const [{ post }] = await Promise.all([
+        createPost(token!, {
+          text: text.trim() || undefined,
+          imageUrl: imageUrl ?? undefined,
+          activityId: attached?.id,
+        }),
+        esperar(COBERTURA_MS),
+      ]);
+
+      // Publicar termina VENDO o que foi publicado.
+      //
+      // reset em vez de empilhar: voltar do post tem que levar para a navegação
+      // principal. Empilhando, o botão voltar traria de volta o compositor com
+      // o texto que acabou de virar post — e um segundo "Publicar" ali criaria
+      // uma publicação duplicada.
+      nav.reset({
+        index: 1,
+        routes: [{ name: "Tabs" }, { name: "PostDetail", params: { post } }],
       });
-      done();
+
+      // O post monta por baixo do lime; só então o verde abre nele.
+      await esperar(360);
+      cena.fechar();
     } catch (err) {
+      cena.fechar();
       notify("Não foi possível postar", (err as Error).message);
     } finally {
       setSaving(false);
@@ -208,7 +239,7 @@ export function CreatePostScreen() {
         <Button
           title="Publicar"
           size="lg"
-          onPress={handlePost}
+          onPress={(e) => handlePost(e)}
           loading={saving}
           disabled={!canPost || uploading}
           glow

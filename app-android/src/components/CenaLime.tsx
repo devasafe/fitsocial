@@ -1,8 +1,14 @@
-// A tela de gerar o plano.
+// A cena: a gota lime que toma a tela nos momentos que importam.
 //
-// É o momento mais importante do app — o primeiro plano — e a espera mais longa
-// dele, uns trinta segundos. Spinner aqui desperdiça o único instante em que a
-// pessoa está parada, olhando, esperando algo que ela pediu.
+// Nasceu para a geração do plano — o instante mais importante do app e a espera
+// mais longa dele, uns trinta segundos. Spinner ali desperdiça o único momento
+// em que a pessoa está parada, olhando, esperando algo que ela mesma pediu.
+//
+// Serve também para começar um treino e para publicar. Mas o TEMPO muda, e isso
+// não é detalhe: a cena existe para preencher espera, não para criar espera. Em
+// ação rápida ela é passagem (uma frase, some sozinha); em ação longa ela é
+// companhia (comandos que avançam enquanto dura). Usar a versão longa numa ação
+// instantânea transformaria velocidade em lentidão.
 //
 // A gota nasce EXATAMENTE onde o dedo tocou e cresce até tomar a tela. Isso não
 // é enfeite: amarra o efeito à causa. Você tocou ali, e o mundo cresceu daquele
@@ -33,8 +39,8 @@ import {
 import { Txt } from "./ui";
 import { colors, spacing } from "../theme";
 
-/** Quanto cada comando fica na tela. */
-const PASSO_MS = 6500;
+/** Quanto cada comando fica na tela, quando há mais de um. */
+const PASSO_MS_PADRAO = 6500;
 const REVELACAO_MS = 460;
 const ASSENTAR_MS = 440;
 
@@ -43,15 +49,18 @@ export interface Origem {
   y: number;
 }
 
-export function GerandoPlano({
+export function CenaLime({
   visivel,
   origem,
   passos,
+  passoMs = PASSO_MS_PADRAO,
 }: {
   visivel: boolean;
   /** Onde o dedo tocou. Sem isso, nasce do centro. */
   origem?: Origem | null;
+  /** Uma frase só = passagem. Várias = companhia numa espera longa. */
   passos: readonly string[];
+  passoMs?: number;
 }) {
   const { width, height } = useWindowDimensions();
   const [montado, setMontado] = useState(false);
@@ -157,12 +166,13 @@ export function GerandoPlano({
         ]).start();
         return i + 1;
       });
-    }, PASSO_MS);
+    }, passoMs);
     return () => clearInterval(t);
-  }, [visivel, passos.length, texto]);
+  }, [visivel, passos.length, passoMs, texto]);
 
   if (!montado) return null;
 
+  // Frase única é sempre destaque: ela É a mensagem, não uma etapa.
   const ultimo = passo === passos.length - 1;
 
   return (

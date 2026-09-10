@@ -13,6 +13,7 @@ import { AuthProvider } from "./src/context/AuthContext";
 import { PRCelebrationProvider } from "./src/components/PRCelebration";
 import { PrivacidadeTreinosProvider } from "./src/components/PrivacidadeTreinos";
 import { ContadoresProvider } from "./src/context/ContadoresContext";
+import { CenaProvider } from "./src/components/CenaContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
@@ -39,7 +40,9 @@ export default function App() {
         <ContadoresProvider>
           <PRCelebrationProvider>
             <PrivacidadeTreinosProvider>
-              <RootNavigator />
+              <CenaProvider>
+                <RootNavigator />
+              </CenaProvider>
             </PrivacidadeTreinosProvider>
           </PRCelebrationProvider>
         </ContadoresProvider>
