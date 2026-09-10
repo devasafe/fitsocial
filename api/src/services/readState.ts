@@ -106,6 +106,35 @@ export async function contadores(user: Id): Promise<Contadores> {
   return { feed, explore, desafios, notificacoes };
 }
 
+/**
+ * Quantas publicações de quem a pessoa segue ela ainda não viu — só lendo.
+ *
+ * `contadores()` não serve aqui: ele CRIA a marca de leitura quando não existe,
+ * e quem chama isto é o push, que roda solto depois da resposta HTTP. Escrita
+ * em trabalho de fundo escapa do pedido que a originou e reaparece no meio de
+ * outra coisa.
+ *
+ * Sem marca ainda, devolve 0: a pessoa nunca abriu o Feed neste app, e o push
+ * cai no texto simples de uma publicação só.
+ */
+export async function naoVistosNoFeed(user: Id): Promise<number> {
+  const marca = await ReadState.findOne({ user, area: "feed" }).select("lastSeenAt");
+  if (!marca) return 0;
+
+  const seguindo = await Follow.find({ follower: user }).select("following");
+  if (!seguindo.length) return 0;
+
+  return Post.countDocuments(
+    {
+      author: { $in: seguindo.map((f) => f.following) },
+      createdAt: { $gt: marca.lastSeenAt },
+      hidden: { $ne: true },
+      deletedAt: null,
+    },
+    ateOTeto
+  );
+}
+
 /** Chamado quando a pessoa chega ao conteúdo que era novo — não ao abrir a aba. */
 export async function marcarVisto(user: Id, area: Area): Promise<void> {
   await ReadState.updateOne(

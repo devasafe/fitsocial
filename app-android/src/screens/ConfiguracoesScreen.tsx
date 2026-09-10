@@ -21,6 +21,7 @@ import {
 import { Screen, Txt, Card, ErrorState } from "../components/ui";
 import { Skeleton } from "../components/Skeleton";
 import { confirmDialog, notify } from "../lib/notify";
+import { estadoDoPush, ligarPush, type EstadoDaPermissao } from "../lib/push";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import app from "../../app.json";
@@ -33,6 +34,7 @@ export function ConfiguracoesScreen() {
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [push, setPush] = useState<EstadoDaPermissao>("indisponivel");
 
   const carregar = useCallback(async () => {
     try {
@@ -47,8 +49,31 @@ export function ConfiguracoesScreen() {
   useFocusEffect(
     useCallback(() => {
       void carregar();
+      // Reconferido a cada abertura: a pessoa pode ter mexido na permissão nas
+      // Configurações do sistema, e a chave aqui precisa contar a verdade.
+      void estadoDoPush().then(setPush);
     }, [carregar])
   );
+
+  // O pedido de permissão sai daqui, e não da abertura do app: negado no iOS é
+  // definitivo — não dá para perguntar de novo, só mandar a pessoa no sistema.
+  async function mexerNoPush(ligar: boolean) {
+    if (!ligar) {
+      notify(
+        "Desligue pelo sistema",
+        "Para parar de receber no celular, desative as notificações do FitSocial nas configurações do aparelho."
+      );
+      return;
+    }
+    const resultado = await ligarPush(token!);
+    setPush(resultado);
+    if (resultado === "negada") {
+      notify(
+        "Permissão negada",
+        "Você já recusou as notificações antes. Para liberar, ative o FitSocial nas configurações do aparelho."
+      );
+    }
+  }
 
   // O switch responde na hora e desfaz se o servidor recusar. Esperar a rede
   // para mover um botão deixa a tela com cara de travada.
@@ -133,7 +158,22 @@ export function ConfiguracoesScreen() {
         )}
       </Secao>
 
-      <Secao titulo="Notificações">
+      <Secao
+        titulo="Notificações"
+        nota={
+          push === "indisponivel"
+            ? "Receber no celular só funciona no aplicativo instalado."
+            : undefined
+        }
+      >
+        {push !== "indisponivel" ? (
+          <Chave
+            titulo="Receber neste celular"
+            descricao="Permite que o FitSocial avise você mesmo com o app fechado."
+            ligado={push === "concedida"}
+            aoMudar={(v) => void mexerNoPush(v)}
+          />
+        ) : null}
         {notif ? (
           <>
             <Chave

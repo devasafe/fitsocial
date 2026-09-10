@@ -1,13 +1,19 @@
 {
   "expo": {
-    "name": "app-android",
-    "slug": "app-android",
+    "name": "FitSocial",
+    "slug": "fitsocial",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      },
+      "bundleIdentifier": "club.satriz.fitsocial"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +22,12 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "NOTIFICATIONS",
+        "POST_NOTIFICATIONS"
+      ],
+      "package": "club.satriz.fitsocial"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -27,7 +38,14 @@
         {
           "locationWhenInUsePermission": "O FitSocial usa sua localização para gravar o percurso do seu treino."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#C8FA4B"
+        }
       ]
-    ]
+    ],
+    "scheme": "fitsocial"
   }
 }
