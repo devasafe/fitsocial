@@ -14,7 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getCoachMessages, sendCoachMessage } from "../api/coach";
-import { adjustPlan } from "../api/plans";
+import { adjustPlan, generateDiet } from "../api/plans";
 import type { ChatMessage } from "../api/onboarding";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
 import { Txt, ErrorState } from "../components/ui";
@@ -60,18 +60,24 @@ export function CoachScreen() {
       const res = await sendCoachMessage(token!, text);
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
 
-      if (res.adjustPending || res.planAdjusted) {
+      const ajuste = res.dietAdjustPending
+        ? { rotulo: "sua dieta", executar: () => generateDiet(token!) }
+        : res.adjustPending || res.planAdjusted
+          ? { rotulo: "seu plano", executar: () => adjustPlan(token!) }
+          : null;
+
+      if (ajuste) {
         // O reajuste é uma segunda conversa com a IA e leva o seu tempo; avisa
         // que está acontecendo em vez de deixar a tela quieta.
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "Estou reajustando seu plano, um instante…" },
+          { role: "assistant", content: `Estou refazendo ${ajuste.rotulo}, um instante…` },
         ]);
         try {
-          await adjustPlan(token!);
+          await ajuste.executar();
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: "Pronto, seu plano foi atualizado." },
+            { role: "assistant", content: `Pronto, ${ajuste.rotulo} foi atualizada.` },
           ]);
         } catch (err) {
           setMessages((prev) => [

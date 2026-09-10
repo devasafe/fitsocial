@@ -11,6 +11,8 @@ export interface CoachReply {
   /** O coach concluiu que o plano precisa mudar. O ajuste em si é uma chamada
    *  separada — fazer as duas no mesmo pedido dobrava a espera. */
   adjustPending?: boolean;
+  /** Reajuste da DIETA. Separado do treino: cada metade existe sozinha. */
+  dietAdjustPending?: boolean;
   premiumRequired: boolean;
 }
 
