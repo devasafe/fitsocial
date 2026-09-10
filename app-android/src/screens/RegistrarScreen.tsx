@@ -78,7 +78,10 @@ export function RegistrarScreen() {
         nav.navigate("RegisterGeneric", { sportId });
         break;
       case "wod":
-        nav.navigate("RegisterWod", { sportId });
+        // CrossFit tem tela própria, de blocos. Funcional/HIIT continua no
+        // formulário simples: um WOD e pronto é exatamente o que ele é.
+        if (sportId === "crossfit") nav.navigate("RegisterCrossfit", { sportId });
+        else nav.navigate("RegisterWod", { sportId });
         break;
       default:
         notify("Em breve", `O registro de ${label} chega numa próxima atualização.`);

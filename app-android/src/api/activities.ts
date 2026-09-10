@@ -1,3 +1,4 @@
+import type { PayloadDeCrossfit } from "./crossfit";
 import { apiFetch } from "./client";
 
 export interface StrengthSetInput {
@@ -19,9 +20,16 @@ interface CommonInput {
   notes?: string;
   shareToFeed?: boolean;
   caption?: string;
+  startedAt?: string;
+  /** RPE de 1 a 10. A API já aceitava; o cliente é que não expunha. */
+  perceivedEffort?: number;
+  feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
 }
 
 export type CreateActivityInput =
+  // CrossFit em blocos. Convive com o formato antigo de wod, que continua
+  // abaixo — existe APK instalado mandando ele.
+  | (CommonInput & { kind: "wod"; payload: PayloadDeCrossfit })
   | (CommonInput & { kind: "strength"; payload: { variant?: string; exercises: StrengthExerciseInput[] } })
   | (CommonInput & {
       kind: "endurance";
