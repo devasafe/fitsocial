@@ -66,8 +66,12 @@ challengesRouter.post(
       await createNotification({
         userId: c.creator,
         actorId: req.user!._id,
+        actorName: req.user!.name,
         type: "challenge_join",
-        text: `${req.user!.name} entrou no seu desafio "${c.name}"`,
+        // Função porque a frase carrega o nome do desafio e precisa ser
+        // recomposta quando mais gente entra: "Ana e mais 2 entraram no seu
+        // desafio X".
+        text: (quem, total) => `${quem} ${total > 1 ? "entraram" : "entrou"} no seu desafio "${c.name}"`,
         targetKind: "challenge",
         targetId: c._id,
       });

@@ -424,8 +424,8 @@ socialRouter.post(
       await createNotification({
         userId: post.author,
         actorId: req.user!._id,
+        actorName: req.user!.name,
         type: "like",
-        text: `${req.user!.name} curtiu seu post`,
         targetKind: "post",
         targetId: post._id,
       });
@@ -472,8 +472,8 @@ socialRouter.post(
       await createNotification({
         userId: target._id,
         actorId: req.user!._id,
+        actorName: req.user!.name,
         type: "follow",
-        text: `${req.user!.name} começou a te seguir`,
         targetKind: "profile",
         targetId: req.user!._id,
       });
@@ -640,8 +640,8 @@ socialRouter.post(
     await createNotification({
       userId: post.author,
       actorId: req.user!._id,
+      actorName: req.user!.name,
       type: "comment",
-      text: `${req.user!.name} comentou no seu post`,
       targetKind: "post",
       targetId: post._id,
     });

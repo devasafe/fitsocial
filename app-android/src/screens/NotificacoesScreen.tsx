@@ -36,12 +36,32 @@ function dayBucket(iso: string): string {
 function groupByDay(items: NotificationItem[]): { label: string; items: NotificationItem[] }[] {
   const groups: { label: string; items: NotificationItem[] }[] = [];
   for (const n of items) {
-    const label = dayBucket(n.createdAt);
+    const label = dayBucket(n.atualizadaEm);
     const last = groups[groups.length - 1];
     if (last && last.label === label) last.items.push(n);
     else groups.push({ label, items: [n] });
   }
   return groups;
+}
+
+/** Aviso da plataforma não tem rosto: quem decidiu foi a moderação, não uma pessoa. */
+function SeloDoSistema() {
+  return (
+    <View
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: colors.surface3,
+        borderWidth: 1,
+        borderColor: colors.line,
+      }}
+    >
+      <Txt variant="body">🛡</Txt>
+    </View>
+  );
 }
 
 export function NotificacoesScreen() {
@@ -136,11 +156,15 @@ export function NotificacoesScreen() {
                 }}
               >
                 {!n.read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} /> : <View style={{ width: 8 }} />}
-                <Avatar uri={n.actor.avatarUrl} name={n.actor.name} size={36} />
+                {n.actor ? (
+                  <Avatar uri={n.actor.avatarUrl} name={n.actor.name} size={36} />
+                ) : (
+                  <SeloDoSistema />
+                )}
                 <View style={{ flex: 1 }}>
                   <Txt variant="body">{n.text}</Txt>
                   <Txt variant="caption" color={colors.text3}>
-                    {timeAgo(n.createdAt)}
+                    {timeAgo(n.atualizadaEm)}
                   </Txt>
                 </View>
               </TouchableOpacity>

@@ -338,6 +338,30 @@ Evento  →  regra de relevância  →  destino
 | Novo desafio disponível | ❌ | ✅ Desafios | ❌ |
 | Seu post foi removido | ✅ | ✅ | ❌ |
 
+> **Ajustes na Fase 5 (implementação):**
+>
+> **`post_novo` e `atividade_nova` não foram criados.** A tabela acima já dizia que eles não
+> viram notificação in-app — só badge, que a Fase 4 entregou. Criar o tipo agora seria criar
+> um campo sem quem o escreva nem quem o leia; ele nasce na Fase 6, junto com o push agrupado
+> que é o seu único destino.
+>
+> **`post_removido` ignora as preferências.** Todos os outros tipos respeitam a chave
+> correspondente, conferida antes de gravar. Esse não: seu conteúdo saiu do ar, e você precisa
+> saber disso mesmo com tudo silenciado. Não é divulgação, é aviso.
+>
+> **Aviso da moderação não tem ator.** `actor` virou opcional e vem nulo nesses casos. Dizer
+> qual administrador removeu o post transforma uma decisão da plataforma em briga com uma
+> pessoa.
+>
+> **Agrupa por assunto, não por ator.** A chave é `tipo:alvo`, e o que conta é o número de
+> pessoas distintas (`actors`), não de eventos: a mesma pessoa comentando três vezes é uma
+> pessoa, e "3 pessoas comentaram" seria mentira. O agrupamento vale enquanto a linha continua
+> não lida e recebeu algo nas últimas 24h — depois que você viu, a curtida seguinte é notícia
+> de novo.
+>
+> **A chave `novosPosts` governa o badge do Feed.** Aquele badge É o aviso de que quem você
+> segue publicou; deixá-lo aceso faria a chave prometer silêncio e entregar barulho.
+
 **Curtida não vira push.** É o evento mais frequente e o menos acionável — é o caminho mais
 curto para a pessoa desligar as notificações e nunca mais voltar. Comentário vira, porque
 tem alguém esperando resposta do outro lado.
