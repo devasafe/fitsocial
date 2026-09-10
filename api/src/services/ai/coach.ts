@@ -7,12 +7,24 @@ import type { CheckInStats } from "../adherence.js";
 // A cada turno o coach devolve a resposta + uma possível ação a executar.
 const coachTurnSchema = z.object({
   reply: z.string(),
-  action: z.enum(["none", "adjust_plan"]).optional().default("none"),
+  action: z.enum(["none", "adjust_plan", "adjust_diet"]).optional().default("none"),
 });
 
 export interface CoachTurn {
   reply: string;
-  action: "none" | "adjust_plan";
+  /** `adjust_plan` mexe no treino; `adjust_diet`, só na dieta. Separados porque
+   *  as duas metades passaram a existir uma sem a outra: reajustar "o plano" de
+   *  quem só tem dieta geraria um treino que a pessoa não pediu. */
+  action: "none" | "adjust_plan" | "adjust_diet";
+}
+
+/** O que a pessoa comeu hoje, contra a meta. */
+export interface ConsumoDeHoje {
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  refeicoesRegistradas: number;
 }
 
 export interface CoachContext {
@@ -21,6 +33,8 @@ export interface CoachContext {
   plan: PlanParts | null;
   stats: CheckInStats;
   tier: "free" | "premium";
+  /** Sem isto, "posso comer isso no jantar?" é pergunta sem resposta. */
+  hoje?: ConsumoDeHoje | null;
 }
 
 function buildContextBlock(ctx: CoachContext): string {
@@ -46,6 +60,37 @@ function buildContextBlock(ctx: CoachContext): string {
     if (ctx.plan.diet) metades.push(`dieta ${ctx.plan.diet.dailyCalories} kcal`);
     if (metades.length) parts.push(`PLANO ATUAL: ${metades.join(", ")}.`);
   }
+
+  // A dieta INTEIRA, refeição por refeição.
+  //
+  // Antes o coach só recebia "dieta 2200 kcal". Com isso, "posso trocar o arroz
+  // do almoço por batata doce?" era pergunta feita a alguém que não sabe o que
+  // tem no almoço — e a resposta saía genérica ou inventada.
+  const dieta = ctx.plan?.diet;
+  if (dieta) {
+    const m = dieta.macros;
+    const linhas = dieta.meals.map(
+      (r) =>
+        `  - ${r.name}${r.timeHint ? ` (${r.timeHint})` : ""}: ` +
+        r.items.map((i) => `${i.food} ${i.quantity}`).join(", ")
+    );
+    parts.push(
+      `DIETA ATUAL: ${dieta.dailyCalories} kcal/dia · ` +
+        `${m.proteinG}g proteína, ${m.carbsG}g carboidrato, ${m.fatG}g gordura\n` +
+        linhas.join("\n") +
+        (dieta.notes ? `\n  Observações: ${dieta.notes}` : "")
+    );
+  }
+
+  if (ctx.hoje) {
+    const alvo = dieta?.dailyCalories;
+    const restante = alvo ? alvo - ctx.hoje.kcal : null;
+    parts.push(
+      `COMEU HOJE: ${ctx.hoje.kcal} kcal em ${ctx.hoje.refeicoesRegistradas} registro(s) ` +
+        `(${ctx.hoje.proteinG}g P, ${ctx.hoje.carbsG}g C, ${ctx.hoje.fatG}g G)` +
+        (restante !== null ? `. Restam ${restante} kcal para a meta do dia.` : ".")
+    );
+  }
   if (ctx.plan && !ctx.plan.workout) {
     parts.push("TREINO: a pessoa segue a programação própria/do box, não um plano gerado aqui.");
   }
@@ -68,13 +113,21 @@ COMO AGIR:
 - Se a pessoa relatar dor/lesão ou condição de saúde preocupante, oriente a procurar um profissional. NADA que você diz substitui médico, nutricionista ou educador físico.
 - Mensagens curtas e humanas (2-5 frases). Uma pergunta por vez quando precisar entender melhor.
 
-REAJUSTE DE PLANO (ação):
-- Se, pela conversa, ficar claro que o plano precisa mudar (a pessoa está achando difícil demais, fácil demais, sem tempo, evoluiu muito) E a pessoa CONCORDAR em reajustar, defina "action":"adjust_plan".
-- Só faça isso se o usuário for Premium. Se for Grátis, NÃO use a ação: explique gentilmente que o reajuste do plano pelo coach é um recurso Premium e convide a assinar.
+SOBRE A DIETA:
+- Você tem a dieta completa acima, refeição por refeição. Use os alimentos e quantidades REAIS dela ao responder — nada de sugerir o que não está lá sem dizer que é uma troca.
+- Ao sugerir substituições, respeite as restrições alimentares da ficha e mantenha a refeição perto dos macros originais.
+- Se souber o que a pessoa já comeu hoje, use isso: o que sobrou de calorias muda a resposta sobre o que cabe no jantar.
+${ctx.plan?.diet ? "" : "- A pessoa NÃO tem dieta montada aqui. Não invente uma: se ela quiser, oriente a gerar em Início."}
+
+REAJUSTE (ações):
+- "adjust_plan" — reajusta o TREINO. Use quando ficar claro pela conversa que o treino precisa mudar (difícil demais, fácil demais, sem tempo, evoluiu muito) E a pessoa CONCORDAR.${ctx.plan?.workout ? "" : ' NÃO use: a pessoa não tem treino montado aqui, ela segue a programação própria/do box.'}
+- "adjust_diet" — refaz a DIETA. Use quando a conversa mostrar que a dieta não serve (não gosta dos alimentos, não cabe na rotina, mudou de objetivo, restrição nova) E a pessoa CONCORDAR.${ctx.plan?.diet ? "" : ' NÃO use: a pessoa não tem dieta montada aqui.'}
+- Uma ação por vez. Reajustar o treino não mexe na dieta, e vice-versa.
+- Só use ação se o usuário for Premium. Se for Grátis, NÃO use: explique gentilmente que o reajuste pelo coach é um recurso Premium e convide a assinar.
 - Em todos os outros casos use "action":"none".
 
 Responda SEMPRE apenas com um JSON válido:
-{ "reply": "sua mensagem para a pessoa", "action": "none" | "adjust_plan" }`;
+{ "reply": "sua mensagem para a pessoa", "action": "none" | "adjust_plan" | "adjust_diet" }`;
 }
 
 /** Executa um turno da conversa com o coach. */
