@@ -81,6 +81,13 @@ export const env = {
   // bom, e passa de 45s quando trava. O Groq entrega o mesmo plano em 9-12s.
   // Esperar mais que isso é queimar tempo de quem está olhando a tela antes de
   // chamar quem responde rápido.
+  // E-mail. Sem RESEND_API_KEY o projeto usa o provider de console em
+  // desenvolvimento e RECUSA subir em produção — melhor um erro claro do que
+  // um "esqueci a senha" que promete um e-mail que nunca chega.
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  mailFrom: process.env.MAIL_FROM ?? "FitSocial <nao-responda@satriz.club>",
+  mailTimeoutMs: Number(process.env.MAIL_TIMEOUT_MS ?? 10000),
+
   // Push. O envio funciona sem token, com limite mais apertado; com ele, o
   // Expo também recusa quem não é dono do projeto.
   expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? "",

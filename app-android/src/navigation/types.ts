@@ -6,6 +6,7 @@ import type { Activity } from "../api/activities";
 export type AuthStackParams = {
   Login: undefined;
   Register: undefined;
+  EsqueciSenha: undefined;
 };
 
 // Stack principal (quando logado e com onboarding concluído).

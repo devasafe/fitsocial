@@ -16,6 +16,7 @@ import { ComunidadeScreen } from "../screens/ComunidadeScreen";
 import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { EditarPostScreen } from "../screens/EditarPostScreen";
+import { EsqueciSenhaScreen } from "../screens/EsqueciSenhaScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { useContadores } from "../context/ContadoresContext";
 import { BadgeSobreposto } from "../components/Badge";
@@ -146,6 +147,11 @@ function AuthFlow() {
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
+      <AuthStack.Screen
+        name="EsqueciSenha"
+        component={EsqueciSenhaScreen}
+        options={{ headerShown: true, title: "Recuperar senha", ...headerStyle }}
+      />
     </AuthStack.Navigator>
   );
 }
