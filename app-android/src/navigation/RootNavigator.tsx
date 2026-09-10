@@ -17,6 +17,7 @@ import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { EsqueciSenhaScreen } from "../screens/EsqueciSenhaScreen";
+import { RegisterCrossfitScreen } from "../screens/RegisterCrossfitScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { useContadores } from "../context/ContadoresContext";
 import { BadgeSobreposto } from "../components/Badge";
@@ -193,6 +194,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="RegisterWod"
             component={RegisterWodScreen}
             options={{ headerShown: true, title: "Novo WOD", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="RegisterCrossfit"
+            component={RegisterCrossfitScreen}
+            options={{ headerShown: true, title: "Registrar CrossFit", ...headerStyle }}
           />
           <AppStack.Screen
             name="LiveTrack"
