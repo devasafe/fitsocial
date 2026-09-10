@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, TouchableOpacity, ActivityIndicator } from "react-native";
-import { notify } from "../lib/notify";
+import { notify, confirmDialog } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -11,7 +11,15 @@ import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
-import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plans";
+import {
+  getCurrentPlan,
+  generatePlan,
+  adjustPlan,
+  generateDiet,
+  zerarPlano,
+  zerarParteDoPlano,
+  type Plan,
+} from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { getWaterDay, addWater, type WaterDay } from "../api/water";
@@ -42,12 +50,13 @@ export function HomeScreen() {
   const [quickAdd, setQuickAdd] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [escolhendoProgramacao, setEscolhendoProgramacao] = useState(false);
+  const [gerandoDieta, setGerandoDieta] = useState(false);
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
   const programacao = user?.settings?.programacao ?? null;
   const seguePropria = programacao === "propria";
 
-  async function escolherProgramacao(escolha: "plano" | "propria") {
+  async function escolherProgramacao(escolha: "plano" | "propria" | null) {
     setEscolhendoProgramacao(true);
     try {
       await updateSettings(token!, { programacao: escolha });
@@ -172,8 +181,60 @@ export function HomeScreen() {
     }
   }
 
-  // Sessão de hoje = a primeira do plano (1 toque para começar; "escolher outro" leva à lista).
-  const todaySession = plan?.workout.sessions?.[0];
+  // Cada metade do plano existe por conta própria: dá para ter só a dieta
+  // (quem treina pela programação do box) ou só o treino.
+  const temTreino = !!plan?.workout;
+  const temDieta = !!plan?.diet;
+  const todaySession = plan?.workout?.sessions?.[0];
+
+  async function gerarDieta() {
+    setGerandoDieta(true);
+    try {
+      const { plan } = await generateDiet(token!);
+      setPlan(plan);
+    } catch (err) {
+      notify("Não deu para gerar a dieta", (err as Error).message);
+    } finally {
+      setGerandoDieta(false);
+    }
+  }
+
+  function zerarTudo() {
+    confirmDialog(
+      "Zerar o plano?",
+      "Seu treino e sua dieta são apagados, e você escolhe de novo como treina. Os treinos que você já registrou não são afetados.",
+      async () => {
+        try {
+          await zerarPlano(token!);
+          setPlan(null);
+          await refreshUser();
+        } catch (err) {
+          notify("Não deu para zerar", (err as Error).message);
+        }
+      },
+      "Zerar"
+    );
+  }
+
+  function zerarParte(parte: "workout" | "diet") {
+    const rotulo = parte === "workout" ? "o treino" : "a dieta";
+    confirmDialog(
+      `Zerar ${rotulo}?`,
+      parte === "workout"
+        ? "O treino é apagado e você escolhe de novo como treina. Sua dieta continua."
+        : "A dieta é apagada. Seu treino continua.",
+      async () => {
+        try {
+          const r = await zerarParteDoPlano(token!, parte);
+          setPlan(r.data.plan);
+          await refreshUser();
+        } catch (err) {
+          notify("Não deu para zerar", (err as Error).message);
+        }
+      },
+      "Zerar"
+    );
+  }
 
   function startToday() {
     if (todaySession) navigation.navigate("CheckIn", { session: todaySession });
@@ -235,7 +296,7 @@ export function HomeScreen() {
       </View>
 
       {/* ---- Bloco de treino: muda conforme de onde vem a programação ---- */}
-      {plan ? (
+      {temTreino && plan?.workout ? (
         /* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */
         <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
           <Txt variant="label" color={colors.text2}>
@@ -339,7 +400,7 @@ export function HomeScreen() {
 
       <NutritionToday
         day={day}
-        fallbackTarget={plan?.diet.dailyCalories}
+        fallbackTarget={plan?.diet?.dailyCalories}
         onOpen={() => navigation.navigate("Diario")}
         onRegister={() => setQuickAdd(true)}
       />
@@ -367,48 +428,86 @@ export function HomeScreen() {
         </Card>
       </TouchableOpacity>
 
-      {plan ? (
-        <>
-          {/* Referência: treino e dieta completos */}
-          <NavRow title="Meu treino" sub={plan.workout.split} onPress={() => navigation.navigate("Workout", { workout: plan.workout })} />
-          <NavRow title="Minha dieta" sub={`${plan.diet.dailyCalories} kcal por dia`} onPress={() => navigation.navigate("Diet", { diet: plan.diet })} />
-
-          {/* Ações secundárias do plano */}
-          <View style={{ flexDirection: "row", justifyContent: "center", gap: spacing.xl, marginTop: spacing.sm }}>
-            <TouchableOpacity onPress={handleAdjust} disabled={adjusting} activeOpacity={0.7}>
-              <Txt variant="label" color={colors.text2}>
-                {adjusting ? "Reajustando…" : "Pedir reajuste"}
-              </Txt>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleRegenerate} disabled={generating} activeOpacity={0.7}>
-              <Txt variant="label" color={colors.text2}>
-                {generating ? "Gerando…" : "Gerar novo plano"}
-              </Txt>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7}>
-              <Txt variant="label" color={colors.text2}>
-                Importar plano
-              </Txt>
-            </TouchableOpacity>
-          </View>
-
-          <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
-            {plan.disclaimer}
-          </Txt>
-        </>
-      ) : seguePropria ? (
-        /* Discreto de propósito: a oferta continua disponível para quem mudar de
-           ideia, sem virar cobrança em toda abertura do app. */
-        <TouchableOpacity
-          onPress={() => void escolherProgramacao("plano")}
-          activeOpacity={0.7}
-          style={{ paddingVertical: spacing.md, alignItems: "center" }}
-          disabled={generating || escolhendoProgramacao}
-        >
-          <Txt variant="label" color={colors.text3}>
-            {generating ? passoDaEspera : "Quer que o coach monte um plano pra você?"}
-          </Txt>
+      {/* Referência: cada metade aparece só se existir. */}
+      {temTreino && plan?.workout ? (
+        <NavRow title="Meu treino" sub={plan.workout.split} onPress={() => navigation.navigate("Workout", { workout: plan.workout! })} />
+      ) : null}
+      {temDieta && plan?.diet ? (
+        <NavRow title="Minha dieta" sub={`${plan.diet.dailyCalories} kcal por dia`} onPress={() => navigation.navigate("Diet", { diet: plan.diet! })} />
+      ) : (
+        /* Sem dieta — inclusive para quem segue a programação do box. Antes a
+           dieta só existia dentro de um plano completo, então pedir dieta
+           obrigava a gerar um treino que a pessoa não ia usar. */
+        <TouchableOpacity onPress={() => void gerarDieta()} activeOpacity={0.7} disabled={gerandoDieta}>
+          <Card>
+            <Txt variant="titleCard">
+              {gerandoDieta ? "Montando sua dieta…" : "Quer uma dieta?"}
+            </Txt>
+            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+              {gerandoDieta
+                ? "Leva cerca de meio minuto."
+                : "O coach monta a partir do seu perfil. Independente do treino."}
+            </Txt>
+          </Card>
         </TouchableOpacity>
+      )}
+
+      {temTreino ? (
+        /* Ações secundárias do plano de treino */
+        <View style={{ flexDirection: "row", justifyContent: "center", gap: spacing.xl, marginTop: spacing.sm }}>
+          <TouchableOpacity onPress={handleAdjust} disabled={adjusting} activeOpacity={0.7}>
+            <Txt variant="label" color={colors.text2}>
+              {adjusting ? "Reajustando…" : "Pedir reajuste"}
+            </Txt>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleRegenerate} disabled={generating} activeOpacity={0.7}>
+            <Txt variant="label" color={colors.text2}>
+              {generating ? "Gerando…" : "Gerar novo plano"}
+            </Txt>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7}>
+            <Txt variant="label" color={colors.text2}>
+              Importar plano
+            </Txt>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* Voltar atrás. Sempre disponível: escolher como treina não pode ser
+          uma porta de mão única. */}
+      {plan || seguePropria ? (
+        <View style={{ alignItems: "center", gap: spacing.sm, marginTop: spacing.sm }}>
+          {temTreino && temDieta ? (
+            <TouchableOpacity onPress={() => zerarParte("diet")} activeOpacity={0.7}>
+              <Txt variant="label" color={colors.text3}>
+                Zerar só a dieta
+              </Txt>
+            </TouchableOpacity>
+          ) : null}
+          {plan ? (
+            <TouchableOpacity onPress={zerarTudo} activeOpacity={0.7}>
+              <Txt variant="label" color={colors.danger}>
+                Zerar meu plano e escolher de novo
+              </Txt>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => void escolherProgramacao(null)}
+              activeOpacity={0.7}
+              disabled={escolhendoProgramacao}
+            >
+              <Txt variant="label" color={colors.text3}>
+                Mudar como eu treino
+              </Txt>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
+
+      {plan?.disclaimer ? (
+        <Txt variant="caption" color={colors.text3} style={{ textAlign: "center" }}>
+          {plan.disclaimer}
+        </Txt>
       ) : null}
 
       <QuickFoodAdd

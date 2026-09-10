@@ -5,7 +5,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { CoachMessage } from "../models/CoachMessage.js";
 import { Profile, profileDataSchema, type ProfileData } from "../models/Profile.js";
-import { Plan, type PlanData } from "../models/Plan.js";
+import { Plan, type PlanParts } from "../models/Plan.js";
 import { Activity } from "../models/Activity.js";
 import { computeStats } from "../services/adherence.js";
 import { runCoachTurn, COACH_GREETING, type CoachContext } from "../services/ai/coach.js";
@@ -52,11 +52,11 @@ coachRouter.post(
     const profile: ProfileData | null = profileDoc
       ? profileDataSchema.parse(profileDoc.toObject())
       : null;
-    const plan: PlanData | null = planDoc
+    const plan: PlanParts | null = planDoc
       ? {
           summary: planDoc.summary,
-          workout: planDoc.workout,
-          diet: planDoc.diet,
+          workout: (planDoc.workout as PlanParts["workout"]) ?? null,
+          diet: (planDoc.diet as PlanParts["diet"]) ?? null,
           disclaimer: planDoc.disclaimer,
         }
       : null;

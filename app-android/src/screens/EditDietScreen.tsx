@@ -39,8 +39,9 @@ export function EditDietScreen() {
     getCurrentPlan(token!)
       .then((p) => {
         setPlan(p);
-        if (p) {
-          const d = p.diet;
+        // A dieta pode não existir: quem só gerou treino não tem o que editar.
+        const d = p?.diet;
+        if (d) {
           setKcal(String(d.dailyCalories));
           setProtein(String(d.macros.proteinG));
           setCarbs(String(d.macros.carbsG));
@@ -103,7 +104,8 @@ export function EditDietScreen() {
     }
     setSaving(true);
     try {
-      await updatePlan(token!, { workout: plan.workout, diet });
+      // Só a dieta vai no corpo — mandar o treino junto obrigaria a tê-lo.
+      await updatePlan(token!, { diet });
       notify("Dieta atualizada", "Suas mudanças foram salvas.", () => nav.goBack());
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

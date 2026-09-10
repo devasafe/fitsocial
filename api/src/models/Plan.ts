@@ -55,6 +55,30 @@ export const planDataSchema = z.object({
 
 export type PlanData = z.infer<typeof planDataSchema>;
 
+/**
+ * Só a dieta.
+ *
+ * Existe porque as duas metades do plano deixaram de ser inseparáveis: quem
+ * segue a programação do box não quer um treino gerado, mas pode querer uma
+ * dieta. Antes, pedir dieta obrigava a gerar um treino junto — e o treino
+ * gerado era ruído para essa pessoa.
+ */
+export const dietDataSchema = z.object({
+  summary: z.string(),
+  diet: dietSchema,
+  disclaimer: z.string(),
+});
+
+export type DietData = z.infer<typeof dietDataSchema>;
+
+/** O plano guardado, onde cada metade pode faltar. */
+export interface PlanParts {
+  summary: string;
+  workout: z.infer<typeof workoutSchema> | null;
+  diet: z.infer<typeof dietSchema> | null;
+  disclaimer: string;
+}
+
 // ---- Modelo Mongoose (guarda histórico de versões por usuário) ----
 
 const planSchema = new Schema(
@@ -62,8 +86,10 @@ const planSchema = new Schema(
     user: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     version: { type: Number, required: true, default: 1 },
     summary: { type: String, required: true },
-    workout: { type: Schema.Types.Mixed, required: true },
-    diet: { type: Schema.Types.Mixed, required: true },
+    // As duas metades são opcionais e independentes: dá para ter só a dieta
+    // (quem treina pela programação do box) ou só o treino.
+    workout: { type: Schema.Types.Mixed, default: null },
+    diet: { type: Schema.Types.Mixed, default: null },
     disclaimer: { type: String, required: true },
   },
   { timestamps: true }

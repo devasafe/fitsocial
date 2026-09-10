@@ -4,7 +4,7 @@ import {
   NUTRITION_KNOWLEDGE,
   SAFETY_DISCLAIMER,
 } from "./knowledgeBase.js";
-import { planDataSchema, type PlanData } from "../../models/Plan.js";
+import { planDataSchema, dietDataSchema, type PlanData, type DietData } from "../../models/Plan.js";
 import type { ProfileData } from "../../models/Profile.js";
 import { backfillWorkoutKinds } from "../exerciseKind.js";
 
@@ -85,6 +85,67 @@ function buildUserPrompt(profile: ProfileData): string {
 - Observações: ${profile.notes || "nenhuma"}
 
 Gere o plano completo de treino e dieta para esta pessoa.`;
+}
+
+const DIETA_JSON_FORMAT = `{
+  "summary": "string",
+  "diet": {
+    "dailyCalories": number,
+    "macros": { "proteinG": number, "carbsG": number, "fatG": number },
+    "meals": [ { "name": "string", "timeHint": "string", "items": [ { "food": "string", "quantity": "string" } ] } ],
+    "notes": "string"
+  },
+  "disclaimer": "string"
+}`;
+
+/**
+ * Gera SÓ a dieta.
+ *
+ * Prompt próprio, e não o de plano com o treino descartado depois: pedir um
+ * treino para jogar fora gasta tempo e tokens, e a IA distribui atenção entre
+ * as duas metades. Aqui ela cuida de uma coisa só.
+ *
+ * O contexto de treino continua na ficha (dias por semana, minutos por sessão),
+ * porque quem treina cinco vezes na semana come diferente de quem treina duas —
+ * mesmo que o treino em si venha do box.
+ */
+export async function generateDiet(
+  profile: ProfileData,
+  userId?: string,
+  provider: AIProvider = getAIProvider()
+): Promise<DietData> {
+  const system = `Você é o nutricionista do FitSocial. Gere uma DIETA personalizada, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
+
+${NUTRITION_KNOWLEDGE}
+
+REGRAS:
+- Baseie TODA a dieta na ficha do usuário fornecida.
+- Respeite rigorosamente as restrições alimentares informadas.
+- Considere o volume de treino da ficha ao calcular as calorias, mesmo que o treino em si não seja montado por você.
+- "summary" deve ser uma mensagem curta e motivadora explicando a estratégia alimentar.
+- "disclaimer" deve ser exatamente: "${SAFETY_DISCLAIMER}"
+
+Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
+${DIETA_JSON_FORMAT}`;
+
+  const raw = await provider.generate({
+    system,
+    messages: [
+      {
+        role: "user",
+        content: `${buildUserPrompt(profile).replace(
+          "Gere o plano completo de treino e dieta para esta pessoa.",
+          "Gere apenas a dieta para esta pessoa. O treino dela vem de outra fonte."
+        )}`,
+      },
+    ],
+    jsonMode: true,
+    temperature: 0.5,
+    feature: "diet_generate",
+    userId,
+  });
+
+  return parseJson(raw, dietDataSchema);
 }
 
 /** Gera um plano (treino + dieta) validado a partir da ficha do usuário. */

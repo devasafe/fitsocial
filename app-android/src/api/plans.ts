@@ -33,10 +33,33 @@ export interface Plan {
   id: string;
   version: number;
   summary: string;
-  workout: Workout;
-  diet: Diet;
+  /** Nula para quem segue a programação do box e nunca gerou treino. */
+  workout: Workout | null;
+  /** Nula para quem tem treino mas ainda não pediu dieta. */
+  diet: Diet | null;
   disclaimer: string;
   createdAt: string;
+}
+
+/** Gera só a dieta — sem carregar junto um treino que a pessoa não vai usar. */
+export function generateDiet(token: string) {
+  return apiFetch<{ plan: Plan }>("/plans/diet", { method: "POST", token });
+}
+
+/** Apaga o plano inteiro e devolve a pessoa à escolha de como treina. */
+export function zerarPlano(token: string) {
+  return apiFetch<{ data: { removidos: number } }>("/plans/current", {
+    method: "DELETE",
+    token,
+  });
+}
+
+/** Apaga uma metade só. A outra continua de pé. */
+export function zerarParteDoPlano(token: string, parte: "workout" | "diet") {
+  return apiFetch<{ data: { plan: Plan | null }; meta: { vazio?: boolean } }>(
+    `/plans/current/${parte}`,
+    { method: "DELETE", token }
+  );
 }
 
 export function generatePlan(token: string) {
@@ -54,7 +77,7 @@ export function importPlan(token: string, text: string) {
 }
 
 /** Edição manual do plano (treino/dieta) — salva in place. */
-export function updatePlan(token: string, data: { summary?: string; workout: Workout; diet: Diet }) {
+export function updatePlan(token: string, data: { summary?: string; workout?: Workout; diet?: Diet }) {
   return apiFetch<{ plan: Plan }>("/plans/current", { method: "PUT", token, body: data });
 }
 

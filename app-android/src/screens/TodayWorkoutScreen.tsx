@@ -54,11 +54,13 @@ export function TodayWorkoutScreen() {
     );
   }
 
-  if (!plan) {
+  // Ter plano não é mais o mesmo que ter treino: quem só gerou dieta chega
+  // aqui com plano e sem sessões.
+  if (!plan?.workout) {
     return (
       <View style={styles.center}>
         <Txt variant="titleSection" style={{ textAlign: "center" }}>
-          Você ainda não tem um plano
+          Você ainda não tem um plano de treino
         </Txt>
         <Txt variant="body" color={colors.text2} style={styles.emptyText}>
           Gere ou importe seu plano na aba Início para começar a treinar.

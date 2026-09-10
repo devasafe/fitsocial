@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getAIProvider, parseJson, type AIMessage, type AIProvider } from "./index.js";
 import type { ProfileData } from "../../models/Profile.js";
-import type { PlanData } from "../../models/Plan.js";
+import type { PlanParts } from "../../models/Plan.js";
 import type { CheckInStats } from "../adherence.js";
 
 // A cada turno o coach devolve a resposta + uma possível ação a executar.
@@ -17,7 +17,8 @@ export interface CoachTurn {
 
 export interface CoachContext {
   profile: ProfileData | null;
-  plan: PlanData | null;
+  /** `PlanParts`, não `PlanData`: cada metade pode faltar de verdade. */
+  plan: PlanParts | null;
   stats: CheckInStats;
   tier: "free" | "premium";
 }
@@ -33,10 +34,20 @@ function buildContextBlock(ctx: CoachContext): string {
     );
   }
   if (ctx.plan) {
-    parts.push(
-      `PLANO ATUAL: treino "${ctx.plan.workout.split}" (${ctx.plan.workout.daysPerWeek}x/sem), ` +
-        `dieta ${ctx.plan.diet.dailyCalories} kcal.`
-    );
+    // Cada metade pode faltar: há quem tenha só dieta (treina pela programação
+    // do box) e quem tenha só treino. Falar de uma metade inexistente faria o
+    // coach inventar um plano que a pessoa não tem.
+    const metades: string[] = [];
+    if (ctx.plan.workout) {
+      metades.push(
+        `treino "${ctx.plan.workout.split}" (${ctx.plan.workout.daysPerWeek}x/sem)`
+      );
+    }
+    if (ctx.plan.diet) metades.push(`dieta ${ctx.plan.diet.dailyCalories} kcal`);
+    if (metades.length) parts.push(`PLANO ATUAL: ${metades.join(", ")}.`);
+  }
+  if (ctx.plan && !ctx.plan.workout) {
+    parts.push("TREINO: a pessoa segue a programação própria/do box, não um plano gerado aqui.");
   }
   parts.push(
     `ADESÃO: streak ${ctx.stats.streak} dia(s), ${ctx.stats.week} treino(s) na semana, ${ctx.stats.total} no total.`
