@@ -1,7 +1,7 @@
 import type mongoose from "mongoose";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Activity } from "../models/Activity.js";
-import { normalizarWod, blocosDoTipo, fecharScore } from "./crossfit.js";
+import { normalizarWod, blocosDoTipo, fecharScore, chaveDoMovimento } from "./crossfit.js";
 import { resolverBenchmark } from "./benchmarks.js";
 
 // Motor de detecção de PR (Fase 2c). Ver docs/ESPORTES.md §4.4, §5.3, §7.3, §12.
@@ -213,10 +213,18 @@ function wodCandidates(payload: unknown): Candidate[] {
     const score = metcon.resultado;
     if (!score) continue;
 
-    // Sem identidade estável não há recorde: "Fran" e "fran " digitados
-    // diferente virariam dois recordes que nunca se comparam. O slug do
-    // benchmark é a identidade; nome livre não serve.
-    const chave = metcon.benchmark?.slug ?? resolverBenchmark(metcon.nome)?.slug ?? null;
+    // Identidade do recorde. O slug do catálogo tem preferência — é ele que
+    // faz "Fran", "fran" e "FRAN " serem o mesmo histórico.
+    //
+    // Nome livre TAMBÉM gera recorde, normalizado. Eu tinha exigido só o slug,
+    // e isso silenciosamente parou de atualizar o recorde de quem chama o WOD
+    // de "Treino A" — que é quase todo mundo. Quebrar o histórico de quem já
+    // usa é pior que o risco teórico de dois treinos parecidos dividirem um
+    // nome genérico: esse risco é escolha de quem nomeia, o outro é bug.
+    const chave =
+      metcon.benchmark?.slug ??
+      resolverBenchmark(metcon.nome)?.slug ??
+      chaveDoMovimento(metcon.nome ?? "");
     if (!chave) continue;
 
     // Estourou o cap: o resultado é um parcial. Deixar competir faria "4 rounds
@@ -230,9 +238,26 @@ function wodCandidates(payload: unknown): Candidate[] {
       out.push({ exerciseName: chave, type: "wod_time", repRange: nivel, value: score.tempoSec as number, unit: "s" });
     } else if (score.tipo === "carga" && (score.cargaKg ?? 0) > 0) {
       out.push({ exerciseName: chave, type: "wod_load", repRange: nivel, value: score.cargaKg as number, unit: "kg" });
+    } else if (score.tipo === "rounds_reps" && (score.rounds ?? 0) > 0) {
+      // AMRAP continua medido em ROUNDS no recorde.
+      //
+      // Eu tinha trocado para o total de reps canônico, sob a MESMA chave de
+      // recorde — então um "15 rounds" já gravado passava a ser comparado
+      // contra "150 reps" e virava um "novo recorde" falso, com a lista
+      // misturando as duas unidades.
+      //
+      // O valor canônico continua existindo e continua certo: ele vive no
+      // histórico de benchmark (metrics.wod.scoreValor), que é novo e não tem
+      // legado. Recorde fala a língua de quem treina ("fiz 15 rounds");
+      // o gráfico ordena por trabalho total.
+      out.push({
+        exerciseName: chave,
+        type: "wod_score",
+        repRange: nivel,
+        value: score.rounds as number,
+        unit: "rounds",
+      });
     } else if (fechado.valor != null && fechado.valor > 0) {
-      // rounds_reps e reps compartilham o mesmo tipo de recorde: os dois são
-      // "quanto trabalho saiu", e o valor canônico já os deixa comparáveis.
       out.push({
         exerciseName: chave,
         type: "wod_score",

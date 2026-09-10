@@ -49,7 +49,17 @@ export type Movimento = z.infer<typeof movimentoSchema>;
 // impede comparar Fran RX com Fran scaled) e os ajustes registram O QUE mudou —
 // que é o que o enum sozinho nunca soube dizer.
 
-export const NIVEIS_DE_ESCALA = ["rx", "rx_plus", "scaled", "iniciante", "custom"] as const;
+// "adaptado" é legado do formato antigo. Fica aceito porque já existe
+// recorde gravado com essa chave — converter para "custom" criaria uma
+// linha nova ao lado da antiga, e a pessoa veria o recorde duplicado.
+export const NIVEIS_DE_ESCALA = [
+  "rx",
+  "rx_plus",
+  "scaled",
+  "iniciante",
+  "custom",
+  "adaptado",
+] as const;
 
 export const escalaSchema = z.object({
   nivel: z.enum(NIVEIS_DE_ESCALA).default("rx"),

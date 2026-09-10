@@ -110,9 +110,14 @@ coachRouter.post(
       const temMetade =
         turn.action === "adjust_plan" ? Boolean(planDoc?.workout) : Boolean(planDoc?.diet);
 
-      if (user.tier !== "premium") {
+      // A cobrança só faz sentido se houver o que reajustar. Sem esta guarda,
+      // uma conversa sobre dieta de quem não tem dieta abria a tela de
+      // assinatura do nada, no meio do papo.
+      if (!temMetade) {
+        // Nada a fazer: o coach responde, e só.
+      } else if (user.tier !== "premium") {
         premiumRequired = true;
-      } else if (profile && temMetade) {
+      } else if (profile) {
         if (turn.action === "adjust_plan") adjustPending = true;
         else dietAdjustPending = true;
       }

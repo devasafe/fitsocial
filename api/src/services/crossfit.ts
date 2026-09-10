@@ -154,9 +154,10 @@ function deV1(p: WodPayloadV1): WodPayloadV2 {
     formatoLivre: null,
     prescricao: { movimentos },
     resultado,
-    // "adaptado" era o terceiro nível do formato antigo; o mais próximo hoje é
-    // "custom", que aceita descrever o que mudou.
-    escala: { nivel: p.level === "adaptado" ? "custom" : p.level },
+    // "adaptado" é preservado como está: é a chave dos recordes que já foram
+    // gravados por quem usa o app instalado. Trocar para "custom" faria o
+    // recorde antigo ficar parado ao lado de um novo começando do zero.
+    escala: { nivel: p.level },
     rounds: null,
     notas: p.description ?? null,
   });
@@ -212,4 +213,51 @@ export function movimentosDoTreino(wod: WodPayloadV2): string[] {
   }
   vistos.delete("");
   return [...vistos];
+}
+
+/**
+ * A volta: blocos → os campos planos do formato antigo.
+ *
+ * O app instalado lê `payload.name`, `payload.level`, `payload.resultTimeSec` e
+ * `payload.movements`. Um treino gravado no formato novo não tem nenhum deles,
+ * e a tela de detalhe dele mostraria "WOD: —" para tudo.
+ *
+ * Servir os campos planos AO LADO dos blocos resolve sem tirar nada de
+ * ninguém — mesma escolha do `crossfit` ao lado do `payload`.
+ */
+export function paraFormatoAntigo(wod: WodPayloadV2): Record<string, unknown> {
+  const metcon = metconPrincipal(wod);
+  if (!metcon) return {};
+
+  const r = metcon.resultado;
+  const forca = blocosDoTipo(wod, "forca")[0];
+
+  return {
+    name: metcon.nome ?? metcon.benchmark?.slug ?? "Treino",
+    // "intervalo" e "outro" não existiam no formato antigo; o mais próximo que
+    // ele entende é for_time.
+    scoreType:
+      metcon.formato === "max_reps"
+        ? "for_reps"
+        : metcon.formato === "intervalo" || metcon.formato === "outro"
+          ? "for_time"
+          : metcon.formato,
+    level: metcon.escala.nivel === "rx" || metcon.escala.nivel === "scaled" ? metcon.escala.nivel : "adaptado",
+    ...(r?.tipo === "tempo" && r.tempoSec != null ? { resultTimeSec: r.tempoSec } : {}),
+    ...(r?.tipo === "rounds_reps" ? { resultRounds: r.rounds ?? 0, resultReps: r.repsExtras ?? 0 } : {}),
+    ...(r?.tipo === "reps" && r.reps != null ? { resultReps: r.reps } : {}),
+    ...(r?.tipo === "carga" && r.cargaKg != null ? { resultLoadKg: r.cargaKg } : {}),
+    ...(metcon.notas ? { description: metcon.notas } : {}),
+    ...(forca ? { strengthBlock: { variant: "musculacao", exercises: forca.exercicios } } : {}),
+    movements: metcon.prescricao.movimentos.slice(0, 30).map((m) => ({
+      name: m.nome,
+      // Calcula em vez de ler `valorKg`: esse campo é derivado e o cliente não
+      // é obrigado a mandá-lo preenchido.
+      ...(cargaEmKg(m.carga) != null ? { loadKg: cargaEmKg(m.carga) } : {}),
+      // O formato antigo só sabia reps; distância e caloria viram o número que
+      // houver, para o card não ficar mudo.
+      ...(m.reps != null ? { reps: m.reps } : {}),
+      ...(m.duracaoSec != null ? { timeSec: m.duracaoSec } : {}),
+    })),
+  };
 }
