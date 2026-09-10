@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { normalizarWod, paraFormatoAntigo } from "../services/crossfit.js";
+import { lerQuadro } from "../services/ai/lerQuadro.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { getBenchmark } from "../services/benchmarks.js";
 import { z } from "zod";
 import mongoose from "mongoose";
@@ -169,6 +171,26 @@ activitiesRouter.post(
       data: serializeActivity(activity),
       meta: { sharedPostId: post?._id.toString() ?? null, newPRs },
     });
+  })
+);
+
+/**
+ * Lê o quadro da aula e devolve os blocos montados. NÃO grava nada.
+ *
+ * Montar um WOD à mão é oito blocos de formulário para um quadro que a pessoa
+ * copia em vinte segundos. Aqui ela cola, e confere o que saiu — inclusive
+ * porque a leitura NÃO preenche resultado nenhum: o quadro diz o que era para
+ * fazer, quanto ela fez é ela quem informa.
+ */
+const lerQuadroSchema = z.object({ texto: z.string().min(3).max(4000) });
+activitiesRouter.post(
+  "/ler-quadro",
+  // Uma chamada de IA por leitura, e ninguém cola trinta quadros por minuto.
+  rateLimit({ windowMs: 60_000, max: 10, name: "ler-quadro" }),
+  asyncHandler(async (req, res) => {
+    const { texto } = lerQuadroSchema.parse(req.body);
+    const leitura = await lerQuadro(texto, { userId: req.user!._id.toString() });
+    res.json({ data: leitura });
   })
 );
 

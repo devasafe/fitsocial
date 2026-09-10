@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button } from "../components/ui";
 import { MenuSheet } from "../components/MenuSheet";
 import { EditorDeBloco, blocoNovo, ROTULO_DO_BLOCO } from "../components/crossfit/EditorDeBloco";
+import { ColarOQuadro } from "../components/crossfit/ColarOQuadro";
 import { resumoDoMovimento } from "../components/crossfit/MovimentosEditor";
 import { resumoDaForca } from "../components/crossfit/EditorDeForca";
 import { resumoDoMetcon } from "../components/crossfit/EditorDeMetcon";
@@ -92,6 +93,10 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
 
   const [blocos, setBlocos] = useState<Bloco[]>([]);
   const [box, setBox] = useState("");
+  // O quadro que a pessoa colou. Guardado junto dos blocos: eles sao a
+  // interpretacao, ele e a fonte.
+  const [quadro, setQuadro] = useState("");
+  const [colando, setColando] = useState(false);
   const [duracao, setDuracao] = useState("");
   const [rpe, setRpe] = useState("");
   const [notas, setNotas] = useState("");
@@ -146,7 +151,12 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
       return;
     }
 
-    const payload: PayloadDeCrossfit = { v: 2, box: box.trim() || null, blocos: limpos };
+    const payload: PayloadDeCrossfit = {
+      v: 2,
+      box: box.trim() || null,
+      quadro: quadro.trim() || null,
+      blocos: limpos,
+    };
 
     setSalvando(true);
     try {
@@ -187,6 +197,28 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
           />
         </Linha>
       </Card>
+
+      {/* Antes dos blocos: colar o quadro e o caminho curto, e e o primeiro
+          que a pessoa deve enxergar. Montar oito blocos a mao continua ali
+          embaixo para quem preferir. */}
+      {blocos.length === 0 ? (
+        <TouchableOpacity
+          onPress={() => setColando(true)}
+          activeOpacity={0.85}
+          style={styles.colar}
+        >
+          <Txt variant="titleCard">Colar o quadro da aula</Txt>
+          <Txt variant="body" color={colors.text2} style={{ marginTop: 2 }}>
+            Cole o treino como está escrito e eu monto os blocos
+          </Txt>
+        </TouchableOpacity>
+      ) : quadro ? (
+        <TouchableOpacity onPress={() => setColando(true)} activeOpacity={0.7}>
+          <Txt variant="label" color={colors.lime} style={{ marginBottom: spacing.sm }}>
+            Quadro colado · tocar para trocar
+          </Txt>
+        </TouchableOpacity>
+      ) : null}
 
       {blocos.map((b, i) => {
         const linhas = resumo(b);
@@ -243,6 +275,18 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
         }))}
       />
 
+      <ColarOQuadro
+        visivel={colando}
+        aoFechar={() => setColando(false)}
+        aoLer={({ blocos: lidos, box: caixa, quadro: texto }) => {
+          // Substitui, nao acumula: colar de novo e trocar o quadro, nao
+          // registrar dois treinos.
+          setBlocos(lidos);
+          setQuadro(texto);
+          if (caixa && !box.trim()) setBox(caixa);
+        }}
+      />
+
       <EditorDeBloco
         bloco={editando != null ? (blocos[editando] ?? null) : null}
         visivel={editando != null}
@@ -261,6 +305,14 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  colar: {
+    backgroundColor: colors.surface2,
+    borderColor: colors.lime,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    marginBottom: spacing.card,
+    padding: spacing.md,
+  },
   cabecalho: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.md },
   ponto: { width: 12, height: 12, borderRadius: 6 },
   basicas: { marginBottom: spacing.md },

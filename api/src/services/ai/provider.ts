@@ -31,6 +31,8 @@ export interface GenerateOptions {
   userId?: string;
   /** Imagem para o modelo analisar. Só providers com `aceitaImagem`. */
   imagem?: AIImage;
+  /** Prazo próprio, para chamadas que geram muita saída. Padrão: env. */
+  timeoutMs?: number;
 }
 
 export interface AIProvider {

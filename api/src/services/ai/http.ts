@@ -31,7 +31,15 @@ const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function chamarProvedor(
   url: string,
   init: RequestInit,
-  nome: string
+  nome: string,
+  /**
+   * Prazo próprio, para o que gera muita saída.
+   *
+   * O padrão de 25s serve para uma resposta de coach. Ler o quadro de uma aula
+   * inteira devolve oito blocos de JSON — e aí 25s não bastam: descobri
+   * rodando o modelo de verdade, não o mock.
+   */
+  timeoutMs = env.aiTimeoutMs
 ): Promise<RespostaHttp> {
   const tentativas = Math.max(env.aiRetries, 0) + 1;
   let ultimoErro: AIError | null = null;
@@ -39,7 +47,7 @@ export async function chamarProvedor(
   for (let i = 0; i < tentativas; i++) {
     let res: Response;
     try {
-      res = await fetch(url, { ...init, signal: AbortSignal.timeout(env.aiTimeoutMs) });
+      res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     } catch (err) {
       const abortou = (err as Error).name === "TimeoutError" || (err as Error).name === "AbortError";
 

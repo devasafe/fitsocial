@@ -2,7 +2,7 @@ import mongoose, { Schema, type HydratedDocument } from "mongoose";
 import { z } from "zod";
 import { ACTIVITY_KINDS, isValidSport } from "../services/sports.js";
 import { strengthPayloadSchema } from "./strength.js";
-import { wodPayloadV2Schema } from "./crossfit.js";
+import { wodPayloadV2Schema, wodPayloadV2Entrada } from "./crossfit.js";
 
 // Força e CrossFit moram em arquivos próprios: o primeiro porque os dois o
 // usam, o segundo porque é o formato mais rico do projeto.
@@ -119,7 +119,10 @@ export type WodPayloadV1 = z.infer<typeof wodPayloadV1Schema>;
  * A leitura normaliza os dois para a forma de blocos (services/crossfit.ts), de
  * modo que o resto do sistema conhece um formato só.
  */
-export const wodPayloadSchema = z.union([wodPayloadV2Schema, wodPayloadV1Schema]);
+// Entrada usa a versao com refine (ou tem bloco, ou tem o quadro escrito); a
+// leitura de dado ja gravado usa a solta, para nao recusar o que ja esta no
+// banco.
+export const wodPayloadSchema = z.union([wodPayloadV2Entrada, wodPayloadV1Schema]);
 export type WodPayload = z.infer<typeof wodPayloadSchema>;
 
 // ---- Entrada de criação (união discriminada por kind) ----

@@ -13,7 +13,9 @@ export type AiFeature =
   | "diet_generate"
   // Foto de prato analisada. Custa mais que texto — merece linha própria
   // no painel de consumo.
-  | "meal_photo";
+  | "meal_photo"
+  // Quadro da aula de CrossFit lido e virado blocos.
+  | "wod_import";
 
 /** Motivo da falha, já classificado — o painel agrupa por isto. */
 export type AiErrorKind =

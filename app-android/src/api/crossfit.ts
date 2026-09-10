@@ -164,7 +164,37 @@ export type Bloco = BlocoLivre | BlocoDescanso | BlocoSkill | BlocoForca | Bloco
 export interface PayloadDeCrossfit {
   v: 2;
   box?: string | null;
+  /**
+   * O quadro, do jeito que a pessoa colou.
+   *
+   * Guardado sempre: os blocos são a interpretação, este texto é a fonte. Se a
+   * leitura errar, o treino continua registrável e daqui a um ano ainda dá
+   * para saber o que o coach escreveu.
+   */
+  quadro?: string | null;
   blocos: Bloco[];
+}
+
+export interface LeituraDoQuadro {
+  box?: string | null;
+  blocos: Bloco[];
+  /** O que a leitura não conseguiu interpretar. Vazio quando leu tudo. */
+  observacao: string;
+}
+
+/**
+ * Manda o quadro da aula e recebe os blocos montados. NÃO grava nada.
+ *
+ * A leitura preenche o que estava NO QUADRO e nunca o resultado: quanto você
+ * fez não está escrito lá, e um resultado inventado viraria recorde falso.
+ */
+export async function lerQuadro(token: string, texto: string): Promise<LeituraDoQuadro> {
+  const r = await apiFetch<{ data: LeituraDoQuadro }>("/activities/ler-quadro", {
+    method: "POST",
+    token,
+    body: { texto },
+  });
+  return r.data;
 }
 
 // ---- Benchmarks ----
