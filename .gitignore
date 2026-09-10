@@ -21,3 +21,10 @@ app-android/web-build/
 *.mobileprovision
 
 .vercel
+
+# Credenciais do Firebase. O `google-services.json` identifica o app no FCM; a
+# chave de serviço é credencial de ADMINISTRADOR do projeto Firebase — quem a
+# tem manda push em nome do app e lê o que o Firebase guarda. Nenhum dos dois
+# entra no repositório, que é público.
+app-android/google-services.json
+app-android/credenciais/
