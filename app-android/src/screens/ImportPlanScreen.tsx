@@ -8,6 +8,7 @@ import {
   Platform,
 } from "react-native";
 import { notify } from "../lib/notify";
+import { EsperaLonga, PASSOS } from "../components/Espera";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { importPlan } from "../api/plans";
@@ -80,6 +81,10 @@ export function ImportPlanScreen() {
           disabled={text.trim().length < 10}
           size="lg"
         />
+
+        {/* A IA leva cerca de meio minuto. Spinner no botão diz "clicou"; as
+            etapas dizem que ainda está indo. */}
+        <EsperaLonga ativo={loading} passos={PASSOS.importarPlano} style={{ marginTop: spacing.md }} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

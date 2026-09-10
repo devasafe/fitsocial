@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getCurrentPlan, type Plan } from "../api/plans";
 import { colors, radius, spacing } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 import { Txt, Card, Screen, ErrorState } from "../components/ui";
 import type { AppStackParams } from "../navigation/types";
 
@@ -35,7 +36,7 @@ export function TodayWorkoutScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+        <SkeletonLista itens={3} altura={96} />
       </View>
     );
   }

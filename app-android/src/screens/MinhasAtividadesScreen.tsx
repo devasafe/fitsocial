@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { listActivities, type Activity } from "../api/activities";
 import { colors, spacing } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
 
@@ -74,7 +75,7 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.lime} size="large" />
+        <SkeletonLista itens={5} />
       </View>
     );
   }

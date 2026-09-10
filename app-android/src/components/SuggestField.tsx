@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, TextInput, TouchableOpacity } from "react-native";
+import { View, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
 import { Txt } from "./ui";
 import { colors, radius, spacing, type as typeScale } from "../theme";
 
@@ -28,14 +28,20 @@ export function SuggestField({
 }) {
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
+  // Sem isto, esperar a busca é indistinguível de "não achou nada" — e a
+  // pessoa desiste de digitar achando que o termo não existe.
+  const [buscando, setBuscando] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(async () => {
+      setBuscando(true);
       try {
         setItems(await fetchSuggestions(value));
       } catch {
         setItems([]);
+      } finally {
+        setBuscando(false);
       }
     }, 200);
     return () => clearTimeout(t);
@@ -67,6 +73,23 @@ export function SuggestField({
           fontSize: 16,
         }}
       />
+      {open && buscando && items.length === 0 ? (
+        <View
+          style={{
+            marginTop: 4,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: spacing.sm,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.sm,
+          }}
+        >
+          <ActivityIndicator color={colors.text3} size="small" />
+          <Txt variant="caption" color={colors.text3}>
+            Procurando…
+          </Txt>
+        </View>
+      ) : null}
       {open && items.length > 0 ? (
         <View
           style={{

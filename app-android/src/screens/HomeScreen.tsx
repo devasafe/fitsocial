@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { useContadores } from "../context/ContadoresContext";
 import { updateSettings } from "../api/settings";
 import { BadgeSobreposto } from "../components/Badge";
+import { EsperaLonga, PASSOS } from "../components/Espera";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
@@ -45,7 +46,6 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [erroPlano, setErroPlano] = useState<string | null>(null);
-  const [passoDaEspera, setPassoDaEspera] = useState("Montando seu plano…");
   const [adjusting, setAdjusting] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -117,28 +117,6 @@ export function HomeScreen() {
       load();
     }, [load])
   );
-
-  // A geração leva cerca de meio minuto. Um texto que avança mostra que algo
-  // está acontecendo; um texto parado faz a tela parecer travada.
-  useEffect(() => {
-    if (!generating) {
-      setPassoDaEspera("Montando seu plano…");
-      return;
-    }
-    const passos = [
-      "Lendo sua ficha…",
-      "Montando seu treino…",
-      "Ajustando a dieta…",
-      "Terminando os detalhes…",
-    ];
-    let i = 0;
-    setPassoDaEspera(passos[0]);
-    const t = setInterval(() => {
-      i = Math.min(i + 1, passos.length - 1);
-      setPassoDaEspera(passos[i]);
-    }, 7000);
-    return () => clearInterval(t);
-  }, [generating]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -347,12 +325,7 @@ export function HomeScreen() {
           ) : null}
 
           {generating ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-              <ActivityIndicator color={colors.lime} />
-              <Txt variant="body" color={colors.text2}>
-                {passoDaEspera}
-              </Txt>
-            </View>
+            <EsperaLonga ativo passos={PASSOS.plano} />
           ) : erroPlano ? null : (
             <View style={{ gap: spacing.sm }}>
               <Button
@@ -440,14 +413,14 @@ export function HomeScreen() {
            obrigava a gerar um treino que a pessoa não ia usar. */
         <TouchableOpacity onPress={() => void gerarDieta()} activeOpacity={0.7} disabled={gerandoDieta}>
           <Card>
-            <Txt variant="titleCard">
-              {gerandoDieta ? "Montando sua dieta…" : "Quer uma dieta?"}
-            </Txt>
-            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
-              {gerandoDieta
-                ? "Leva cerca de meio minuto."
-                : "O coach monta a partir do seu perfil. Independente do treino."}
-            </Txt>
+            <Txt variant="titleCard">{gerandoDieta ? "Sua dieta" : "Quer uma dieta?"}</Txt>
+            {gerandoDieta ? (
+              <EsperaLonga ativo passos={PASSOS.dieta} style={{ marginTop: spacing.sm }} />
+            ) : (
+              <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+                O coach monta a partir do seu perfil. Independente do treino.
+              </Txt>
+            )}
           </Card>
         </TouchableOpacity>
       )}

@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button } from "../components/ui";
 import { notify } from "../lib/notify";
 import { getWaterDay, addWater, deleteWater, setWaterGoal, type WaterDay } from "../api/water";
 import { colors, spacing, radius } from "../theme";
+import { SkeletonTiles } from "../components/Skeleton";
 
 const PRESETS = [200, 250, 500];
 
@@ -178,7 +179,7 @@ export function AguaScreen() {
 
       {/* Histórico do dia */}
       {loading ? (
-        <ActivityIndicator color={colors.lime} />
+        <SkeletonTiles itens={3} />
       ) : (day?.logs ?? []).length === 0 ? (
         <Card>
           <Txt variant="titleCard">Nada registrado</Txt>

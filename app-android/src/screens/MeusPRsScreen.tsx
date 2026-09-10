@@ -7,6 +7,7 @@ import { Txt, Screen, Card, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
 import { colors, spacing } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
 
@@ -58,7 +59,7 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.lime} size="large" />
+        <SkeletonLista itens={5} altura={72} />
       </View>
     );
   }
