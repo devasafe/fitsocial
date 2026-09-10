@@ -142,7 +142,10 @@ const baseCreateFields = {
   title: z.string().max(120).optional(),
   startedAt: z.coerce.date().optional(),
   durationSec: z.number().int().min(0).max(86_400).optional(),
-  visibility: z.enum(["private", "followers", "public"]).default("followers"),
+  // Sem default de propósito: quando a pessoa não escolhe explicitamente, quem
+  // decide é a preferência dela (services/activityVisibility.ts). Com default
+  // aqui, "não escolheu" viraria indistinguível de "escolheu seguidores".
+  visibility: z.enum(["private", "followers", "public"]).optional(),
   perceivedEffort: z.number().int().min(1).max(10).optional(),
   feeling: z.enum(["otimo", "bom", "normal", "ruim", "pessimo"]).optional(),
   notes: z.string().max(2000).optional(),

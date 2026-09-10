@@ -45,10 +45,27 @@ export interface Comment {
 }
 export interface UserProfile {
   user: { id: string; name: string; username: string | null; avatarUrl: string; bio: string };
-  counts: { posts: number; followers: number; following: number };
+  /** `treinos` conta atividades registradas; `posts`, o que foi publicado.
+   *  Antes o app exibia `posts` sob o rótulo "Treinos". */
+  counts: { treinos: number; posts: number; followers: number; following: number };
   isFollowing: boolean;
   isMe: boolean;
   posts: Post[];
+}
+
+/** Um treino no perfil de alguém. Não é um post — é o registro do que a
+ *  pessoa fez, com ou sem ter compartilhado no feed. */
+export interface TreinoPublico {
+  id: string;
+  sportId: string;
+  kind: string;
+  title: string;
+  startedAt: string;
+  durationSec: number;
+  metrics: Record<string, number | undefined>;
+  payload: Record<string, unknown>;
+  /** true quando esse treino também virou publicação no feed. */
+  compartilhado: boolean;
 }
 
 // Post: qualquer combinação de texto, foto e treino anexado (ao menos um).
@@ -88,6 +105,14 @@ export function unlikePost(token: string, id: string) {
 
 export function getUserProfile(token: string, id: string) {
   return apiFetch<UserProfile>(`/social/users/${id}`, { token });
+}
+
+export function getUserActivities(token: string, id: string, cursor?: string | null) {
+  const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<{ data: TreinoPublico[]; meta: { nextCursor: string | null } }>(
+    `/social/users/${id}/activities${q}`,
+    { token }
+  );
 }
 
 export function followUser(token: string, id: string) {

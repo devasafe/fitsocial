@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
+import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -14,6 +15,7 @@ type Props = NativeStackScreenProps<AppStackParams, "RegisterGeneric">;
 export function RegisterGenericScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
+  const perguntarPrivacidade = usePerguntaDePrivacidade();
   const [name, setName] = useState("");
   const [min, setMin] = useState("");
   const [description, setDescription] = useState("");
@@ -62,6 +64,9 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
           customMetrics,
         },
       });
+      // Esta tela vai direto para publicar, então a pergunta vem antes de sair
+      // — senão quem registra só por aqui nunca seria perguntado.
+      perguntarPrivacidade();
       navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

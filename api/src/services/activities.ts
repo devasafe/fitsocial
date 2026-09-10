@@ -1,6 +1,9 @@
 import type mongoose from "mongoose";
 import { Activity, type ActivityCreateInput } from "../models/Activity.js";
 import { Post } from "../models/Post.js";
+import { User } from "../models/User.js";
+import { HttpError } from "../utils/httpError.js";
+import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
 import { getSport } from "./sports.js";
 import { computeMetrics } from "./activityMetrics.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
@@ -21,6 +24,10 @@ export async function createActivity(
   userId: mongoose.Types.ObjectId,
   input: ActivityCreateInput
 ): Promise<CreatedActivity> {
+  // Precisa do documento para saber a preferência de visibilidade da pessoa.
+  const dono = await User.findById(userId);
+  if (!dono) throw new HttpError(404, "Usuário não encontrado");
+
   let storedPayload: unknown = input.payload;
   let durationSec = input.durationSec ?? 0;
   let metrics = computeMetrics(input);
@@ -54,7 +61,8 @@ export async function createActivity(
     title: input.title ?? "",
     startedAt: input.startedAt ?? new Date(),
     durationSec,
-    visibility: input.visibility,
+    // A escolha explícita manda; sem ela, vale a preferência da pessoa.
+    visibility: input.visibility ?? visibilidadeParaNovaAtividade(dono),
     perceivedEffort: input.perceivedEffort,
     feeling: input.feeling,
     notes: input.notes ?? "",

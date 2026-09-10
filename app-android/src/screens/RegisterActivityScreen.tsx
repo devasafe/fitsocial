@@ -9,6 +9,7 @@ import { createActivity } from "../api/activities";
 import { searchExercises } from "../api/library";
 import { lastEntries, type LastEntry } from "../api/checkins";
 import { usePRCelebration } from "../components/PRCelebration";
+import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
 import { colors, spacing, radius, sportColor } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -63,6 +64,7 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
   const { sportId, prefill } = route.params;
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
+  const perguntarPrivacidade = usePerguntaDePrivacidade();
   const [exercises, setExercises] = useState<ExerciseForm[]>(
     prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
   );
@@ -138,6 +140,8 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
         payload: { variant, exercises: payloadExercises },
       });
       celebratePR(res.meta.newPRs ?? []);
+      // Só aparece para quem ainda não escolheu; o treino já está salvo.
+      perguntarPrivacidade();
       navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

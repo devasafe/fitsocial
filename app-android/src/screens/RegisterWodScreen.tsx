@@ -8,6 +8,7 @@ import { SuggestField } from "../components/SuggestField";
 import { createActivity, type CreateActivityInput } from "../api/activities";
 import { searchWods, type WodBenchmark } from "../api/library";
 import { usePRCelebration } from "../components/PRCelebration";
+import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
 import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -65,6 +66,7 @@ export function RegisterWodScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
+  const perguntarPrivacidade = usePerguntaDePrivacidade();
   const [name, setName] = useState("");
   const [level, setLevel] = useState<"rx" | "scaled" | "adaptado">("rx");
   const [scoreType, setScoreType] = useState<ScoreType>("for_time");
@@ -127,6 +129,8 @@ export function RegisterWodScreen({ route, navigation }: Props) {
         payload,
       });
       celebratePR(res.meta.newPRs ?? []);
+      // Só aparece para quem ainda não escolheu; o treino já está salvo.
+      perguntarPrivacidade();
       navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

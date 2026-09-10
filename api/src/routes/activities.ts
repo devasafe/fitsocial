@@ -4,6 +4,8 @@ import mongoose from "mongoose";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
+import { podeVerAtividade, podarRotaSePrivada } from "../services/activityVisibility.js";
+import { getSport } from "../services/sports.js";
 import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
@@ -121,14 +123,12 @@ activitiesRouter.get(
     const me = req.user!._id;
     const isOwner = a.user.toString() === me.toString();
     if (!isOwner) {
-      // Se foi compartilhada no feed (tem post), qualquer um pode abrir o treino.
-      const shared = await Post.exists({ activity: a._id });
-      if (!shared) {
-        if (a.visibility === "private") throw new HttpError(404, "Atividade não encontrada");
-        if (a.visibility === "followers") {
-          const follows = await Follow.exists({ follower: me, following: a.user });
-          if (!follows) throw new HttpError(404, "Atividade não encontrada");
-        }
+      // Compartilhar no feed torna o treino visível: quem publicou escolheu
+      // mostrar. Fora isso, vale a preferência da pessoa e a visibilidade do
+      // treino — antes esta checagem era pulada sempre que havia post.
+      const compartilhado = await Post.exists({ activity: a._id, hidden: { $ne: true } });
+      if (!compartilhado && !(await podeVerAtividade(a, me))) {
+        throw new HttpError(404, "Atividade não encontrada");
       }
     }
     // Dono do treino (para o cabeçalho do detalhe ao ver de outra pessoa).
@@ -148,7 +148,55 @@ activitiesRouter.get(
         }
       : null;
 
-    res.json({ data: { ...serializeActivity(a), owner, post } });
+    const serializada = serializeActivity(a);
+    res.json({
+      data: {
+        ...serializada,
+        // O traçado só sai se o dono tornou as rotas públicas.
+        payload: await podarRotaSePrivada(
+          (serializada.payload ?? {}) as Record<string, unknown>,
+          a.user,
+          me
+        ),
+        owner,
+        post,
+      },
+    });
+  })
+);
+
+// Compartilhar um treino já registrado. Antes só dava para decidir no instante
+// do registro (shareToFeed): quem lembrasse depois não tinha caminho.
+activitiesRouter.post(
+  "/:id/share",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const { caption } = z
+      .object({ caption: z.string().max(2000).optional() })
+      .parse(req.body ?? {});
+
+    const a = await Activity.findById(req.params.id);
+    if (!a) throw new HttpError(404, "Atividade não encontrada");
+    if (a.user.toString() !== req.user!._id.toString()) {
+      throw new HttpError(403, "Só o dono do treino pode compartilhar");
+    }
+
+    // Um treino, um post. Compartilhar de novo devolve o que já existe em vez
+    // de encher o feed com o mesmo treino repetido.
+    const existente = await Post.findOne({ activity: a._id, hidden: { $ne: true } });
+    if (existente) {
+      res.json({ data: { postId: existente._id.toString() }, meta: { jaCompartilhado: true } });
+      return;
+    }
+
+    const sport = getSport(a.sportId);
+    const post = await Post.create({
+      author: a.user,
+      text: caption?.trim() || `Treino de ${sport?.label ?? a.sportId} concluído 💪`,
+      activity: a._id,
+    });
+
+    res.status(201).json({ data: { postId: post._id.toString() }, meta: { jaCompartilhado: false } });
   })
 );
 

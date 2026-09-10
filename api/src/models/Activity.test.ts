@@ -12,7 +12,9 @@ const strengthBase = {
 describe("activityCreateSchema", () => {
   it("valida um registro de strength e aplica os defaults", () => {
     const parsed = activityCreateSchema.parse(strengthBase);
-    expect(parsed.visibility).toBe("followers");
+    // Sem default no schema de propósito: quando a pessoa não escolhe, quem
+    // decide é a preferência dela (services/activityVisibility.ts).
+    expect(parsed.visibility).toBeUndefined();
     expect(parsed.kind).toBe("strength");
     if (parsed.kind !== "strength") return;
     expect(parsed.payload.variant).toBe("musculacao");
