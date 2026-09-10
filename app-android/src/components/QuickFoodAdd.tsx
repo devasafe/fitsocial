@@ -2,7 +2,10 @@
 // Abre da Home (card de nutrição) sem sair da tela. Registra no dia de hoje.
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Txt, Button, Chip } from "./ui";
+import type { AppStackParams } from "../navigation/types";
 import { notify } from "../lib/notify";
 import { logFood, MEAL_LABEL, type Meal } from "../api/nutrition";
 import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
@@ -36,11 +39,14 @@ export function QuickFoodAdd({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const [meal, setMeal] = useState<Meal>(defaultMeal());
   const [recents, setRecents] = useState<RecentFood[]>([]);
   const [name, setName] = useState("");
   const [kcal, setKcal] = useState("");
   const [protein, setProtein] = useState("");
+  const [carbs, setCarbs] = useState("");
+  const [fat, setFat] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -54,12 +60,22 @@ export function QuickFoodAdd({
     async (food: RecentFood) => {
       setSaving(true);
       try {
-        await logFood(token, { date: todayStr(), meal, name: food.name, kcal: food.kcal, proteinG: food.proteinG });
+        await logFood(token, {
+          date: todayStr(),
+          meal,
+          name: food.name,
+          kcal: food.kcal,
+          proteinG: food.proteinG,
+          carbsG: food.carbsG,
+          fatG: food.fatG,
+        });
         await pushRecentFood(food);
         setRecents(await loadRecents(token));
         setName("");
         setKcal("");
         setProtein("");
+        setCarbs("");
+        setFat("");
         onAdded();
         notify("Adicionado", `${food.name} · ${food.kcal} kcal`);
       } catch (err) {
@@ -76,7 +92,13 @@ export function QuickFoodAdd({
       notify("Faltou preencher", "Informe o nome e as calorias.");
       return;
     }
-    commit({ name: name.trim(), kcal: Number(kcal) || 0, proteinG: Number(protein) || 0 });
+    commit({
+      name: name.trim(),
+      kcal: Number(kcal) || 0,
+      proteinG: Number(protein) || 0,
+      carbsG: Number(carbs) || 0,
+      fatG: Number(fat) || 0,
+    });
   }
 
   return (
@@ -105,6 +127,15 @@ export function QuickFoodAdd({
                 </Txt>
               </TouchableOpacity>
             </View>
+
+            <Button
+              title="Analisar uma foto do prato"
+              variant="secondary"
+              onPress={() => {
+                onClose();
+                nav.navigate("RefeicaoPorFoto", { meal });
+              }}
+            />
 
             {/* Refeição */}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
@@ -153,10 +184,10 @@ export function QuickFoodAdd({
               placeholderTextColor={colors.text3}
               style={inputStyle}
             />
-            <View style={{ flexDirection: "row", gap: spacing.sm }}>
-              <TextInput value={kcal} onChangeText={setKcal} placeholder="kcal" placeholderTextColor={colors.text3} keyboardType="numeric" style={[inputStyle, { flex: 1 }]} />
-              <TextInput value={protein} onChangeText={setProtein} placeholder="proteína (g)" placeholderTextColor={colors.text3} keyboardType="numeric" style={[inputStyle, { flex: 1 }]} />
-            </View>
+            <TextInput value={kcal} onChangeText={setKcal} placeholder="kcal" placeholderTextColor={colors.text3} keyboardType="numeric" style={inputStyle} />
+            <TextInput value={protein} onChangeText={setProtein} placeholder="proteína (g)" placeholderTextColor={colors.text3} keyboardType="numeric" style={inputStyle} />
+            <TextInput value={carbs} onChangeText={setCarbs} placeholder="carboidrato (g)" placeholderTextColor={colors.text3} keyboardType="numeric" style={inputStyle} />
+            <TextInput value={fat} onChangeText={setFat} placeholder="gordura (g)" placeholderTextColor={colors.text3} keyboardType="numeric" style={inputStyle} />
             <Button title="Adicionar" onPress={addManual} loading={saving} />
           </View>
         </KeyboardAvoidingView>

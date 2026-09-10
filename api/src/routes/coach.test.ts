@@ -16,6 +16,7 @@ let userId = "";
 // Mock com fila: cada generate() consome a próxima resposta.
 class MockProvider implements AIProvider {
   readonly name = "mock";
+  readonly aceitaImagem = false;
   queue: string[] = [];
   async generate(): Promise<string> {
     return this.queue.shift() ?? JSON.stringify({ reply: "ok", action: "none" });

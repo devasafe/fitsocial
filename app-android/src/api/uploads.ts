@@ -10,5 +10,5 @@ export async function uploadImage(token: string, form: FormData): Promise<{ url:
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? "Falha no upload da imagem");
-  return data as { url: string };
+  return data as { url: string; width?: number; height?: number };
 }

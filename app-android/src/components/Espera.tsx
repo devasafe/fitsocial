@@ -68,6 +68,7 @@ export const PASSOS = {
     "Bora evoluir 💪",
   ],
   dieta: ["Lendo sua ficha…", "Calculando as calorias…", "Montando as refeições…"],
+  refeicao: ["Olhando o prato…", "Identificando os alimentos…", "Estimando as porções…"],
   importarPlano: [
     "Lendo o que você colou…",
     "Identificando os exercícios…",

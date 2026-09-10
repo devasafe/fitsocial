@@ -3,6 +3,10 @@ import { z } from "zod";
 
 export const MEALS = ["cafe", "almoco", "lanche", "janta"] as const;
 
+/** De onde veio o registro. "foto" e estimativa de IA que a pessoa confirmou —
+ *  saber disso permite, depois, medir o quanto ela costuma corrigir. */
+export const ORIGENS = ["manual", "foto"] as const;
+
 export const foodLogCreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve ser yyyy-mm-dd"),
   meal: z.enum(MEALS),
@@ -11,6 +15,11 @@ export const foodLogCreateSchema = z.object({
   proteinG: z.number().min(0).max(2000).default(0),
   carbsG: z.number().min(0).max(2000).default(0),
   fatG: z.number().min(0).max(2000).default(0),
+  /** Porção em gramas. Opcional: a entrada manual continua sem exigir isto. */
+  gramas: z.number().min(0).max(5000).nullish(),
+  origem: z.enum(ORIGENS).default("manual"),
+  /** Foto do prato, quando veio da análise por imagem. */
+  imageUrl: z.string().url().nullish(),
 });
 
 export type FoodLogCreateInput = z.infer<typeof foodLogCreateSchema>;
@@ -25,6 +34,9 @@ const foodLogSchema = new Schema(
     proteinG: { type: Number, default: 0 },
     carbsG: { type: Number, default: 0 },
     fatG: { type: Number, default: 0 },
+    gramas: { type: Number, default: null },
+    origem: { type: String, enum: ORIGENS, default: "manual" },
+    imageUrl: { type: String, default: "" },
   },
   { timestamps: true }
 );

@@ -25,14 +25,21 @@ interface ChatResponse {
  * Entra na cadeia de fallback junto do Gemini.
  */
 export class OpenAICompatibleProvider implements AIProvider {
+  /** Os modelos configurados hoje (gpt-oss no Groq, llama no OpenRouter) sao
+   *  so de texto. Quando entrar um modelo com visao aqui, e so passar true. */
+  readonly aceitaImagem: boolean;
+
   constructor(
     readonly name: string,
     private readonly baseUrl: string, // ex.: https://api.groq.com/openai/v1
     private readonly apiKey: string,
     private readonly model: string,
     private readonly extraHeaders: Record<string, string> = {},
-    private readonly meta: AiProviderMeta = { keyLabel: "openai#1", chainIndex: 0 }
-  ) {}
+    private readonly meta: AiProviderMeta = { keyLabel: "openai#1", chainIndex: 0 },
+    aceitaImagem = false
+  ) {
+    this.aceitaImagem = aceitaImagem;
+  }
 
   async generate(options: GenerateOptions): Promise<string> {
     const iniciado = Date.now();

@@ -1,10 +1,14 @@
 import { Router } from "express";
+import multer from "multer";
 import mongoose from "mongoose";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { FoodLog, foodLogCreateSchema } from "../models/FoodLog.js";
 import { Plan } from "../models/Plan.js";
+import { processImage } from "../services/media/image.js";
+import { analisarRefeicao, exigirModeloComVisao } from "../services/ai/refeicaoPorFoto.js";
 
 export const nutritionRouter = Router();
 nutritionRouter.use(requireAuth);
@@ -19,8 +23,62 @@ function serialize(l: InstanceType<typeof FoodLog>) {
     proteinG: l.proteinG,
     carbsG: l.carbsG,
     fatG: l.fatG,
+    gramas: l.gramas ?? null,
+    origem: l.origem ?? "manual",
+    imageUrl: l.imageUrl || "",
   };
 }
+
+// ---- análise de foto de refeição ----
+
+// Em memória: a foto é analisada e descartada. Guardar o prato de todo mundo
+// custaria armazenamento para um dado que ninguém revisita.
+const uploadDaFoto = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Envie uma imagem"));
+  },
+}).single("image");
+
+/**
+ * Estima o que tem no prato. NÃO grava nada.
+ *
+ * A pessoa confere e corrige na tela seguinte, e só então os itens viram
+ * registros — um modelo de visão estima porção pela aparência, ele não pesa o
+ * prato, e um erro de 30% que entra calado no total do dia desanda a dieta sem
+ * ela entender por quê.
+ */
+nutritionRouter.post(
+  "/analisar-foto",
+  // Cada análise é uma chamada de IA com imagem, que custa bem mais que texto.
+  rateLimit({ windowMs: 60_000, max: 8, name: "refeicao-foto" }),
+  (req, res, next) =>
+    uploadDaFoto(req, res, (err: unknown) =>
+      err ? next(new HttpError(400, (err as Error).message || "Falha no envio")) : next()
+    ),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw new HttpError(400, "Nenhuma foto enviada");
+    exigirModeloComVisao();
+
+    // O mesmo processamento do upload de post: reduz o tamanho e DESCARTA o
+    // EXIF. Foto de refeição é tirada em casa e carrega a coordenada de casa.
+    let imagem;
+    try {
+      imagem = await processImage(req.file.buffer);
+    } catch {
+      throw new HttpError(400, "Arquivo de imagem inválido");
+    }
+
+    const analise = await analisarRefeicao(
+      { base64: imagem.buffer.toString("base64"), mimeType: imagem.contentType },
+      { userId: req.user!._id.toString(), dica: typeof req.body?.dica === "string" ? req.body.dica : undefined }
+    );
+
+    res.json({ data: analise });
+  })
+);
 
 // Registra um alimento no diário.
 nutritionRouter.post(

@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, TextInput, TouchableOpacity, ActivityIndicator } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Chip } from "../components/ui";
 import { notify } from "../lib/notify";
@@ -8,6 +9,7 @@ import { getDay, logFood, deleteFood, MEAL_LABEL, type DaySummary, type Meal } f
 import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
 import { colors, spacing, radius } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
+import type { AppStackParams } from "../navigation/types";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
 
@@ -37,6 +39,7 @@ function Bar({ value, target }: { value: number; target: number }) {
 }
 
 export function DiarioScreen() {
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [date, setDate] = useState(todayStr());
   const [day, setDay] = useState<DaySummary | null>(null);
@@ -150,6 +153,12 @@ export function DiarioScreen() {
 
       {/* Adicionar alimento */}
       <Card>
+        <Button
+          title="Analisar uma foto do prato"
+          variant="secondary"
+          onPress={() => nav.navigate("RefeicaoPorFoto", { meal })}
+          style={{ marginBottom: spacing.sm }}
+        />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm }}>
           {MEALS.map((m) => (
             <Chip key={m} label={MEAL_LABEL[m]} active={meal === m} onPress={() => setMeal(m)} />
@@ -176,7 +185,7 @@ export function DiarioScreen() {
           </View>
         )}
         {input(name, setName, "Alimento")}
-        <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm }}>
+        <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
           {input(kcal, setKcal, "kcal")}
           {input(protein, setProtein, "proteína (g)")}
         </View>

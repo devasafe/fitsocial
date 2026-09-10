@@ -45,6 +45,7 @@ import { ConfiguracoesScreen } from "../screens/ConfiguracoesScreen";
 import { AlterarSenhaScreen } from "../screens/AlterarSenhaScreen";
 import { ExcluirContaScreen } from "../screens/ExcluirContaScreen";
 import { RegistrarScreen } from "../screens/RegistrarScreen";
+import { RefeicaoPorFotoScreen } from "../screens/RefeicaoPorFotoScreen";
 import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
 import { RegisterClassScreen } from "../screens/RegisterClassScreen";
@@ -226,6 +227,16 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="Registrar"
             component={RegistrarScreen}
             options={{ ...transicaoDeFolha, presentation: "modal" }}
+          />
+          <AppStack.Screen
+            name="RefeicaoPorFoto"
+            component={RefeicaoPorFotoScreen}
+            options={{
+              ...transicaoDeFolha,
+              headerShown: true,
+              title: "Refeição por foto",
+              ...headerStyle,
+            }}
           />
           <AppStack.Screen
             name="RegisterActivity"
