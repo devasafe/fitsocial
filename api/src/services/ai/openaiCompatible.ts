@@ -101,7 +101,8 @@ export class OpenAICompatibleProvider implements AIProvider {
           },
           body: JSON.stringify(body),
         },
-        this.name
+        this.name,
+        options.timeoutMs
       );
     } catch (err) {
       const kind = err instanceof AIError && err.kind === "timeout" ? "timeout" : "network";

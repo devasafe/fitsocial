@@ -119,7 +119,8 @@ export class GeminiProvider implements AIProvider {
           },
           body: JSON.stringify(body),
         },
-        "o Gemini"
+        "o Gemini",
+        options.timeoutMs
       );
     } catch (err) {
       const kind = err instanceof AIError && err.kind === "timeout" ? "timeout" : "network";

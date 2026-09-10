@@ -286,8 +286,28 @@ export type Bloco = z.infer<typeof blocoSchema>;
 export const wodPayloadV2Schema = z.object({
   v: z.literal(2),
   box: z.string().max(80).nullish(),
+  /**
+   * O quadro, do jeito que estava escrito.
+   *
+   * Guardado sempre, mesmo quando os blocos foram montados a partir dele: os
+   * blocos são a INTERPRETAÇÃO, este texto é a fonte. Se a leitura errar, ou
+   * se o formato do box não couber em bloco nenhum, o treino continua
+   * registrável — e daqui a um ano ainda dá para saber o que o coach escreveu.
+   */
+  quadro: z.string().max(4000).nullish(),
   // 12 era pouco para um quadro com aquecimento, skill, tres partes de WOD e
   // os descansos entre elas.
-  blocos: z.array(blocoSchema).min(1).max(24),
+  //
+  // Sem mínimo: um treino colado do quadro cujo texto a leitura não conseguiu
+  // interpretar continua sendo um treino. O que não pode é vir vazio dos dois
+  // jeitos — daí o refine abaixo.
+  blocos: z.array(blocoSchema).max(24).default([]),
 });
 export type WodPayloadV2 = z.infer<typeof wodPayloadV2Schema>;
+
+/** O que a borda valida: ou tem bloco, ou tem o quadro escrito. Vazio dos dois
+ *  lados não é treino nenhum. */
+export const wodPayloadV2Entrada = wodPayloadV2Schema.refine(
+  (p) => p.blocos.length > 0 || !!p.quadro?.trim(),
+  { message: "Monte ao menos um bloco, ou cole o quadro do treino" }
+);
