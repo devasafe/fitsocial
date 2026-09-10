@@ -3,6 +3,13 @@ import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, ActivityIndic
 import { colors, radius } from "../theme";
 import type { VideoRef } from "../api/exerciseVideos";
 import { ExerciseVideoModal } from "./ExerciseVideoModal";
+import { EscolherPlataformaSheet } from "./EscolherPlataformaSheet";
+import {
+  getPlataforma,
+  setPlataforma,
+  urlDeBusca,
+  type PlataformaDeVideo,
+} from "../lib/plataformaDeVideo";
 
 interface Props {
   video: VideoRef | null;
@@ -15,6 +22,27 @@ const H = 40;
 
 export function ExerciseVideoThumb({ video, loading, exerciseName }: Props) {
   const [open, setOpen] = useState(false);
+  const [escolhendo, setEscolhendo] = useState(false);
+
+  function abrirBusca(plataforma: PlataformaDeVideo) {
+    void Linking.openURL(urlDeBusca(plataforma, exerciseName));
+  }
+
+  // Só pergunta quem ainda não respondeu. Respondeu uma vez, virou preferência
+  // — e preferência não se pergunta de novo no meio do treino.
+  async function verExecucao() {
+    const guardada = await getPlataforma();
+    if (guardada) {
+      abrirBusca(guardada);
+      return;
+    }
+    setEscolhendo(true);
+  }
+
+  async function escolher(plataforma: PlataformaDeVideo) {
+    await setPlataforma(plataforma);
+    abrirBusca(plataforma);
+  }
 
   if (loading) {
     return (
@@ -24,17 +52,24 @@ export function ExerciseVideoThumb({ video, loading, exerciseName }: Props) {
     );
   }
 
-  // Sem vídeo (sem API key ou "miss"): fallback abre a busca no YouTube externo.
+  // Sem vídeo em cache (sem chave de API ou "miss"): a busca vai para fora, na
+  // plataforma que a pessoa escolheu.
   if (!video) {
-    const q = encodeURIComponent(`${exerciseName} execução correta`);
     return (
-      <TouchableOpacity
-        style={[styles.box, styles.center, styles.fallback]}
-        onPress={() => Linking.openURL(`https://www.youtube.com/results?search_query=${q}`)}
-        accessibilityLabel={`Buscar vídeo de ${exerciseName} no YouTube`}
-      >
-        <Text style={styles.play}>▶</Text>
-      </TouchableOpacity>
+      <>
+        <TouchableOpacity
+          style={[styles.box, styles.center, styles.fallback]}
+          onPress={() => void verExecucao()}
+          accessibilityLabel={`Buscar vídeo de ${exerciseName}`}
+        >
+          <Text style={styles.play}>▶</Text>
+        </TouchableOpacity>
+        <EscolherPlataformaSheet
+          visivel={escolhendo}
+          aoFechar={() => setEscolhendo(false)}
+          aoEscolher={(p) => void escolher(p)}
+        />
+      </>
     );
   }
 
