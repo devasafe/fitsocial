@@ -9,6 +9,7 @@ import { notify } from "../lib/notify";
 import { listMyChallenges, discoverChallenges, joinChallenge, scoreModeName, type Challenge } from "../api/challenges";
 import { useMarcarAoChegarAoFim } from "../lib/marcarVisto";
 import { colors, spacing, radius } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 
 function periodLabel(endAt: string): string {
@@ -86,7 +87,9 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.lime} style={{ marginTop: spacing.lg }} />
+        // Lista de cartões: o esqueleto no formato reserva o espaço, e a tela
+        // não pula quando os desafios chegam.
+        <SkeletonLista itens={3} altura={104} />
       ) : error && items.length === 0 ? (
         <ErrorState message="Não foi possível carregar os desafios." onRetry={load} />
       ) : items.length === 0 ? (

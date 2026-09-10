@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, ActivityIndicator } from "react-native";
 import { notify } from "../lib/notify";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
@@ -70,9 +70,20 @@ export function EditProfileScreen() {
       <View style={styles.avatarRow}>
         <Avatar uri={avatarUrl} name={name || "?"} size={84} />
         <TouchableOpacity onPress={pickImage} disabled={uploading} activeOpacity={0.7}>
-          <Txt variant="bodyStrong" color={colors.lime}>
-            {uploading ? "Enviando…" : "Trocar foto"}
-          </Txt>
+          {uploading ? (
+            // Texto parado não distingue "enviando" de "travou" — e a foto pode
+            // ser grande no 4G do box.
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <ActivityIndicator color={colors.lime} size="small" />
+              <Txt variant="bodyStrong" color={colors.text2}>
+                Enviando foto…
+              </Txt>
+            </View>
+          ) : (
+            <Txt variant="bodyStrong" color={colors.lime}>
+              Trocar foto
+            </Txt>
+          )}
         </TouchableOpacity>
       </View>
 

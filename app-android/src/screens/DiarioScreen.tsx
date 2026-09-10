@@ -7,6 +7,7 @@ import { notify } from "../lib/notify";
 import { getDay, logFood, deleteFood, MEAL_LABEL, type DaySummary, type Meal } from "../api/nutrition";
 import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
 import { colors, spacing, radius } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
 
@@ -184,7 +185,7 @@ export function DiarioScreen() {
 
       {/* Refeições */}
       {loading ? (
-        <ActivityIndicator color={colors.lime} />
+        <SkeletonLista itens={4} altura={64} />
       ) : (day?.logs ?? []).length === 0 ? (
         <Card>
           <Txt variant="titleCard">Nada registrado nesse dia</Txt>

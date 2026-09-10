@@ -19,6 +19,7 @@ import type { ChatMessage } from "../api/onboarding";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
 import { Txt, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
+import { SkeletonChat } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 
 export function CoachScreen() {
@@ -103,10 +104,11 @@ export function CoachScreen() {
     }
   }
 
+  // Bolhas de conversa, não um spinner no vazio: a tela já parece o que vai ser.
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.lime} size="large" />
+      <View style={[styles.center, { justifyContent: "flex-start", padding: spacing.gutter }]}>
+        <SkeletonChat itens={4} />
       </View>
     );
   }

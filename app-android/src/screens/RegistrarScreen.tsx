@@ -9,6 +9,7 @@ import { listSports, type Sport } from "../api/sports";
 import { listActivities, type Activity } from "../api/activities";
 import { sportLabel } from "../lib/sportLabel";
 import { colors, spacing, radius, sportColor } from "../theme";
+import { SkeletonGrade } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 
 interface RecentSport {
@@ -144,7 +145,7 @@ export function RegistrarScreen() {
       </Txt>
 
       {loading ? (
-        <ActivityIndicator color={colors.lime} />
+        <SkeletonGrade itens={6} altura={92} />
       ) : (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.card }}>
           {sports.map((s) => (

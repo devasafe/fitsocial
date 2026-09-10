@@ -54,7 +54,7 @@ import { AguaScreen } from "../screens/AguaScreen";
 import { NotificacoesScreen } from "../screens/NotificacoesScreen";
 import { BuscarPessoasScreen } from "../screens/BuscarPessoasScreen";
 import type { AuthStackParams, AppStackParams, MainTabParams } from "./types";
-import { colors } from "../theme";
+import { colors, motion } from "../theme";
 
 const AuthStack = createNativeStackNavigator<AuthStackParams>();
 const AppStack = createNativeStackNavigator<AppStackParams>();
@@ -64,6 +64,33 @@ const navTheme = {
   ...DefaultTheme,
   colors: { ...DefaultTheme.colors, background: colors.bg },
 };
+
+/**
+ * Transição de tela.
+ *
+ * `motion.base` (200ms) vem do design system, e a regra dele é "movimento
+ * responde a ação". Navegar é uma ação, então tem movimento. Conteúdo chegando
+ * da rede NÃO é ação da pessoa — por isso nada aqui faz o conteúdo aparecer
+ * animado, só a tela.
+ *
+ * Empilhar desliza da direita: é o gesto mental de entrar mais fundo, e
+ * devolve o caminho de volta ao sair. Rápido de propósito — transição que a
+ * pessoa espera terminar deixou de ser suave e virou lentidão.
+ */
+const transicaoDeTela = {
+  animation: "slide_from_right",
+  animationDuration: motion.base,
+} as const;
+
+/**
+ * Telas que a pessoa ABRE em cima do que estava fazendo, em vez de avançar
+ * para dentro: registrar, compor um post, editar. Sobem de baixo, como uma
+ * folha — deslizar da direita sugeriria profundidade que não existe ali.
+ */
+const transicaoDeFolha = {
+  animation: "slide_from_bottom",
+  animationDuration: motion.base,
+} as const;
 
 const headerStyle = {
   headerStyle: { backgroundColor: colors.surface },
@@ -116,6 +143,10 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        // Abas são irmãs, não profundidade: deslizar entre elas mentiria sobre
+        // hierarquia. Fade curto — some e aparece, sem chamar atenção.
+        animation: "fade",
+        transitionSpec: { animation: "timing", config: { duration: motion.micro } },
         tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.line },
         tabBarActiveTintColor: colors.lime,
         tabBarInactiveTintColor: colors.text2,
@@ -146,7 +177,7 @@ function MainTabs() {
 
 function AuthFlow() {
   return (
-    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+    <AuthStack.Navigator screenOptions={{ headerShown: false, ...transicaoDeTela }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
       <AuthStack.Screen
@@ -160,7 +191,7 @@ function AuthFlow() {
 
 function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
   return (
-    <AppStack.Navigator screenOptions={{ headerShown: false }}>
+    <AppStack.Navigator screenOptions={{ headerShown: false, ...transicaoDeTela }}>
       {needsOnboarding ? (
         <AppStack.Screen name="Onboarding" component={OnboardingForm} />
       ) : (
@@ -169,42 +200,42 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="Registrar"
             component={RegistrarScreen}
-            options={{ presentation: "modal" }}
+            options={{ ...transicaoDeFolha, presentation: "modal" }}
           />
           <AppStack.Screen
             name="RegisterActivity"
             component={RegisterActivityScreen}
-            options={{ headerShown: true, title: "Novo treino", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Novo treino", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterEndurance"
             component={RegisterEnduranceScreen}
-            options={{ headerShown: true, title: "Nova atividade", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Nova atividade", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterClass"
             component={RegisterClassScreen}
-            options={{ headerShown: true, title: "Nova atividade", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Nova atividade", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterGeneric"
             component={RegisterGenericScreen}
-            options={{ headerShown: true, title: "Nova atividade", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Nova atividade", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterWod"
             component={RegisterWodScreen}
-            options={{ headerShown: true, title: "Novo WOD", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Novo WOD", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterCrossfit"
             component={RegisterCrossfitScreen}
-            options={{ headerShown: true, title: "Registrar CrossFit", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Registrar CrossFit", ...headerStyle }}
           />
           <AppStack.Screen
             name="LiveTrack"
             component={LiveTrackScreen}
-            options={{ headerShown: true, title: "Gravar percurso", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Gravar percurso", ...headerStyle }}
           />
           <AppStack.Screen
             name="TodayWorkout"
@@ -234,9 +265,9 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="CreatePost"
             component={CreatePostScreen}
-            options={{ headerShown: true, title: "Novo post", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Novo post", ...headerStyle }}
           />
-          <AppStack.Screen name="EditarPost" component={EditarPostScreen} />
+          <AppStack.Screen name="EditarPost" component={EditarPostScreen} options={transicaoDeFolha} />
           <AppStack.Screen
             name="EditProfile"
             component={EditProfileScreen}
@@ -320,7 +351,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="CriarDesafio"
             component={CriarDesafioScreen}
-            options={{ headerShown: true, title: "Criar desafio", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Criar desafio", ...headerStyle }}
           />
           <AppStack.Screen
             name="DesafioDetail"
@@ -345,12 +376,12 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="Coach"
             component={CoachScreen}
-            options={{ headerShown: true, title: "Seu coach", presentation: "modal", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Seu coach", presentation: "modal", ...headerStyle }}
           />
           <AppStack.Screen
             name="BuscarPessoas"
             component={BuscarPessoasScreen}
-            options={{ headerShown: true, title: "Buscar pessoas", ...headerStyle }}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Buscar pessoas", ...headerStyle }}
           />
         </>
       )}

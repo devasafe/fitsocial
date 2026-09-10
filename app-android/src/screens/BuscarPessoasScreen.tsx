@@ -10,6 +10,7 @@ import { Txt } from "../components/ui";
 import { Avatar } from "../components/Avatar";
 import { FollowButton } from "../components/FollowButton";
 import { colors, spacing, radius } from "../theme";
+import { SkeletonLista } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 
 export function BuscarPessoasScreen() {
@@ -79,7 +80,7 @@ export function BuscarPessoasScreen() {
         ListEmptyComponent={
           loading ? (
             <View style={{ paddingTop: spacing.lg, alignItems: "center" }}>
-              <ActivityIndicator color={colors.lime} />
+              <SkeletonLista itens={4} altura={56} />
             </View>
           ) : (
             <Txt variant="body" color={colors.text2} style={{ textAlign: "center", marginTop: spacing.lg }}>
