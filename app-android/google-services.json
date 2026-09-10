@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "885353775037",
+    "project_id": "fitsocial-bc29a",
+    "storage_bucket": "fitsocial-bc29a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885353775037:android:cf638fb0098513cf371cd4",
+        "android_client_info": {
+          "package_name": "club.satriz.fitsocial"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDmh6SGIB0scLYOxsNaErv4aJ7BAmGAr7E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
