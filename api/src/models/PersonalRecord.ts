@@ -21,6 +21,7 @@ const prSchema = new Schema(
         "wod_time",
         "wod_score",
         "wod_load",
+        "skill_reps",
       ],
       required: true,
     },

@@ -10,7 +10,7 @@ import { FoodLog } from "../models/FoodLog.js";
 import { CoachMessage } from "../models/CoachMessage.js";
 import { User } from "../models/User.js";
 import { chaveDoDia } from "../utils/dia.js";
-import type { AIProvider, AIGenerateParams } from "../services/ai/provider.js";
+import type { AIProvider, GenerateOptions } from "../services/ai/provider.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -20,7 +20,7 @@ class EspiaoDeProvider implements AIProvider {
   readonly name = "espiao";
   ultimoSystem = "";
   proximaResposta = JSON.stringify({ reply: "ok", action: "none" });
-  async generate(params: AIGenerateParams): Promise<string> {
+  async generate(params: GenerateOptions): Promise<string> {
     this.ultimoSystem = params.system ?? "";
     return this.proximaResposta;
   }

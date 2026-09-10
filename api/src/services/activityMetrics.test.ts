@@ -43,7 +43,7 @@ describe("computeMetrics por formato (2b)", () => {
     const m = computeMetrics(input);
     expect(m.distanceKm).toBe(5);
     expect(m.avgPaceSecPerKm).toBe(360); // 6:00 / km
-    expect(Math.round(m.speedKmh)).toBe(10);
+    expect(Math.round(m.speedKmh as number)).toBe(10);
   });
 
   it("class e generic guardam os minutos", () => {
