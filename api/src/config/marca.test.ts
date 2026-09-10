@@ -14,7 +14,10 @@ import { env } from "./env.js";
  * antigo de propósito: trocá-los quebraria instalação e sessão de quem já usa.
  */
 
-const RAIZ = join(import.meta.dirname, "..");
+// process.cwd() e nao import.meta: o build da API compila para CommonJS e
+// os testes entram no build, entao import.meta aqui quebra o deploy — que
+// foi exatamente o que aconteceu.
+const RAIZ = join(process.cwd(), "src");
 
 /** Onde o nome aparece por motivo legítimo, e não deve ser trocado. */
 const PERMITIDOS = new Set([

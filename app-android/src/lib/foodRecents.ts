@@ -7,6 +7,9 @@ export interface RecentFood {
   name: string;
   kcal: number;
   proteinG: number;
+  /** Opcionais: os recentes gravados antes disto so tinham kcal e proteina. */
+  carbsG?: number;
+  fatG?: number;
 }
 
 // Recentes do servidor (autoritativo, cruza dispositivos) com fallback local.

@@ -8,22 +8,36 @@ import { AIError, type AIProvider, type GenerateOptions } from "./provider.js";
  */
 export class FallbackProvider implements AIProvider {
   readonly name: string;
+  readonly aceitaImagem: boolean;
 
   constructor(private readonly providers: AIProvider[]) {
     if (providers.length === 0) throw new AIError("Nenhum provider de IA configurado");
     this.name = `fallback(${providers.map((p) => p.name).join(" → ")})`;
+    // A cadeia enxerga se ALGUÉM nela enxerga.
+    this.aceitaImagem = providers.some((p) => p.aceitaImagem);
   }
 
   async generate(options: GenerateOptions): Promise<string> {
+    // Com imagem, só entram os que enxergam. Mandar uma foto para um modelo de
+    // texto não dá erro: dá uma resposta confiante sobre um prato que ele nunca
+    // viu, e a pessoa registra macros inventados no diário dela.
+    const elegiveis = options.imagem
+      ? this.providers.filter((p) => p.aceitaImagem)
+      : this.providers;
+
+    if (elegiveis.length === 0) {
+      throw new AIError("Nenhum modelo configurado analisa imagem", false, "credencial");
+    }
+
     let lastError: unknown;
-    for (let i = 0; i < this.providers.length; i++) {
-      const provider = this.providers[i];
+    for (let i = 0; i < elegiveis.length; i++) {
+      const provider = elegiveis[i];
       try {
         return await provider.generate(options);
       } catch (err) {
         lastError = err;
         const retryable = err instanceof AIError ? err.retryable : true;
-        const isLast = i === this.providers.length - 1;
+        const isLast = i === elegiveis.length - 1;
         console.warn(
           `[ai] ${provider.name} falhou: ${(err as Error).message}.` +
             (retryable && !isLast ? " Caindo para o próximo…" : "")

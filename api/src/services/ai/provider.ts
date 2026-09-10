@@ -9,6 +9,13 @@ export interface AIMessage {
   content: string;
 }
 
+/** Uma imagem enviada junto do texto, para os modelos que enxergam. */
+export interface AIImage {
+  /** Bytes da imagem em base64, SEM o prefixo "data:". */
+  base64: string;
+  mimeType: string;
+}
+
 export interface GenerateOptions {
   /** Instrução de sistema (persona, regras, formato de saída). */
   system?: string;
@@ -22,11 +29,17 @@ export interface GenerateOptions {
   feature?: AiFeature;
   /** Quem disparou a chamada — só para telemetria. */
   userId?: string;
+  /** Imagem para o modelo analisar. Só providers com `aceitaImagem`. */
+  imagem?: AIImage;
 }
 
 export interface AIProvider {
   /** Nome do provider (para logs/diagnóstico). */
   readonly name: string;
+  /** Este modelo enxerga imagem? Quem não enxerga é pulado na cadeia quando a
+   *  chamada tem foto — mandar mesmo assim renderia uma resposta inventada
+   *  sobre um prato que o modelo nunca viu. */
+  readonly aceitaImagem: boolean;
   /** Gera texto a partir do histórico. Retorna o texto bruto da resposta. */
   generate(options: GenerateOptions): Promise<string>;
 }

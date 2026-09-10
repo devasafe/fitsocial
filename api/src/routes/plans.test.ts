@@ -41,6 +41,7 @@ const planJson = JSON.stringify({
 
 class MockProvider implements AIProvider {
   readonly name = "mock";
+  readonly aceitaImagem = false;
   next = planJson;
   async generate(): Promise<string> {
     return this.next;

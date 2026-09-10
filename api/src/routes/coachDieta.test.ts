@@ -18,6 +18,7 @@ let mongod: MongoMemoryServer;
 /** Guarda o prompt que chegou: é ele que diz o que o coach enxergou. */
 class EspiaoDeProvider implements AIProvider {
   readonly name = "espiao";
+  readonly aceitaImagem = false;
   ultimoSystem = "";
   proximaResposta = JSON.stringify({ reply: "ok", action: "none" });
   async generate(params: GenerateOptions): Promise<string> {

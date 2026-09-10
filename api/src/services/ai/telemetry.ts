@@ -10,7 +10,10 @@ export type AiFeature =
   | "plan_adjust"
   | "plan_import"
   // Dieta gerada sozinha, sem treino junto: consumo próprio no painel.
-  | "diet_generate";
+  | "diet_generate"
+  // Foto de prato analisada. Custa mais que texto — merece linha própria
+  // no painel de consumo.
+  | "meal_photo";
 
 /** Motivo da falha, já classificado — o painel agrupa por isto. */
 export type AiErrorKind =

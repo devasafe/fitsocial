@@ -46,6 +46,7 @@ export type AppStackParams = {
   BuscarPessoas: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
+  RefeicaoPorFoto: { meal?: "cafe" | "almoco" | "lanche" | "janta" } | undefined;
   RegisterActivity: {
     sportId: string;
     // "Repetir último": pré-preenche os exercícios/séries a partir do último treino.

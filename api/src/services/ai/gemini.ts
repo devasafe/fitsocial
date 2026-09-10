@@ -10,9 +10,13 @@ import { chamarProvedor } from "./http.js";
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
+/** Uma part e texto OU imagem embutida. O corpo aceita as duas na mesma
+ *  mensagem, que e como se manda uma foto com a pergunta junto. */
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+
 interface GeminiContent {
   role: "user" | "model";
-  parts: { text: string }[];
+  parts: GeminiPart[];
 }
 
 interface GeminiResponse {
@@ -34,6 +38,8 @@ interface GeminiResponse {
  */
 export class GeminiProvider implements AIProvider {
   readonly name = "gemini";
+  // A familia Flash e multimodal: aceita imagem na mesma chamada.
+  readonly aceitaImagem = true;
 
   constructor(
     private readonly apiKey = env.geminiApiKey,
@@ -76,6 +82,18 @@ export class GeminiProvider implements AIProvider {
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
+
+    // A imagem vai na ULTIMA mensagem do usuario, antes do texto: e a ordem que
+    // o Gemini documenta para "olhe isto e responda aquilo".
+    if (options.imagem) {
+      const ultima = contents[contents.length - 1];
+      if (!ultima || ultima.role !== "user") {
+        throw new AIError("Imagem sem uma pergunta de usuario para acompanhar");
+      }
+      ultima.parts.unshift({
+        inlineData: { mimeType: options.imagem.mimeType, data: options.imagem.base64 },
+      });
+    }
 
     const body: Record<string, unknown> = {
       contents,
