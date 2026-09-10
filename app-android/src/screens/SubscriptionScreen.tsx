@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { devUpgrade } from "../api/billing";
 import { Button, Txt } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
+import { MARCA } from "../marca";
 
 const BENEFITS = [
   "Planos de treino e dieta ilimitados",
@@ -50,7 +51,7 @@ export function SubscriptionScreen() {
           Acesso completo
         </Txt>
         <Txt variant="body" color={colors.text2} style={styles.subtitle}>
-          Enquanto construímos o FitSocial, fundadores usam tudo sem limite.
+          Enquanto construímos o {MARCA}, fundadores usam tudo sem limite.
         </Txt>
       </View>
 

@@ -8,7 +8,7 @@ async function main() {
   installAiTelemetry(); // só depois do banco: o sink grava direto no Mongo
   const app = createApp();
   app.listen(env.port, () => {
-    console.log(`[api] FitSocial rodando em http://localhost:${env.port}`);
+    console.log(`[api] ${env.appName} rodando em http://localhost:${env.port}`);
   });
 }
 

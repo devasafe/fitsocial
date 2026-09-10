@@ -7,6 +7,7 @@ import {
 import { planDataSchema, dietDataSchema, type PlanData, type DietData } from "../../models/Plan.js";
 import type { ProfileData } from "../../models/Profile.js";
 import { backfillWorkoutKinds } from "../exerciseKind.js";
+import { env } from "../../config/env.js";
 
 // Formato JSON do plano, reutilizado nos prompts de geração/importação.
 const PLAN_JSON_FORMAT = `{
@@ -35,7 +36,7 @@ export function normalizePlanData(plan: PlanData): PlanData {
 }
 
 function buildSystemPrompt(): string {
-  return `Você é o coach do FitSocial, que acumula os papéis de personal trainer e nutricionista. Gere um plano de TREINO e DIETA personalizado, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
+  return `Você é o coach do ${env.appName}, que acumula os papéis de personal trainer e nutricionista. Gere um plano de TREINO e DIETA personalizado, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
 
 ${TRAINING_KNOWLEDGE}
 
@@ -114,7 +115,7 @@ export async function generateDiet(
   userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<DietData> {
-  const system = `Você é o nutricionista do FitSocial. Gere uma DIETA personalizada, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
+  const system = `Você é o nutricionista do ${env.appName}. Gere uma DIETA personalizada, em português do Brasil, seguindo ESTRITAMENTE os princípios abaixo.
 
 ${NUTRITION_KNOWLEDGE}
 
@@ -217,7 +218,7 @@ export async function importPlanFromText(
     ? `Perfil (para preencher lacunas com coerência): objetivo=${profile.goal}, nível=${profile.experienceLevel}, ${profile.daysPerWeek}x/sem, restrições=[${profile.dietaryRestrictions.join(", ") || "nenhuma"}], lesões=[${profile.injuriesConditions.join(", ") || "nenhuma"}].`
     : "";
 
-  const system = `Você é o assistente do FitSocial. O usuário JÁ TEM um plano (feito por um profissional) e quer inseri-lo no app. Sua tarefa é converter o texto do plano dele para o formato JSON estruturado do app.
+  const system = `Você é o assistente do ${env.appName}. O usuário JÁ TEM um plano (feito por um profissional) e quer inseri-lo no app. Sua tarefa é converter o texto do plano dele para o formato JSON estruturado do app.
 
 REGRAS IMPORTANTES:
 - Use FIELMENTE o que o usuário forneceu. NÃO invente exercícios, cargas ou refeições que não estão no texto.

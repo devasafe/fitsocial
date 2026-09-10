@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAIProvider, parseJson, type AIMessage, type AIProvider } from "./index.js";
 import { GOALS, SEXES, LEVELS, profileDataSchema, type ProfileData } from "../../models/Profile.js";
+import { env } from "../../config/env.js";
 
 // O que a IA devolve a cada turno da conversa. A ficha intermediária é
 // TOLERANTE de propósito (o modelo costuma mandar campos ainda vazios como
@@ -17,7 +18,7 @@ export interface OnboardingTurn {
   profile: ProfileData | null;
 }
 
-const SYSTEM_PROMPT = `Você é o coach do FitSocial, um app de treino e nutrição. Sua tarefa é conduzir uma conversa de cadastro (onboarding) calorosa e natural, em português do Brasil, para conhecer a pessoa e montar a ficha dela.
+const SYSTEM_PROMPT = `Você é o coach do ${env.appName}, um app de treino e nutrição. Sua tarefa é conduzir uma conversa de cadastro (onboarding) calorosa e natural, em português do Brasil, para conhecer a pessoa e montar a ficha dela.
 
 COMPORTAMENTO:
 - Fale como um treinador amigável e acolhedor, não como um formulário. Uma pergunta por vez.
@@ -79,6 +80,6 @@ export async function runOnboardingTurn(
 
 /** Mensagem inicial do coach, mostrada antes do usuário digitar. */
 export const ONBOARDING_GREETING =
-  "Oi! Eu sou seu coach aqui no FitSocial 💪 Vou te fazer algumas perguntas rápidas pra montar seu treino e sua dieta sob medida. Pra começar: qual é seu principal objetivo hoje — perder gordura, ganhar massa, cuidar da saúde ou melhorar performance?";
+  `Oi! Eu sou seu coach aqui no ${env.appName} 💪 Vou te fazer algumas perguntas rápidas pra montar seu treino e sua dieta sob medida. Pra começar: qual é seu principal objetivo hoje — perder gordura, ganhar massa, cuidar da saúde ou melhorar performance?`;
 
 export type { ProfileData };

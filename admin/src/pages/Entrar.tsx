@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { entrar, ErroApi } from "../api";
+import { MARCA } from "../marca";
 
 export function Entrar({ aoEntrar }: { aoEntrar: (token: string) => void }) {
   const [email, setEmail] = useState("");
@@ -29,7 +30,7 @@ export function Entrar({ aoEntrar }: { aoEntrar: (token: string) => void }) {
     <div className="entrar">
       <form onSubmit={enviar}>
         <div style={{ marginBottom: 6 }}>
-          <h1>Painel do FitSocial</h1>
+          <h1>Painel do {MARCA}</h1>
           <p className="selo" style={{ marginTop: 6 }}>
             Sua sessão aqui vale 12 horas e é separada da do aplicativo.
           </p>

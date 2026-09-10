@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { buscarPanorama, type Panorama } from "../api";
 import { Cartao } from "../components/Cartao";
 import { GraficoBarras, GraficoLinhas } from "../components/Grafico";
+import { MARCA } from "../marca";
 
 const JANELAS = [7, 30, 90];
 const nf = new Intl.NumberFormat("pt-BR");
@@ -67,7 +68,7 @@ export function Painel({ token }: { token: string }) {
         <div>
           <h1>Crescimento</h1>
           <p>
-            Como o FitSocial está indo nos últimos {dias} dias. Os dias fecham no horário
+            Como o {MARCA} está indo nos últimos {dias} dias. Os dias fecham no horário
             de Brasília.
           </p>
         </div>

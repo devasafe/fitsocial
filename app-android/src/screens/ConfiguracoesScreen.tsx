@@ -31,7 +31,11 @@ import {
 } from "../lib/plataformaDeVideo";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
-import app from "../../app.json";
+// A versao vem da configuracao ja resolvida do Expo: o app.json virou
+// app.config.js para o nome do produto sair de um lugar so, e ler o
+// arquivo de configuracao direto amarraria a tela ao formato dele.
+import Constants from "expo-constants";
+import { MARCA } from "../marca";
 
 type Nav = NativeStackNavigationProp<AppStackParams>;
 
@@ -71,7 +75,7 @@ export function ConfiguracoesScreen() {
     if (!ligar) {
       notify(
         "Desligue pelo sistema",
-        "Para parar de receber no celular, desative as notificações do FitSocial nas configurações do aparelho."
+        `Para parar de receber no celular, desative as notificações do ${MARCA} nas configurações do aparelho.`
       );
       return;
     }
@@ -80,7 +84,7 @@ export function ConfiguracoesScreen() {
     if (resultado === "negada") {
       notify(
         "Permissão negada",
-        "Você já recusou as notificações antes. Para liberar, ative o FitSocial nas configurações do aparelho."
+        `Você já recusou as notificações antes. Para liberar, ative o ${MARCA} nas configurações do aparelho.`
       );
     }
   }
@@ -187,7 +191,7 @@ export function ConfiguracoesScreen() {
         {push !== "indisponivel" ? (
           <Chave
             titulo="Receber neste celular"
-            descricao="Permite que o FitSocial avise você mesmo com o app fechado."
+            descricao={`Permite que o ${MARCA} avise você mesmo com o app fechado.`}
             ligado={push === "concedida"}
             aoMudar={(v) => void mexerNoPush(v)}
           />
@@ -259,7 +263,7 @@ export function ConfiguracoesScreen() {
       </Secao>
 
       <Secao titulo="Sobre">
-        <Linha titulo="Versão" detalhe={app.expo.version} ultima />
+        <Linha titulo="Versão" detalhe={Constants.expoConfig?.version ?? "—"} ultima />
       </Secao>
 
       <EscolherPlataformaSheet

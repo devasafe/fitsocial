@@ -1,4 +1,4 @@
-// Design system do FitSocial — ver docs/BRIEF? (brief de design mobile).
+// Design system do app — ver docs/DESIGN.md.
 // Base: verde-tinta terroso + texto osso quente. O lima é só o sistema; o
 // conteúdo é colorido pelo esporte. Chaves antigas (bg/surface/primary…) foram
 // remapeadas para os valores do brief, então todas as telas herdam a paleta nova.
