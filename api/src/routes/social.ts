@@ -21,6 +21,9 @@ import { Report, MOTIVOS_DE_DENUNCIA } from "../models/Report.js";
 import { recordAudit } from "../services/adminAudit.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 import { getSport } from "../services/sports.js";
+import { montarCartao, type Formato } from "../services/media/cartaoDeCompartilhar.js";
+import { getStorageProvider } from "../services/storage/index.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { normalizarWod } from "../services/crossfit.js";
 
 export const socialRouter = Router();
@@ -127,6 +130,8 @@ interface ActivityPayload {
   resultRounds?: number | null;
   resultReps?: number | null;
   resultLoadKg?: number | null;
+  /** Track de GPS de corrida e pedal — o cartao de compartilhar desenha o traco. */
+  points?: { lat: number; lng: number }[];
 }
 interface PopulatedActivity {
   _id: mongoose.Types.ObjectId;
@@ -331,6 +336,79 @@ socialRouter.get(
     res.json({ post: serializePost(post, likedIds) });
   })
 );
+
+/**
+ * O cartão para compartilhar fora do app (Instagram, WhatsApp, o que for).
+ *
+ * Montado aqui, e não no aplicativo, por dois motivos: o mesmo desenho vale
+ * para Android e navegador, e mudar o layout depois não obriga ninguém a
+ * atualizar o app.
+ */
+socialRouter.post(
+  "/posts/:id/cartao",
+  // Cada cartão é um redimensionamento de imagem e uma escrita no storage.
+  rateLimit({ windowMs: 60_000, max: 12, name: "cartao-compartilhar" }),
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const formato: Formato = req.query.formato === "feed" ? "feed" : "story";
+
+    const post = await Post.findById(req.params.id)
+      .populate("author", "name username avatarUrl")
+      .populate("activity", "kind sportId payload metrics durationSec title");
+
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
+    // Só o dono compartilha o próprio post: o cartão leva o nome de quem
+    // treinou, e gerar o de outra pessoa seria assinar por ela.
+    if (!post.author._id.equals(req.user!._id)) {
+      throw new HttpError(403, "Só dá para compartilhar o seu próprio post");
+    }
+
+    const resumo = activitySummary(post);
+
+    // A foto vem do próprio storage do app; sem ela o cartão é só os números.
+    let foto: Buffer | null = null;
+    if (post.imageUrl) {
+      try {
+        const r = await fetch(post.imageUrl, { signal: AbortSignal.timeout(10_000) });
+        if (r.ok) foto = Buffer.from(await r.arrayBuffer());
+      } catch {
+        // Foto fora do ar não impede o compartilhamento.
+      }
+    }
+
+    const autor = post.author as unknown as PopulatedAuthor;
+    const atividade = post.activity as unknown as PopulatedActivity | undefined;
+    const percurso = Array.isArray(atividade?.payload?.points)
+      ? (atividade.payload.points as { lat: number; lng: number }[])
+      : null;
+
+    const png = await montarCartao(
+      {
+        foto,
+        titulo: resumo?.title ?? post.text.slice(0, 60) ?? "",
+        stats: resumo?.stats ?? [],
+        cor: (resumo && getSport(resumo.sportId)?.color) || "#C8FA4B",
+        percurso,
+        autor: autor.name,
+      },
+      formato
+    );
+
+    const salvo = await getStorageProvider().save({
+      buffer: png,
+      contentType: "image/png",
+      ext: ".png",
+    });
+
+    res.json({ url: toAbsoluto(req, salvo.url), formato });
+  })
+);
+
+/** URL relativa (disco, em desenvolvimento) vira absoluta; S3 já vem pronta. */
+function toAbsoluto(req: { protocol: string; get(n: string): string | undefined }, url: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${req.protocol}://${req.get("host")}${url}`;
+}
 
 // Editar o próprio post. Só o texto — ver services/postModeration.ts.
 socialRouter.patch(

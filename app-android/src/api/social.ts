@@ -91,6 +91,21 @@ export function createPost(
   return apiFetch<{ post: Post }>("/social/posts", { method: "POST", token, body: input });
 }
 
+export type FormatoDoCartao = "story" | "feed";
+
+/**
+ * Pede ao servidor o cartao para compartilhar fora do app.
+ *
+ * O desenho e montado la: assim o mesmo cartao vale para Android e navegador,
+ * e mudar o layout depois nao obriga ninguem a atualizar o app.
+ */
+export function gerarCartao(token: string, postId: string, formato: FormatoDoCartao) {
+  return apiFetch<{ url: string; formato: FormatoDoCartao }>(
+    `/social/posts/${postId}/cartao?formato=${formato}`,
+    { method: "POST", token }
+  );
+}
+
 export function getFeed(token: string) {
   return apiFetch<{ posts: Post[] }>("/social/feed", { token });
 }

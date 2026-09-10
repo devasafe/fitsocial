@@ -7,6 +7,7 @@ import { colors, radius, spacing, sportColor } from "../theme";
 import { Card, Txt, Button } from "./ui";
 import { Avatar } from "./Avatar";
 import { MenuSheet, type AcaoDoMenu } from "./MenuSheet";
+import { CompartilharTreino } from "./CompartilharTreino";
 import { useProporcaoDaFoto } from "../lib/proporcaoDaFoto";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
@@ -50,6 +51,22 @@ function HeartIcon({ filled, color }: { filled?: boolean; color: string }) {
       <Path
         d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
         fill={filled ? color : "none"}
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// Traço 1.75 na grade de 24, como os outros ícones do app.
+function CompartilharIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24">
+      <Path
+        d="M12 15V3M12 3 8 7M12 3l4 4M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"
+        fill="none"
         stroke={color}
         strokeWidth={1.75}
         strokeLinecap="round"
@@ -137,6 +154,7 @@ export function PostCard({
 
   const when = timeAgo(post.createdAt);
   const [menuAberto, setMenuAberto] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false);
   // Posts antigos não trazem o tamanho da foto; aí ele é medido na hora.
   const proporcao = useProporcaoDaFoto(post.imageUrl, post.imageWidth, post.imageHeight);
 
@@ -165,6 +183,8 @@ export function PostCard({
     });
   }
   const temMenu = acoes.length > 0;
+  // Post proprio: a tela so passa onEditar/onExcluir para os que sao da pessoa.
+  const podeCompartilhar = !!(onEditar || onExcluir) || !!post.author.isMe;
 
   return (
     <Card style={styles.card}>
@@ -280,8 +300,32 @@ export function PostCard({
             {post.commentCount}
           </Txt>
         </TouchableOpacity>
+
+        {/* Só no próprio post: o cartão leva o nome de quem treinou, e o
+            servidor recusa gerar o de outra pessoa. Aparecer para todo mundo
+            seria oferecer o que não vai funcionar. */}
+        {podeCompartilhar ? (
+          <TouchableOpacity
+            style={styles.action}
+            onPress={() => setCompartilhando(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Compartilhar treino"
+          >
+            <CompartilharIcon color={colors.text2} />
+            <Txt variant="label" color={colors.text2}>
+              Compartilhar
+            </Txt>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <MenuSheet visivel={menuAberto} aoFechar={() => setMenuAberto(false)} acoes={acoes} />
+      {podeCompartilhar ? (
+        <CompartilharTreino
+          postId={post.id}
+          visivel={compartilhando}
+          aoFechar={() => setCompartilhando(false)}
+        />
+      ) : null}
     </Card>
   );
 }

@@ -44,6 +44,9 @@ module.exports = {
       favicon: "./assets/favicon.png",
     },
     plugins: [
+      // Pedido pelo proprio expo-sharing ao instalar: ele configura o
+      // FileProvider do Android, sem o qual o arquivo nao chega ao Instagram.
+      "expo-sharing",
       [
         "expo-location",
         {
