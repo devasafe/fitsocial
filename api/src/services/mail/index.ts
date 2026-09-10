@@ -1,6 +1,7 @@
 import { env } from "../../config/env.js";
 import { ConsoleMailer } from "./console.js";
 import { ResendMailer } from "./resend.js";
+import { BrevoMailer } from "./brevo.js";
 import { MailError, type Mailer } from "./provider.js";
 
 let cached: Mailer | null = null;
@@ -17,6 +18,14 @@ let cached: Mailer | null = null;
 export function getMailer(): Mailer {
   if (cached) return cached;
 
+  // Brevo primeiro: é o provider que a casa já usa (o Drop manda por ele), com
+  // conta, remetente e allowlist de IP da VPS já resolvidos. Resend fica como
+  // alternativa — a interface existe justamente para essa troca custar pouco.
+  if (env.brevoApiKey) {
+    cached = new BrevoMailer(env.brevoApiKey, env.mailFromEmail, env.mailFromName);
+    return cached;
+  }
+
   if (env.resendApiKey) {
     cached = new ResendMailer(env.resendApiKey, env.mailFrom);
     return cached;
@@ -24,7 +33,7 @@ export function getMailer(): Mailer {
 
   if (env.isProd) {
     throw new MailError(
-      "Envio de e-mail não configurado: defina RESEND_API_KEY e MAIL_FROM."
+      "Envio de e-mail não configurado: defina BREVO_API_KEY (ou RESEND_API_KEY) e MAIL_FROM."
     );
   }
 

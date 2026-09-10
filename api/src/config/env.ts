@@ -84,8 +84,11 @@ export const env = {
   // E-mail. Sem RESEND_API_KEY o projeto usa o provider de console em
   // desenvolvimento e RECUSA subir em produção — melhor um erro claro do que
   // um "esqueci a senha" que promete um e-mail que nunca chega.
+  brevoApiKey: process.env.BREVO_API_KEY ?? "",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   mailFrom: process.env.MAIL_FROM ?? "FitSocial <nao-responda@satriz.club>",
+  mailFromEmail: process.env.MAIL_FROM_EMAIL ?? "nao-responda@satriz.club",
+  mailFromName: process.env.MAIL_FROM_NAME ?? "FitSocial",
   mailTimeoutMs: Number(process.env.MAIL_TIMEOUT_MS ?? 10000),
 
   // Push. O envio funciona sem token, com limite mais apertado; com ele, o
