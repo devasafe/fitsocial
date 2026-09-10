@@ -1,3 +1,4 @@
+import type { PayloadDeCrossfit } from "./crossfit";
 import { apiFetch } from "./client";
 
 export interface SearchUser {
@@ -64,8 +65,10 @@ export interface TreinoPublico {
   title: string;
   startedAt: string;
   durationSec: number;
-  metrics: Record<string, number | undefined>;
+  metrics: Record<string, unknown>;
   payload: Record<string, unknown>;
+  /** CrossFit já em blocos — o servidor normaliza os dois formatos. */
+  crossfit?: PayloadDeCrossfit | null;
   /** true quando esse treino também virou publicação no feed. */
   compartilhado: boolean;
 }

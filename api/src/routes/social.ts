@@ -21,6 +21,7 @@ import { Report, MOTIVOS_DE_DENUNCIA } from "../models/Report.js";
 import { recordAudit } from "../services/adminAudit.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 import { getSport } from "../services/sports.js";
+import { normalizarWod } from "../services/crossfit.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -616,6 +617,9 @@ socialRouter.get(
         startedAt: a.startedAt,
         durationSec: a.durationSec,
         metrics: a.metrics ?? {},
+        // Blocos normalizados ao lado do payload cru — o card de CrossFit lê
+        // daqui, e o app instalado continua lendo o payload.
+        ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
         // O traçado de GPS só sai se o dono tornou as rotas públicas.
         payload: await podarRotaSePrivada(
           (a.payload ?? {}) as Record<string, unknown>,

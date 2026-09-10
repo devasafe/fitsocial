@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -65,6 +65,23 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
 
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+      {/* Benchmark é recorde também, mas de outra natureza: um WOD repetido ao
+          longo do tempo, não uma carga máxima. Fica aqui perto, em tela
+          própria — misturar as duas listas confundiria as duas. */}
+      <TouchableOpacity onPress={() => nav.navigate("Benchmarks")} activeOpacity={0.85}>
+        <Card level={2}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View style={{ flex: 1 }}>
+              <Txt variant="titleCard">Meus benchmarks</Txt>
+              <Txt variant="body" color={colors.text2} style={{ marginTop: 2 }}>
+                Fran, Cindy, Murph — e quanto você melhorou em cada um.
+              </Txt>
+            </View>
+            <Txt variant="titleCard" color={colors.text3}>›</Txt>
+          </View>
+        </Card>
+      </TouchableOpacity>
+
       {error && byExercise.length === 0 ? (
         <ErrorState message="Não foi possível carregar seus recordes." onRetry={load} />
       ) : byExercise.length === 0 ? (

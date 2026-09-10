@@ -18,6 +18,7 @@ import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { EsqueciSenhaScreen } from "../screens/EsqueciSenhaScreen";
 import { RegisterCrossfitScreen } from "../screens/RegisterCrossfitScreen";
+import { BenchmarksScreen } from "../screens/BenchmarksScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { useContadores } from "../context/ContadoresContext";
 import { BadgeSobreposto } from "../components/Badge";
@@ -295,6 +296,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="MeusPRs"
             component={MeusPRsScreen}
             options={{ headerShown: true, title: "Meus recordes", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Benchmarks"
+            component={BenchmarksScreen}
+            options={{ headerShown: true, title: "Meus benchmarks", ...headerStyle }}
           />
           <AppStack.Screen
             name="MinhasAtividades"

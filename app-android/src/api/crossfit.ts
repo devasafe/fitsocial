@@ -158,3 +158,23 @@ export function buscarBenchmarks(token: string, q = "") {
     { token }
   );
 }
+
+/** Um benchmark que a pessoa já fez, com a evolução. */
+export interface BenchmarkFeito {
+  slug: string;
+  nome: string;
+  familia: string | null;
+  escala: string;
+  formato: string;
+  scoreTipo: string | null;
+  maiorMelhor: boolean;
+  vezes: number;
+  melhor: { valor: number; quando: string } | null;
+  ultimo: { valor: number; quando: string } | null;
+  /** Positivo é melhora, em qualquer tipo de score. Nulo se só fez uma vez. */
+  delta: number | null;
+}
+
+export function listarBenchmarks(token: string) {
+  return apiFetch<{ data: BenchmarkFeito[] }>("/activities/benchmarks", { token });
+}

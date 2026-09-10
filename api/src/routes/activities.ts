@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { normalizarWod } from "../services/crossfit.js";
+import { getBenchmark } from "../services/benchmarks.js";
 import { z } from "zod";
 import mongoose from "mongoose";
 import { requireAuth } from "../middleware/auth.js";
@@ -34,10 +36,121 @@ export function serializeActivity(a: InstanceType<typeof Activity>) {
     feeling: a.feeling ?? null,
     planLink: a.planLink ?? null,
     payload: a.payload,
+    // Forma normalizada em blocos, AO LADO do payload cru — não no lugar dele.
+    // O app instalado lê `payload.name`, `payload.movements`; trocar por baixo
+    // quebraria a tela de detalhe no celular de quem não atualizou.
+    ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
     metrics: a.metrics,
     createdAt: a.get("createdAt") as Date,
   };
 }
+
+/**
+ * Histórico de benchmarks da pessoa.
+ *
+ * Uma linha por WOD conhecido que ela já fez, com a melhor marca, a última e a
+ * diferença entre as duas. É o §34 da spec: repetir Fran em dois meses e ver
+ * "−34s" é o que transforma registro em evolução.
+ *
+ * Lê de `metrics.wod`, que a Fase 1 promoveu justamente para isto — sem varrer
+ * payload nenhum.
+ */
+activitiesRouter.get(
+  "/benchmarks",
+  asyncHandler(async (req, res) => {
+    const linhas = await Activity.find({
+      user: req.user!._id,
+      kind: "wod",
+      "metrics.wod.slug": { $ne: null, $exists: true },
+    })
+      .select("startedAt metrics")
+      .sort({ startedAt: 1 });
+
+    interface Marca {
+      slug: string;
+      nome: string;
+      familia: string | null;
+      escala: string;
+      formato: string;
+      scoreTipo: string | null;
+      maiorMelhor: boolean;
+      vezes: number;
+      melhor: { valor: number; quando: Date } | null;
+      ultimo: { valor: number; quando: Date } | null;
+    }
+
+    // Agrupa por benchmark E por escala: Fran RX e Fran scaled são progressões
+    // diferentes, e misturar as duas mostraria uma "piora" quando a pessoa
+    // subiu de nível.
+    const porChave = new Map<string, Marca>();
+
+    for (const a of linhas) {
+      const w = (a.metrics as { wod?: Record<string, unknown> } | null)?.wod;
+      if (!w?.slug) continue;
+      const valor = w.scoreValor as number | null;
+      if (valor == null) continue;
+
+      const slug = w.slug as string;
+      const escala = (w.escala as string) ?? "rx";
+      const chave = `${slug}:${escala}`;
+      const quando = a.startedAt;
+      const maiorMelhor = (w.maiorMelhor as boolean | null) ?? true;
+
+      const atual =
+        porChave.get(chave) ??
+        ({
+          slug,
+          nome: getBenchmark(slug)?.nome ?? slug,
+          familia: (w.familia as string | null) ?? null,
+          escala,
+          formato: (w.formato as string) ?? "outro",
+          scoreTipo: (w.scoreTipo as string | null) ?? null,
+          maiorMelhor,
+          vezes: 0,
+          melhor: null,
+          ultimo: null,
+        } satisfies Marca);
+
+      atual.vezes += 1;
+      atual.ultimo = { valor, quando };
+      if (
+        !atual.melhor ||
+        (maiorMelhor ? valor > atual.melhor.valor : valor < atual.melhor.valor)
+      ) {
+        atual.melhor = { valor, quando };
+      }
+      porChave.set(chave, atual);
+    }
+
+    const data = [...porChave.values()]
+      .map((m) => ({
+        ...m,
+        // Diferença entre as DUAS ÚLTIMAS vezes, com sinal já orientado: valor
+        // positivo é melhora, seja o score de tempo (menor) ou de reps (maior).
+        delta: null as number | null,
+      }))
+      .sort((a, b) => (b.ultimo?.quando.getTime() ?? 0) - (a.ultimo?.quando.getTime() ?? 0));
+
+    // Segunda passada para o delta: precisa das duas últimas de cada chave.
+    for (const item of data) {
+      const doMesmo = linhas
+        .filter((a) => {
+          const w = (a.metrics as { wod?: Record<string, unknown> } | null)?.wod;
+          return w?.slug === item.slug && ((w?.escala as string) ?? "rx") === item.escala;
+        })
+        .map((a) => (a.metrics as { wod: { scoreValor: number | null } }).wod.scoreValor)
+        .filter((v): v is number => v != null);
+
+      if (doMesmo.length >= 2) {
+        const ultimo = doMesmo[doMesmo.length - 1];
+        const anterior = doMesmo[doMesmo.length - 2];
+        item.delta = item.maiorMelhor ? ultimo - anterior : anterior - ultimo;
+      }
+    }
+
+    res.json({ data, meta: { total: data.length } });
+  })
+);
 
 function assertObjectId(id: string) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(400, "ID inválido");
