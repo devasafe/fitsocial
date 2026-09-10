@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { User, hashPassword, verifyPassword, publicUser, type UserDoc } from "../models/User.js";
-import { signToken } from "../utils/token.js";
+import { signTokenForUser } from "../utils/token.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { excluirConta } from "../services/accountDeletion.js";
@@ -62,7 +62,7 @@ authRouter.post(
     });
 
     await ensureFounderPremium(user); // amigo fundador já entra premium
-    const token = signToken(user._id.toString());
+    const token = signTokenForUser(user);
     res.status(201).json({ token, user: userPayload(user) });
   })
 );
@@ -83,7 +83,7 @@ authRouter.post(
     await assertAccountUsable(user);
 
     await ensureFounderPremium(user);
-    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion ?? 0 });
+    const token = signTokenForUser(user);
     res.json({ token, user: userPayload(user) });
   })
 );
@@ -126,7 +126,7 @@ authRouter.patch(
     await user.save();
 
     // E devolve um token novo, para quem trocou não ser deslogado junto.
-    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion });
+    const token = signTokenForUser(user);
 
     res.json({
       data: { token },
@@ -172,7 +172,7 @@ authRouter.post(
     const { email, codigo, nova } = redefinirSchema.parse(req.body);
     const user = await redefinirSenha(email, codigo, nova);
 
-    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion });
+    const token = signTokenForUser(user);
     res.json({ data: { token, user: publicUser(user) }, meta: { sessoesEncerradas: true } });
   })
 );

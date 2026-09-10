@@ -9,7 +9,26 @@ export interface JwtPayload {
   v?: number;
 }
 
-/** Assina um token. Sem opções, é o token de 30 dias do app — como sempre foi. */
+/**
+ * Assina um token PARA UM USUÁRIO — sempre carregando a versão da senha dele.
+ *
+ * Existe porque a alternativa não funcionou: com `tokenVersion` opcional em
+ * `signToken`, a rota de sessão do painel esqueceu de passá-lo, e o token
+ * nascia com `v` ausente. Enquanto a versão de todo mundo era 0 ninguém notou;
+ * na primeira troca de senha, o painel passou a emitir tokens natimortos — o
+ * login respondia 200 e a requisição seguinte, 401, para sempre.
+ *
+ * Aqui o valor vem do próprio usuário, então não há o que esquecer nem o que
+ * passar errado. Todo emissor de token deve usar esta função.
+ */
+export function signTokenForUser(
+  user: { _id: { toString(): string }; tokenVersion?: number | null },
+  opts: { scope?: "admin"; expiresIn?: string } = {}
+): string {
+  return signToken(user._id.toString(), { ...opts, tokenVersion: user.tokenVersion ?? 0 });
+}
+
+/** Assinatura crua. Prefira `signTokenForUser` — ver o porquê acima. */
 export function signToken(
   userId: string,
   opts: { scope?: "admin"; expiresIn?: string; tokenVersion?: number } = {}
