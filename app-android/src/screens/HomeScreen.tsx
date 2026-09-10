@@ -8,7 +8,8 @@ import { useContadores } from "../context/ContadoresContext";
 import { updateSettings } from "../api/settings";
 import { BadgeSobreposto } from "../components/Badge";
 import { EsperaLonga, PASSOS } from "../components/Espera";
-import { GerandoPlano, type Origem } from "../components/GerandoPlano";
+import { CenaLime, type Origem } from "../components/CenaLime";
+import { useCena, esperar, COBERTURA_MS } from "../components/CenaContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
@@ -55,6 +56,7 @@ export function HomeScreen() {
   // Onde o dedo tocou: é daí que a gota nasce. Sem isso ela viria do centro,
   // e o efeito perderia a ligação com a causa.
   const [origemDaGota, setOrigemDaGota] = useState<Origem | null>(null);
+  const cena = useCena();
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
   const programacao = user?.settings?.programacao ?? null;
@@ -227,9 +229,22 @@ export function HomeScreen() {
     );
   }
 
-  function startToday() {
+  async function startToday(evento?: { nativeEvent: { pageX: number; pageY: number } }) {
+    // Pela cena do provedor, não pela daqui: esta tela some por baixo da pilha
+    // assim que o treino abre, e a cena tem que continuar na frente.
+    cena.abrir({
+      passos: PASSOS.comecarTreino,
+      origem: evento ? { x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY } : null,
+    });
+
+    // Passagem, não espera: o treino não fica meio segundo mais longe por causa
+    // de um efeito. A troca acontece escondida atrás do lime.
+    await esperar(COBERTURA_MS);
     if (todaySession) navigation.navigate("CheckIn", { session: todaySession });
     else navigation.navigate("TodayWorkout");
+
+    await esperar(360);
+    cena.fechar();
   }
 
   if (loading) {
@@ -296,7 +311,7 @@ export function HomeScreen() {
           <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
             {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
           </Txt>
-          <Button title="Começar treino" onPress={startToday} size="lg" glow />
+          <Button title="Começar treino" onPress={(e) => startToday(e)} size="lg" glow />
           <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
             <Txt variant="label" color={colors.text2}>
               Escolher outro treino
@@ -497,7 +512,7 @@ export function HomeScreen() {
       ) : null}
 
       {/* A cena. Fica por cima de tudo, inclusive da barra de abas. */}
-      <GerandoPlano visivel={generating} origem={origemDaGota} passos={PASSOS.plano} />
+      <CenaLime visivel={generating} origem={origemDaGota} passos={PASSOS.plano} />
 
       <QuickFoodAdd
         visible={quickAdd}

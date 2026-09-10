@@ -74,4 +74,7 @@ export const PASSOS = {
     "Organizando em sessões…",
   ],
   foto: ["Preparando a foto…", "Enviando…"],
+  /** Passagem: uma frase só, some sozinha. Não é espera, é cerimônia. */
+  comecarTreino: ["Bora treinar 💪"],
+  publicando: ["Publicando…"],
 } as const;
