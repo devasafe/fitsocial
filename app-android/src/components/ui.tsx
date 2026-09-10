@@ -196,6 +196,7 @@ export function Screen({
   underHeader,
   style,
   contentStyle,
+  scrollProps,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -204,6 +205,8 @@ export function Screen({
   underHeader?: boolean;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  /** Repassado ao ScrollView — quem precisa saber onde a rolagem chegou. */
+  scrollProps?: Partial<React.ComponentProps<typeof ScrollView>>;
 }) {
   const insets = useSafeAreaInsets();
   const topInset = underHeader ? 0 : insets.top;
@@ -217,6 +220,7 @@ export function Screen({
           contentStyle,
         ]}
         keyboardShouldPersistTaps="handled"
+        {...scrollProps}
       >
         {children}
       </ScrollView>

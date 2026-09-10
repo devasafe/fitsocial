@@ -3,6 +3,7 @@ import { View, TouchableOpacity } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import { useContadores } from "../context/ContadoresContext";
 import { Txt, Screen, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { Avatar } from "../components/Avatar";
@@ -45,6 +46,7 @@ function groupByDay(items: NotificationItem[]): { label: string; items: Notifica
 
 export function NotificacoesScreen() {
   const { token } = useAuth();
+  const { zerarNotificacoes } = useContadores();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,14 +57,17 @@ export function NotificacoesScreen() {
       const res = await listNotifications(token!);
       setItems(res.data);
       setError(false);
-      // Marca como lidas ao abrir (limpa o contador na Home).
-      markNotificationsRead(token!).catch(() => {});
+      // Marca como lidas ao abrir. Aqui abrir É chegar ao conteúdo: a lista
+      // inteira está na tela, diferente de uma aba que continua rolando.
+      markNotificationsRead(token!)
+        .then(zerarNotificacoes)
+        .catch(() => {});
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, zerarNotificacoes]);
 
   useFocusEffect(
     useCallback(() => {

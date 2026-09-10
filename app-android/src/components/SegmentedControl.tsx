@@ -3,11 +3,14 @@
 import React from "react";
 import { View, TouchableOpacity } from "react-native";
 import { Txt } from "./ui";
+import { Badge } from "./Badge";
 import { colors, radius, spacing } from "../theme";
 
 export interface Segment<T extends string> {
   key: T;
   label: string;
+  /** Quantos itens novos há nessa sub-visão. 0 ou ausente não desenha nada. */
+  badge?: number;
 }
 
 export function SegmentedControl<T extends string>({
@@ -45,6 +48,8 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(s.key)}
             style={{
               flex: 1,
+              flexDirection: "row",
+              gap: spacing.xs,
               paddingVertical: 8,
               borderRadius: radius.full,
               alignItems: "center",
@@ -55,6 +60,9 @@ export function SegmentedControl<T extends string>({
             <Txt variant={active ? "bodyStrong" : "body"} color={active ? colors.text : colors.text2}>
               {s.label}
             </Txt>
+            {/* O badge some do segmento aberto: o que você está olhando não
+                precisa chamar sua atenção. */}
+            {!active && <Badge valor={s.badge ?? 0} />}
           </TouchableOpacity>
         );
       })}

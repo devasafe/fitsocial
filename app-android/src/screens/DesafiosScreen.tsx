@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button, Chip, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { notify } from "../lib/notify";
 import { listMyChallenges, discoverChallenges, joinChallenge, scoreModeName, type Challenge } from "../api/challenges";
+import { useMarcarAoChegarAoFim } from "../lib/marcarVisto";
 import { colors, spacing, radius } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -26,6 +27,8 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
   const [error, setError] = useState(false);
   const [code, setCode] = useState("");
   const [joining, setJoining] = useState(false);
+  // Só a aba "Descobrir" tem novidade: "Meus" são desafios que a pessoa já conhece.
+  const marcacao = useMarcarAoChegarAoFim("desafios", tab === "discover" && !loading);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +64,7 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
   }
 
   return (
-    <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+    <Screen scroll underHeader contentStyle={{ gap: spacing.card }} scrollProps={marcacao}>
       <Button title="Criar desafio" onPress={() => nav.navigate("CriarDesafio")} size="lg" glow />
 
       {/* Entrar por código */}
