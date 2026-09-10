@@ -27,6 +27,8 @@ interface AuthState {
   refreshUser: () => Promise<void>;
   /** Guarda um token novo sem refazer o login (usado ao trocar a senha). */
   trocarToken: (novo: string) => Promise<void>;
+  /** Abre sessão com um token já emitido pelo servidor (redefinição de senha). */
+  entrarComToken: (token: string, user: AppUser) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -86,6 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [token]);
 
+  const entrarComToken = useCallback(
+    async (novo: string, nextUser: AppUser) => {
+      await persist(novo, nextUser);
+    },
+    [persist]
+  );
+
   const trocarToken = useCallback(async (novo: string) => {
     await AsyncStorage.setItem(TOKEN_KEY, novo);
     setToken(novo);
@@ -100,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout, refreshUser, trocarToken }}
+      value={{ user, token, loading, login, register, logout, refreshUser, trocarToken, entrarComToken }}
     >
       {children}
     </AuthContext.Provider>

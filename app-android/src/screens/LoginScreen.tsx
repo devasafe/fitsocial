@@ -57,6 +57,16 @@ export function LoginScreen({ navigation }: Props) {
 
         <Button title="Entrar" onPress={handleLogin} loading={loading} size="lg" glow />
 
+        <TouchableOpacity
+          style={styles.linkSenha}
+          onPress={() => navigation.navigate("EsqueciSenha")}
+          activeOpacity={0.7}
+        >
+          <Txt variant="body" color={colors.text2}>
+            Esqueci minha senha
+          </Txt>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.link} onPress={() => navigation.navigate("Register")} activeOpacity={0.7}>
           <Txt variant="body" color={colors.text2}>
             Ainda não tem conta? <Txt variant="bodyStrong" color={colors.lime}>Criar conta</Txt>
@@ -73,4 +83,5 @@ const styles = StyleSheet.create({
   logo: { textAlign: "center" },
   subtitle: { textAlign: "center", marginBottom: spacing.xl, marginTop: spacing.sm },
   link: { marginTop: spacing.lg, alignItems: "center" },
+  linkSenha: { marginTop: spacing.md, alignItems: "center" },
 });

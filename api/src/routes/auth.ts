@@ -5,6 +5,7 @@ import { signToken } from "../utils/token.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { excluirConta } from "../services/accountDeletion.js";
+import { pedirRedefinicao, redefinirSenha } from "../services/passwordReset.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
@@ -131,6 +132,48 @@ authRouter.patch(
       data: { token },
       meta: { sessoesEncerradas: true },
     });
+  })
+);
+
+const esqueciSchema = z.object({ email: z.string().email("E-mail inválido") });
+
+/**
+ * Pede um código para criar uma senha nova.
+ *
+ * Responde SEMPRE a mesma coisa, exista o e-mail ou não. Uma rota que responde
+ * "não encontrei" para um e-mail e "enviamos" para outro é uma lista de quem
+ * tem conta aqui, servida a quem perguntar — e serve de graça para quem monta
+ * lista de alvo.
+ */
+authRouter.post(
+  "/forgot-password",
+  rateLimit({ windowMs: 15 * 60_000, max: 5, name: "esqueci-senha" }),
+  asyncHandler(async (req, res) => {
+    const { email } = esqueciSchema.parse(req.body);
+    await pedirRedefinicao(email);
+    res.json({
+      data: { enviado: true },
+      meta: { mensagem: "Se este e-mail tiver conta, o código chega em instantes." },
+    });
+  })
+);
+
+const redefinirSchema = z.object({
+  email: z.string().email("E-mail inválido"),
+  codigo: z.string().regex(/^\d{6}$/, "O código tem 6 dígitos"),
+  nova: z.string().min(8, "A senha precisa de pelo menos 8 caracteres").max(200),
+});
+
+/** Conclui a redefinição e já devolve a pessoa logada, com sessão nova. */
+authRouter.post(
+  "/reset-password",
+  rateLimit({ windowMs: 15 * 60_000, max: 10, name: "redefinir-senha" }),
+  asyncHandler(async (req, res) => {
+    const { email, codigo, nova } = redefinirSchema.parse(req.body);
+    const user = await redefinirSenha(email, codigo, nova);
+
+    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion });
+    res.json({ data: { token, user: publicUser(user) }, meta: { sessoesEncerradas: true } });
   })
 );
 

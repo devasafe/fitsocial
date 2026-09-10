@@ -61,3 +61,24 @@ export function excluirConta(token: string, senha: string) {
     body: { senha },
   });
 }
+
+/**
+ * Pede o código para criar uma senha nova.
+ *
+ * A resposta é a mesma exista o e-mail ou não — a tela não tem como saber, e
+ * isso é de propósito: descobrir quem tem conta não pode ser de graça.
+ */
+export function pedirCodigoDeSenha(email: string) {
+  return apiFetch<{ data: { enviado: boolean }; meta: { mensagem: string } }>(
+    "/auth/forgot-password",
+    { method: "POST", body: { email } }
+  );
+}
+
+/** Conclui a redefinição e já devolve a sessão. */
+export function redefinirSenhaComCodigo(email: string, codigo: string, nova: string) {
+  return apiFetch<{ data: { token: string; user: AppUser } }>("/auth/reset-password", {
+    method: "POST",
+    body: { email, codigo, nova },
+  });
+}
