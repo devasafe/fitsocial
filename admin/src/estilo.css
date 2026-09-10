@@ -30,9 +30,53 @@
 
   --display: "Sora", system-ui, sans-serif;
   --corpo: "Archivo", system-ui, sans-serif;
+
+  /* Escala herdada do app (app-android/src/theme.ts): grade de 4, e raio por
+     HIERARQUIA — a regra escrita é justamente não usar o mesmo raio em tudo.
+     Valem para toda regra nova; o CSS antigo fica com os números que já tem,
+     porque migrar 282 linhas para var() é um diff grande de mudança visual
+     nenhuma, e aí ninguém consegue revisar a mudança de verdade. */
+  --esp-4: 4px;
+  --esp-8: 8px;
+  --esp-12: 12px;
+  --esp-16: 16px;
+  --esp-20: 20px;
+  --esp-24: 24px;
+  --esp-32: 32px;
+  --esp-40: 40px;
+
+  --raio-chip: 10px;
+  --raio-card: 14px;
+  --raio-hero: 20px;
+  --raio-folha: 24px;
+  --raio-pilula: 999px;
+
+  /* Requisito de aceitação do docs/DESIGN.md §7, não sugestão. */
+  --toque: 44px;
+
+  --mov-micro: 120ms;
+  --mov-base: 200ms;
+  --mov-folha: 320ms;
+
+  /* Indireção de propósito. O DevTools não injeta env(safe-area-inset-*), nem
+     nos presets de iPhone — com env() direto no lugar de uso, safe area só dá
+     para testar em aparelho. Passando por variável, um
+     setProperty("--sa-baixo", "34px") no console revela de uma vez tudo que a
+     respeita, e o que não se mexer é bug. */
+  --sa-baixo: env(safe-area-inset-bottom, 0px);
+  --sa-esq: env(safe-area-inset-left, 0px);
+  --sa-dir: env(safe-area-inset-right, 0px);
+
+  --z-camada: 20;
+  --z-cortina: 30;
 }
 
 * { box-sizing: border-box; }
+
+/* manipulation tira o atraso de 300ms do duplo-toque; o highlight cinza do
+   Android briga com o realce de foco que já existe. */
+button, a, input, [role="button"] { touch-action: manipulation; }
+button { -webkit-tap-highlight-color: transparent; }
 
 html, body, #root { height: 100%; }
 
@@ -67,7 +111,16 @@ a { color: var(--lime); }
 
 /* ---------- estrutura ---------- */
 
-.app { display: grid; grid-template-columns: 196px 1fr; height: 100%; }
+/* 100dvh, não 100vh: no navegador do celular a barra de endereço encolhe a
+   viewport e o rodapé fixo sai da tela. Não reproduz no DevTools. */
+.app { display: grid; grid-template-columns: 196px 1fr; height: 100vh; height: 100dvh; }
+
+/* O shell ganhou dois filhos que só existem no celular. Sem posição explícita,
+   o auto-placement do grid os empurraria para uma linha nova no desktop. */
+.lateral { grid-area: 1 / 1; }
+.conteudo { grid-area: 1 / 2; }
+.cab-movel,
+.barra-inferior { display: none; }
 
 .lateral {
   background: var(--surface);
@@ -95,10 +148,15 @@ a { color: var(--lime); }
   padding: 7px 9px;
   text-align: left;
 }
-.nav button:hover { background: var(--surface-2); color: var(--texto); }
+/* No toque o :hover gruda depois do dedo sair, e o botão fica com cara de
+   selecionado — o "Banir" com aparência de apertado é o pior caso disso. */
+@media (hover: hover) and (pointer: fine) {
+  .nav button:hover { background: var(--surface-2); color: var(--texto); }
+}
 .nav button[aria-current="page"] { background: var(--surface-3); color: var(--texto); }
 
 .rodape-lateral { margin-top: auto; padding: 0 8px; color: var(--texto-3); font-size: 12px; }
+.rodape-lateral .sair { margin-top: 8px; width: 100%; }
 
 .conteudo { overflow-y: auto; padding: 28px 32px 56px; }
 
@@ -115,6 +173,44 @@ a { color: var(--lime); }
 
 .secao { margin-bottom: 34px; }
 .secao > h2 { margin-bottom: 12px; }
+
+/* Fileiras de filtro e de janela de tempo (Crescimento, IA, Denúncias,
+   Usuários). Vinham como style inline em cada página — e estilo inline vence
+   media query, então nenhuma regra móvel as alcançaria. */
+.filtros { display: flex; gap: 6px; }
+
+.campo-busca { max-width: 340px; }
+.busca { margin-bottom: 16px; }
+
+.dialogo-largo { width: 520px; }
+.acoes-detalhe { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+/* Entre 721 e 1080 as tabelas de 6 colunas ficam apertadas mas cabem; abaixo
+   disso elas viram cartões e este contêiner nunca aparece. */
+.rolagem-tabela { overflow-x: auto; }
+.col-quota { width: 180px; }
+
+.stats-3 { display: flex; gap: 22px; margin: 16px 0; }
+.retencao { display: flex; gap: 26px; }
+.acoes-lateral { display: flex; flex-direction: column; gap: 8px; min-width: 150px; }
+.denuncia-linha { display: flex; gap: 16px; justify-content: space-between; }
+
+/* Metadados lado a lado, separados por espaço e não por "·": o ponto no meio
+   quebra em posição absurda quando a linha embrulha. */
+.cartao-meta,
+.motivos {
+  align-items: baseline;
+  color: var(--texto-3);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 12px;
+}
+.motivos { margin-top: 4px; }
+.cartao-meta { margin-top: 10px; }
+.midia-denuncia { border-radius: 10px; max-height: min(220px, 45vh); max-width: 100%; }
+
+.dialogo-acoes { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 
 /* ---------- superfícies ---------- */
 /* Elevação por degrau de superfície + borda de 1px. Nada de sombra difusa. */
@@ -146,7 +242,9 @@ td {
   vertical-align: middle;
 }
 tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: var(--surface-2); }
+@media (hover: hover) and (pointer: fine) {
+  tbody tr:hover { background: var(--surface-2); }
+}
 
 /* ---------- formulário ---------- */
 
@@ -185,7 +283,9 @@ button.discreto {
   font: inherit;
   padding: 6px 11px;
 }
-button.discreto:hover { color: var(--texto); border-color: var(--texto-3); }
+@media (hover: hover) and (pointer: fine) {
+  button.discreto:hover { color: var(--texto); border-color: var(--texto-3); }
+}
 button.discreto[aria-pressed="true"] { background: var(--surface-3); color: var(--texto); }
 
 .erro {
@@ -230,14 +330,16 @@ button.discreto[aria-pressed="true"] { background: var(--surface-3); color: var(
   display: grid;
   place-items: center;
   padding: 24px;
-  z-index: 10;
+  z-index: var(--z-cortina);
 }
 
 .dialogo {
+  /* E-mail sem espaço nenhum não quebra sozinho e some na borda do diálogo. */
+  overflow-wrap: anywhere;
   background: var(--surface-2);
   border: 1px solid var(--line-forte);
   border-radius: 16px;
-  max-height: 88vh;
+  max-height: 88dvh;
   overflow-y: auto;
   padding: 22px;
   width: 430px;
@@ -245,7 +347,9 @@ button.discreto[aria-pressed="true"] { background: var(--surface-3); color: var(
 
 button.acao.perigosa { background: var(--perigo); color: var(--texto); }
 button.discreto.perigo { border-color: var(--perigo); color: var(--perigo); }
-button.discreto.perigo:hover { background: rgba(242, 99, 75, 0.12); color: var(--perigo); }
+@media (hover: hover) and (pointer: fine) {
+  button.discreto.perigo:hover { background: rgba(242, 99, 75, 0.12); color: var(--perigo); }
+}
 
 input[type="number"] { max-width: 130px; }
 

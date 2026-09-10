@@ -71,7 +71,7 @@ export function Painel({ token }: { token: string }) {
             de Brasília.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="filtros">
           {JANELAS.map((d) => (
             <button key={d} className="discreto" aria-pressed={dias === d} onClick={() => setDias(d)}>
               {d} dias
@@ -149,7 +149,7 @@ export function Painel({ token }: { token: string }) {
               </div>
 
               <div className="painel">
-                <div style={{ display: "flex", gap: 26 }}>
+                <div className="retencao">
                   {[
                     { r: retencao.d1, b: retencao.base.d1, l: "no dia seguinte" },
                     { r: retencao.d7, b: retencao.base.d7, l: "após 7 dias" },

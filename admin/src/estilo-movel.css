@@ -1,0 +1,335 @@
+/* O painel no celular.
+ *
+ * Arquivo separado de propósito: tudo aqui vive dentro de UM media query, nas
+ * mesmas seções e na mesma ordem de estilo.css. Apagar este arquivo prova que
+ * o desktop está intacto — e o desktop é o que já funciona.
+ *
+ * A fronteira (720px) está duplicada em src/hooks/useEhCelular.ts. Se mudar
+ * uma, mude a outra: CSS dizendo celular e JS dizendo desktop é a categoria de
+ * bug que só aparece na borda exata.
+ *
+ * O que se herda do app aqui e não se herdava no desktop: alvo de toque de
+ * 44px, ação primária ao alcance do polegar, e folha inferior no lugar de
+ * modal centrado. */
+
+@media (max-width: 720px) {
+  /* ---------- estrutura ---------- */
+
+  .app {
+    grid-template-columns: 1fr;
+    /* minmax(0, 1fr) e NÃO 1fr: com 1fr, o tamanho min-content de um filho
+       largo (uma tabela de 6 colunas, o SVG de um gráfico) estoura a linha, a
+       página inteira ganha rolagem e a barra inferior sai da tela. Só
+       reproduz com dado real — com três linhas de teste, passa. */
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .lateral { display: none; }
+
+  .cab-movel {
+    align-items: center;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: var(--esp-12);
+    grid-area: 1 / 1;
+    min-height: 48px;
+    padding: var(--esp-8) max(var(--esp-16), var(--sa-dir)) var(--esp-8)
+      max(var(--esp-16), var(--sa-esq));
+  }
+  .cab-movel .marca { padding: 0; }
+  .cab-movel .quem {
+    color: var(--texto-3);
+    font-size: 12px;
+    margin-left: auto;
+    max-width: 14ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conteudo {
+    grid-area: 2 / 1;
+    /* O scroller é este elemento, não o body — e por isso a barra de endereço
+       do navegador NUNCA vai recolher aqui. É troca consciente: viewport
+       estável vale mais numa ferramenta densa do que 56px que aparecem e
+       somem sob o dedo. Não "conserte" movendo a rolagem para o body: isso
+       traz de volta todos os bugs de position:fixed com teclado no iOS. */
+    overscroll-behavior: contain;
+    padding: var(--esp-16) max(var(--esp-20), var(--sa-dir)) var(--esp-32)
+      max(var(--esp-20), var(--sa-esq));
+  }
+
+  .barra-inferior {
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    display: flex;
+    grid-area: 3 / 1;
+    padding-bottom: max(var(--sa-baixo), var(--esp-8));
+    padding-left: var(--sa-esq);
+    padding-right: var(--sa-dir);
+  }
+  .barra-inferior button {
+    align-items: center;
+    appearance: none;
+    background: none;
+    border: 0;
+    color: var(--texto-2);
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    font: inherit;
+    font-size: 11px;
+    gap: 3px;
+    min-height: 52px;
+    padding: var(--esp-8) 2px;
+  }
+  /* Só a cor muda no ativo. Preencher a aba de lime quebraria a regra de o
+     lime ficar abaixo de 10% da tela. */
+  .barra-inferior button[aria-current="page"] { color: var(--lime); }
+  .barra-inferior .icone { font-size: 17px; font-style: normal; line-height: 1; }
+
+  .cabecalho {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--esp-12);
+  }
+  .cabecalho p { margin-top: 4px; }
+
+  .secao { margin-bottom: var(--esp-24); }
+
+  /* Fileira de filtros e de janelas de tempo: quebra em vez de rolar de lado.
+     São 3 ou 4 rótulos curtos — wrap resolve, e rolagem horizontal esconderia
+     opção sem avisar. */
+  .filtros { flex-wrap: wrap; }
+
+  /* ---------- superfícies ---------- */
+
+  .painel { border-radius: var(--raio-card); padding: var(--esp-12); }
+
+  /* Painel em volta de uma lista de cartões vira moldura dentro de moldura: a
+     borda do painel e a de cada cartão desenham duas caixas para a mesma
+     coisa. Os cartões já são a superfície. */
+  .painel:has(> .lista-cartoes) {
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+
+  /* ---------- formulário e toque ---------- */
+
+  /* Abaixo de 16px o iOS dá zoom ao focar o campo e não desfaz — a página fica
+     deslocada pelo resto da sessão. Invisível no Chrome do desktop. */
+  input,
+  select,
+  textarea { font-size: 16px; min-height: 48px; }
+
+  input[type="number"] { max-width: 140px; }
+
+  button.acao { min-height: 48px; width: 100%; }
+  button.discreto { min-height: var(--toque); padding: var(--esp-8) var(--esp-12); }
+
+  /* ---------- entrar ---------- */
+
+  .entrar { padding: var(--esp-20); }
+  .entrar form { width: min(320px, 100%); }
+
+  /* ---------- folha inferior ---------- */
+
+  .cortina {
+    padding: 0;
+    place-items: end stretch;
+  }
+
+  .dialogo {
+    /* O teto de 560px é da FOLHA, não do diálogo: em paisagem (360px de
+       altura) com o teclado aberto, 88dvh ainda deixaria o campo de motivo
+       fora da tela. No desktop o diálogo continua podendo crescer. */
+    max-height: min(88dvh, 560px);
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--raio-folha) var(--raio-folha) 0 0;
+    border-right: 0;
+    padding: var(--esp-8) var(--esp-20) calc(var(--esp-32) + var(--sa-baixo));
+    width: 100%;
+  }
+
+  /* A alça. Pseudo-elemento porque assim ela não existe no desktop e não custa
+     uma linha de JSX. Mesmas medidas do Sheet do app: 36 × 4. */
+  .dialogo::before {
+    background: var(--line-forte);
+    border-radius: var(--raio-pilula);
+    content: "";
+    display: block;
+    height: 4px;
+    margin: 0 auto var(--esp-16);
+    width: 36px;
+  }
+
+  /* Empilhados e de largura cheia. A ordem do DOM é [Cancelar, Confirmar], e
+     em coluna isso põe a ação principal EMBAIXO — mais perto do polegar, e sem
+     descolar a ordem visual da ordem de tabulação. */
+  .dialogo-acoes {
+    flex-direction: column;
+    gap: var(--esp-8);
+  }
+  .dialogo-acoes button { width: 100%; }
+
+  /* O campo de busca ocupa a linha toda e os filtros quebram embaixo. */
+  .busca .campo-busca { flex: 1 1 100%; max-width: none; }
+
+  /* ---------- camada de tela cheia ---------- */
+
+  .camada {
+    background: var(--bg);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    inset: 0;
+    position: fixed;
+    z-index: var(--z-camada);
+  }
+  .camada-topo {
+    align-items: center;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: var(--esp-12);
+    min-height: 52px;
+    padding: var(--esp-8) max(var(--esp-16), var(--sa-dir)) var(--esp-8)
+      max(var(--esp-16), var(--sa-esq));
+  }
+  .camada-topo button { flex: none; }
+  /* Nome longo trunca em vez de sangrar para fora do cabeçalho. */
+  .camada-topo b {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .camada-corpo {
+    /* E-mail sem espaço nenhum não quebra sozinho, e o resto some na borda. */
+    overflow-wrap: anywhere;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--esp-16) max(var(--esp-20), var(--sa-dir)) var(--esp-24)
+      max(var(--esp-20), var(--sa-esq));
+  }
+  /* Fora da rolagem, sempre. A ação principal não pode depender de a pessoa
+     descobrir que precisa rolar — é a mesma regra do compositor do app. */
+  .camada-acoes {
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    display: grid;
+    gap: var(--esp-8);
+    grid-template-columns: 1fr 1fr;
+    padding: var(--esp-12) max(var(--esp-20), var(--sa-dir))
+      calc(var(--esp-12) + var(--sa-baixo)) max(var(--esp-20), var(--sa-esq));
+  }
+  .camada-acoes button { min-height: 48px; width: 100%; }
+
+  /* ---------- denúncias ---------- */
+
+  /* A coluna de ações ao lado espremia o texto denunciado a quase nada numa
+     tela estreita. Embaixo, em linha, os dois botões dividem a largura. */
+  .denuncia-linha { flex-direction: column; }
+  .acoes-lateral { flex-direction: row; min-width: 0; }
+  .acoes-lateral button { flex: 1; }
+
+  /* ---------- painel de crescimento ---------- */
+
+  /* Duas colunas à força: com auto-fit, 4 KPIs viram 4 blocos empilhados e a
+     tela começa com um palmo de rolagem antes do primeiro gráfico. */
+  .cartoes {
+    gap: var(--esp-8);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: var(--esp-24);
+  }
+  .cartao { padding: var(--esp-12); }
+
+  .retencao {
+    display: grid;
+    gap: var(--esp-12);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* ---------- lista em cartões (no lugar da tabela) ---------- */
+
+  .lista-cartoes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-8);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .cartao-item {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--raio-card);
+    display: block;
+    padding: var(--esp-12);
+    width: 100%;
+  }
+
+  /* O cartão inteiro é o alvo: some o botão "Abrir" e o alvo sai de uns 30px
+     para uns 76. Botão de verdade, então teclado e leitor de tela vêm junto. */
+  button.cartao-item {
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+
+  .cartao-titulo {
+    align-items: baseline;
+    display: flex;
+    gap: var(--esp-8);
+    justify-content: space-between;
+  }
+  .cartao-titulo b {
+    font-family: var(--display);
+    font-size: 16px;
+    font-weight: 700;
+  }
+  /* E-mail longo não pode empurrar o cartão para fora da tela. */
+  .cartao-sub {
+    color: var(--texto-2);
+    font-size: 13px;
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+  .cartao-meta {
+    align-items: baseline;
+    color: var(--texto-3);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 12px;
+    gap: var(--esp-12);
+    margin-top: var(--esp-8);
+  }
+
+  /* A data é o dado menos importante da linha e não pode ser o mais pesado. */
+  .cartao-meta .num { color: var(--texto-3); font-weight: 500; }
+
+  .cartao-numeros {
+    display: grid;
+    gap: var(--esp-8);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: var(--esp-12);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Só a entrada é animada. A saída exige máquina de estado para esperar a
+       animação antes de desmontar, e ninguém reclama de uma folha que fecha
+       rápido demais. */
+    .dialogo { animation: subir var(--mov-folha) cubic-bezier(0.2, 0, 0, 1); }
+  }
+}
+
+@keyframes subir {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

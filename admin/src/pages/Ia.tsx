@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { buscarChaves, buscarSerie, type UsoPorChave, type UsoPorDia } from "../api";
 import { Serie } from "../components/Serie";
+import { useEhCelular } from "../hooks/useEhCelular";
 import { Termica } from "../components/Termica";
 
 const JANELAS = [7, 30, 90];
@@ -11,6 +12,7 @@ export function Ia({ token }: { token: string }) {
   const [serie, setSerie] = useState<UsoPorDia[] | null>(null);
   const [chaves, setChaves] = useState<UsoPorChave[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const ehCelular = useEhCelular();
 
   useEffect(() => {
     let ativo = true;
@@ -42,7 +44,7 @@ export function Ia({ token }: { token: string }) {
             aparecem aqui.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="filtros">
           {JANELAS.map((d) => (
             <button key={d} className="discreto" aria-pressed={dias === d} onClick={() => setDias(d)}>
               {d} dias
@@ -66,8 +68,8 @@ export function Ia({ token }: { token: string }) {
             <>
               <Serie dados={serie} />
               <p className="aviso" style={{ marginTop: 10, marginBottom: 0 }}>
-                {nf.format(totalChamadas)} chamadas e {nf.format(totalTokens)} tokens em {dias} dias
-                {totalFalhas > 0 && <> · {nf.format(totalFalhas)} falharam (em vermelho)</>}
+                {nf.format(totalChamadas)} chamadas e {nf.format(totalTokens)} tokens em {dias} dias.
+                {totalFalhas > 0 && <> {nf.format(totalFalhas)} falharam, em vermelho.</>}
               </p>
             </>
           )}
@@ -83,40 +85,88 @@ export function Ia({ token }: { token: string }) {
             <p className="vazio">
               Nenhuma chave foi usada hoje. O consumo aparece aqui na primeira chamada.
             </p>
+          ) : ehCelular ? (
+            /* Seis colunas de número não cabem em 360px, e rolar de lado para
+               ler uma linha é pior que ler duas. A barra de quota, que é o que
+               se olha de relance, ganha a largura toda. */
+            <ul className="lista-cartoes">
+              {chaves.map((c) => (
+                <li className="cartao-item" key={c.keyLabel}>
+                  <div className="cartao-titulo">
+                    <b>{c.keyLabel}</b>
+                  </div>
+                  <div className="cartao-sub">{c.provider}</div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <Termica pct={c.usoPct} />
+                    {c.limiteDiario !== null && (
+                      <div className="aviso" style={{ marginTop: 4 }}>
+                        {nf.format(c.chamadas)} de {nf.format(c.limiteDiario)}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="cartao-numeros">
+                    <div>
+                      <div className="num">{nf.format(c.chamadas)}</div>
+                      <div className="aviso">chamadas</div>
+                    </div>
+                    <div>
+                      <div
+                        className="num"
+                        style={{ color: c.falhas ? "var(--perigo)" : undefined }}
+                      >
+                        {nf.format(c.falhas)}
+                      </div>
+                      <div className="aviso">falhas</div>
+                    </div>
+                    <div>
+                      <div className="num">{nf.format(c.tokens)}</div>
+                      <div className="aviso">tokens</div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Chave</th>
-                  <th>Serviço</th>
-                  <th style={{ width: 180 }}>Quota usada</th>
-                  <th className="dir">Chamadas</th>
-                  <th className="dir">Falhas</th>
-                  <th className="dir">Tokens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {chaves.map((c) => (
-                  <tr key={c.keyLabel}>
-                    <td>{c.keyLabel}</td>
-                    <td style={{ color: "var(--texto-2)" }}>{c.provider}</td>
-                    <td>
-                      <Termica pct={c.usoPct} />
-                      {c.limiteDiario !== null && (
-                        <span className="aviso">
-                          {nf.format(c.chamadas)} de {nf.format(c.limiteDiario)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="dir num">{nf.format(c.chamadas)}</td>
-                    <td className="dir num" style={{ color: c.falhas ? "var(--perigo)" : undefined }}>
-                      {nf.format(c.falhas)}
-                    </td>
-                    <td className="dir num">{nf.format(c.tokens)}</td>
+            <div className="rolagem-tabela">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Chave</th>
+                    <th>Serviço</th>
+                    <th className="col-quota">Quota usada</th>
+                    <th className="dir">Chamadas</th>
+                    <th className="dir">Falhas</th>
+                    <th className="dir">Tokens</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {chaves.map((c) => (
+                    <tr key={c.keyLabel}>
+                      <td>{c.keyLabel}</td>
+                      <td style={{ color: "var(--texto-2)" }}>{c.provider}</td>
+                      <td>
+                        <Termica pct={c.usoPct} />
+                        {c.limiteDiario !== null && (
+                          <span className="aviso">
+                            {nf.format(c.chamadas)} de {nf.format(c.limiteDiario)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="dir num">{nf.format(c.chamadas)}</td>
+                      <td
+                        className="dir num"
+                        style={{ color: c.falhas ? "var(--perigo)" : undefined }}
+                      >
+                        {nf.format(c.falhas)}
+                      </td>
+                      <td className="dir num">{nf.format(c.tokens)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           <p className="aviso" style={{ marginTop: 12, marginBottom: 0 }}>
             O teto de cada chave vem da variável AI_DAILY_LIMITS. Sem teto configurado,

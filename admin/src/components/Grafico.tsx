@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useEhCelular } from "../hooks/useEhCelular";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Legend,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -16,6 +17,26 @@ const curto = (dia: string) => dia.slice(8) + "/" + dia.slice(5, 7);
 /** O Recharts tipa o rótulo do tooltip como ReactNode, não string. */
 const curtoNode = (label: ReactNode): ReactNode =>
   typeof label === "string" ? curto(label) : label;
+
+/** Ajustes de tela estreita, iguais nos dois gráficos.
+ *
+ *  A `Legend` é o problema silencioso: com 3 séries ela quebra em duas linhas
+ *  numa tela de celular e, como vive dentro do container de altura fixa, quem
+ *  encolhe é o gráfico. Reservando altura para ela, o Recharts passa a
+ *  descontar de forma previsível — e a altura total cresce em vez de o
+ *  desenho murchar. */
+const ALTURA_LEGENDA = 28;
+
+function medidas(movel: boolean, faixas: number, altura: number) {
+  const comLegenda = faixas > 1;
+  return {
+    // O eixo Y custa largura fixa; em 288px de gráfico, 44px são 15%.
+    larguraY: movel ? 34 : 44,
+    margemEsq: movel ? -10 : -22,
+    altura: (movel ? Math.round(altura * 0.8) : altura) + (movel && comLegenda ? ALTURA_LEGENDA : 0),
+    legenda: comLegenda,
+  };
+}
 
 const TOOLTIP = {
   contentStyle: {
@@ -45,14 +66,17 @@ export function GraficoBarras({
   faixas: Faixa[];
   altura?: number;
 }) {
+  const m = medidas(useEhCelular(), faixas.length, altura);
   return (
-    <ResponsiveContainer width="100%" height={altura}>
-      <BarChart data={dados} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+    <ResponsiveContainer width="100%" height={m.altura}>
+      <BarChart data={dados} margin={{ top: 4, right: 4, bottom: 0, left: m.margemEsq }}>
         <CartesianGrid {...GRADE} vertical={false} />
         <XAxis dataKey="dia" tickFormatter={curto} {...EIXO} tickLine={false} minTickGap={18} />
-        <YAxis {...EIXO} tickLine={false} axisLine={false} allowDecimals={false} width={44} />
+        <YAxis {...EIXO} tickLine={false} axisLine={false} allowDecimals={false} width={m.larguraY} />
         <Tooltip {...TOOLTIP} labelFormatter={curtoNode} />
-        {faixas.length > 1 && <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />}
+        {m.legenda && (
+          <Legend height={ALTURA_LEGENDA} wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
+        )}
         {faixas.map((f) => (
           <Bar key={f.chave} dataKey={f.chave} name={f.nome} fill={f.cor} radius={[3, 3, 0, 0]} />
         ))}
@@ -71,14 +95,17 @@ export function GraficoLinhas({
   faixas: Faixa[];
   altura?: number;
 }) {
+  const m = medidas(useEhCelular(), faixas.length, altura);
   return (
-    <ResponsiveContainer width="100%" height={altura}>
-      <AreaChart data={dados} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+    <ResponsiveContainer width="100%" height={m.altura}>
+      <AreaChart data={dados} margin={{ top: 4, right: 4, bottom: 0, left: m.margemEsq }}>
         <CartesianGrid {...GRADE} vertical={false} />
         <XAxis dataKey="dia" tickFormatter={curto} {...EIXO} tickLine={false} minTickGap={18} />
-        <YAxis {...EIXO} tickLine={false} axisLine={false} allowDecimals={false} width={44} />
+        <YAxis {...EIXO} tickLine={false} axisLine={false} allowDecimals={false} width={m.larguraY} />
         <Tooltip {...TOOLTIP} labelFormatter={curtoNode} cursor={{ stroke: "var(--line-forte)" }} />
-        {faixas.length > 1 && <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />}
+        {m.legenda && (
+          <Legend height={ALTURA_LEGENDA} wrapperStyle={{ fontSize: 12, paddingTop: 6 }} />
+        )}
         {faixas.map((f) => (
           <Area
             key={f.chave}
