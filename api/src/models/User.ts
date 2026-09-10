@@ -54,6 +54,22 @@ const userSchema = new Schema(
      *  máximo a cada 10 minutos para não pesar em toda requisição. */
     lastSeenAt: { type: Date, default: null, index: true },
 
+    // --- Preferências ---
+    settings: {
+      /** Treinos aparecem no perfil para outras pessoas.
+       *
+       *  null = ainda não perguntamos. Enquanto for null, nada fica público:
+       *  ninguém deve ter conteúdo exposto por omissão, só por escolha. A
+       *  pergunta aparece na conclusão do primeiro treino. */
+      activitiesPublic: { type: Boolean, default: null },
+      /** Traçado de GPS visível para terceiros.
+       *
+       *  Separado de activitiesPublic de propósito: "correu 6 km em 32 min" é
+       *  resultado, mas a rota começa e termina na porta de casa. No mesmo
+       *  botão, alguém publicaria o endereço achando que publicou o tempo. */
+      routesPublic: { type: Boolean, default: false },
+    },
+
     // --- Assinatura ---
     // `tier` continua sendo a verdade que o app lê; estes campos dizem POR QUE
     // a pessoa é premium, para o webhook da loja não derrubar uma cortesia.
@@ -89,6 +105,11 @@ export function publicUser(user: UserDoc) {
     bio: user.bio ?? "",
     tier: user.tier,
     onboardingComplete: user.onboardingComplete,
+    settings: {
+      // null aqui é o que faz o app perguntar na conclusão do primeiro treino.
+      activitiesPublic: user.settings?.activitiesPublic ?? null,
+      routesPublic: user.settings?.routesPublic ?? false,
+    },
   };
 }
 

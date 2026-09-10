@@ -95,6 +95,55 @@ authRouter.get(
   })
 );
 
+// Preferências de privacidade. Separadas de PATCH /me (que é identidade:
+// nome, foto, bio) porque mudam quem enxerga o quê, não quem a pessoa é.
+const settingsSchema = z.object({
+  activitiesPublic: z.boolean().nullable().optional(),
+  routesPublic: z.boolean().optional(),
+});
+
+authRouter.get(
+  "/settings",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const s = req.user!.settings;
+    res.json({
+      data: {
+        // null = a pessoa ainda não decidiu; é o que faz o app perguntar
+        // depois do primeiro treino.
+        activitiesPublic: s?.activitiesPublic ?? null,
+        routesPublic: s?.routesPublic ?? false,
+      },
+      meta: {},
+    });
+  })
+);
+
+authRouter.patch(
+  "/settings",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const entrada = settingsSchema.parse(req.body);
+    const user = req.user!;
+
+    if (entrada.activitiesPublic !== undefined) {
+      user.set("settings.activitiesPublic", entrada.activitiesPublic);
+    }
+    if (entrada.routesPublic !== undefined) {
+      user.set("settings.routesPublic", entrada.routesPublic);
+    }
+    await user.save();
+
+    res.json({
+      data: {
+        activitiesPublic: user.settings?.activitiesPublic ?? null,
+        routesPublic: user.settings?.routesPublic ?? false,
+      },
+      meta: {},
+    });
+  })
+);
+
 authRouter.get(
   "/check-username",
   requireAuth,

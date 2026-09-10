@@ -7,10 +7,15 @@ import { HttpError } from "../utils/httpError.js";
 import { User } from "../models/User.js";
 import { Post } from "../models/Post.js";
 import { Activity } from "../models/Activity.js";
+import {
+  filtroDeAtividadesVisiveis,
+  podarRotaSePrivada,
+} from "../services/activityVisibility.js";
 import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
 import { Comment } from "../models/Comment.js";
 import { createNotification } from "../services/notifications.js";
+import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 import { getSport } from "../services/sports.js";
 
 export const socialRouter = Router();
@@ -397,14 +402,25 @@ socialRouter.get(
     const user = await User.findById(req.params.id).select("name username avatarUrl bio");
     if (!user) throw new HttpError(404, "Usuário não encontrado");
 
-    const [posts, followers, following, isFollowing] = await Promise.all([
-      Post.find({ author: user._id, ...(user._id.equals(me) ? {} : { hidden: { $ne: true } }) })
-        .sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
-      .populate("activity", "kind sportId payload metrics durationSec title"),
-      Follow.countDocuments({ following: user._id }),
-      Follow.countDocuments({ follower: user._id }),
-      Follow.exists({ follower: me, following: user._id }),
-    ]);
+    const filtroPosts = {
+      author: user._id,
+      ...(user._id.equals(me) ? {} : { hidden: { $ne: true } }),
+    };
+    const filtroAtividades = await filtroDeAtividadesVisiveis(user._id, me);
+
+    const [posts, totalPosts, totalAtividades, followers, following, isFollowing] =
+      await Promise.all([
+        Post.find(filtroPosts)
+          .sort({ createdAt: -1 }).limit(30).populate("author", "name username avatarUrl")
+          .populate("activity", "kind sportId payload metrics durationSec title"),
+        // Contagem de verdade. Antes era posts.length, que vinha de uma query
+        // com limit(30) — o número parava de crescer na trigésima publicação.
+        Post.countDocuments(filtroPosts),
+        Activity.countDocuments(filtroAtividades),
+        Follow.countDocuments({ following: user._id }),
+        Follow.countDocuments({ follower: user._id }),
+        Follow.exists({ follower: me, following: user._id }),
+      ]);
 
     const likedIds = await likedSetFor(me, posts.map((p) => p._id));
     res.json({
@@ -415,7 +431,9 @@ socialRouter.get(
         avatarUrl: user.avatarUrl ?? "",
         bio: user.bio ?? "",
       },
-      counts: { posts: posts.length, followers, following },
+      // "treinos" passa a contar treinos. Antes o app exibia a contagem de
+      // posts com esse rótulo, então quem treinava sem publicar via zero.
+      counts: { treinos: totalAtividades, posts: totalPosts, followers, following },
       isFollowing: Boolean(isFollowing),
       isMe: user._id.toString() === me.toString(),
       posts: posts.map((p) => serializePost(p, likedIds)),
@@ -440,6 +458,72 @@ function serializeComment(comment: InstanceType<typeof Comment>) {
     },
   };
 }
+
+// Treinos públicos de alguém — o que dá corpo à aba "Treinos" do perfil.
+// Sem isto, o perfil de outra pessoa só mostrava o que ela publicou no feed.
+socialRouter.get(
+  "/users/:id/activities",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const me = req.user!._id;
+    const dono = new mongoose.Types.ObjectId(req.params.id);
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const cursor = req.query.cursor ? decodeCursor(String(req.query.cursor)) : null;
+
+    const filtro: mongoose.FilterQuery<typeof Activity> = {
+      ...(await filtroDeAtividadesVisiveis(dono, me)),
+    };
+    if (cursor) {
+      filtro.$and = [
+        {
+          $or: [
+            { startedAt: { $lt: cursor.startedAt } },
+            { startedAt: cursor.startedAt, _id: { $lt: new mongoose.Types.ObjectId(cursor.id) } },
+          ],
+        },
+      ];
+    }
+
+    const docs = await Activity.find(filtro).sort({ startedAt: -1, _id: -1 }).limit(limit + 1);
+    const temMais = docs.length > limit;
+    const itens = temMais ? docs.slice(0, limit) : docs;
+    const ultimo = itens[itens.length - 1];
+    const nextCursor =
+      temMais && ultimo
+        ? encodeCursor({ startedAt: ultimo.startedAt, id: ultimo._id.toString() })
+        : null;
+
+    // Quais desses treinos a pessoa também publicou no feed — o card mostra isso.
+    const idsComPost = new Set(
+      (await Post.find({ activity: { $in: itens.map((a) => a._id) }, hidden: { $ne: true } })
+        .select("activity"))
+        .map((p) => p.activity?.toString())
+        .filter(Boolean) as string[]
+    );
+
+    const data = await Promise.all(
+      itens.map(async (a) => ({
+        id: a._id.toString(),
+        sportId: a.sportId,
+        kind: a.kind,
+        title: a.title ?? "",
+        startedAt: a.startedAt,
+        durationSec: a.durationSec,
+        metrics: a.metrics ?? {},
+        // O traçado de GPS só sai se o dono tornou as rotas públicas.
+        payload: await podarRotaSePrivada(
+          (a.payload ?? {}) as Record<string, unknown>,
+          a.user,
+          me
+        ),
+        compartilhado: idsComPost.has(a._id.toString()),
+      }))
+    );
+
+    res.json({ data, meta: { nextCursor } });
+  })
+);
 
 // Cria um comentário e incrementa a contagem do post.
 socialRouter.post(
