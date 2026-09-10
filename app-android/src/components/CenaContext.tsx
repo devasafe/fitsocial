@@ -12,6 +12,7 @@
 // Quem não navega não precisa disto e pode renderizar <CenaLime> direto.
 
 import React, { createContext, useContext, useMemo, useState } from "react";
+import { Platform } from "react-native";
 import { CenaLime, type Origem } from "./CenaLime";
 
 interface Pedido {
@@ -55,6 +56,7 @@ export function CenaProvider({ children }: { children: React.ReactNode }) {
         origem={pedido?.origem}
         passos={pedido?.passos ?? []}
         passoMs={pedido?.passoMs}
+        aoPedirSaida={cena.fechar}
       />
     </CenaCtx.Provider>
   );
@@ -67,4 +69,29 @@ export function useCena(): Cena {
 /** Espera o mínimo para a gota cobrir a tela antes de trocar o que está embaixo. */
 export const COBERTURA_MS = 520;
 
+// A cena cobre a CERIMÔNIA, não a rede. apiFetch espera até 60s, e uma tela
+// lime inteira por um minuto — sem abas, sem voltar, sem cancelar — é uma
+// armadilha. Passado este limite a cena sai e devolve a pessoa à tela dela,
+// com o botão ainda em carregamento. A ação continua; só a festa acaba.
+export const LIMITE_DE_CENA_MS = 6000;
+
 export const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export interface ToqueBruto {
+  nativeEvent: { pageX?: number; pageY?: number; clientX?: number; clientY?: number };
+}
+
+/** De onde a gota nasce. Sem um ponto confiável, do centro. */
+export function origemDoToque(evento?: ToqueBruto | null): Origem | null {
+  const n = evento?.nativeEvent;
+  if (!n) return null;
+  // No web o overlay é fixed, então o par certo é client*. E o botão é focável:
+  // acionar por teclado gera um clique sintético em (0,0), que faria a gota
+  // nascer no canto da tela em vez do botão.
+  const x = Platform.OS === "web" ? n.clientX ?? n.pageX : n.pageX;
+  const y = Platform.OS === "web" ? n.clientY ?? n.pageY : n.pageY;
+  if (typeof x !== "number" || typeof y !== "number") return null;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (x === 0 && y === 0) return null;
+  return { x, y };
+}

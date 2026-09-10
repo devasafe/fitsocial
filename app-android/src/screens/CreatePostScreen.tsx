@@ -16,12 +16,19 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "../context/AuthContext";
-import { createPost } from "../api/social";
+import { createPost, type Post } from "../api/social";
 import { uploadImage } from "../api/uploads";
 import type { Activity } from "../api/activities";
 import { Button, Txt } from "../components/ui";
 import { PASSOS } from "../components/Espera";
-import { useCena, COBERTURA_MS, esperar } from "../components/CenaContext";
+import {
+  useCena,
+  origemDoToque,
+  COBERTURA_MS,
+  LIMITE_DE_CENA_MS,
+  esperar,
+  type ToqueBruto,
+} from "../components/CenaContext";
 import { sportLabel } from "../lib/sportLabel";
 import { legendaSugerida } from "../lib/crossfitResumo";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
@@ -114,21 +121,21 @@ export function CreatePostScreen() {
     }
   }
 
-  async function handlePost(evento?: { nativeEvent: { pageX: number; pageY: number } }) {
+  async function handlePost(evento?: ToqueBruto) {
     if (!canPost) return;
     setSaving(true);
-    cena.abrir({
-      passos: PASSOS.publicando,
-      origem: evento
-        ? { x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY }
-        : null,
-    });
+    cena.abrir({ passos: PASSOS.publicando, origem: origemDoToque(evento) });
 
+    // Se a rede demorar, a cena sai e devolve a pessoa ao compositor com o
+    // botão em carregamento — de onde ela consegue voltar. A publicação segue.
+    const desistirDaCena = setTimeout(() => cena.fechar(), LIMITE_DE_CENA_MS);
+
+    let post: Post;
     try {
       // O mínimo de espera é da CENA, não da rede: se o post voltar em 200ms,
       // a troca de tela aconteceria com a gota ainda crescendo e a pessoa veria
       // o compositor sumir por baixo dela.
-      const [{ post }] = await Promise.all([
+      [{ post }] = await Promise.all([
         createPost(token!, {
           text: text.trim() || undefined,
           imageUrl: imageUrl ?? undefined,
@@ -136,27 +143,56 @@ export function CreatePostScreen() {
         }),
         esperar(COBERTURA_MS),
       ]);
-
-      // Publicar termina VENDO o que foi publicado.
-      //
-      // reset em vez de empilhar: voltar do post tem que levar para a navegação
-      // principal. Empilhando, o botão voltar traria de volta o compositor com
-      // o texto que acabou de virar post — e um segundo "Publicar" ali criaria
-      // uma publicação duplicada.
-      nav.reset({
-        index: 1,
-        routes: [{ name: "Tabs" }, { name: "PostDetail", params: { post } }],
-      });
-
-      // O post monta por baixo do lime; só então o verde abre nele.
-      await esperar(360);
-      cena.fechar();
     } catch (err) {
+      // Falha instantânea (offline é uns 50ms) cortaria a gota no meio do
+      // crescimento. Deixa a cena chegar até a tela cheia antes de desfazer.
+      clearTimeout(desistirDaCena);
+      await esperar(COBERTURA_MS);
       cena.fechar();
-      notify("Não foi possível postar", (err as Error).message);
-    } finally {
+      // notify no web é window.alert: síncrono, nasceria por cima do verde.
+      await esperar(300);
       setSaving(false);
+      notify("Não foi possível publicar", (err as Error).message);
+      return;
     }
+    clearTimeout(desistirDaCena);
+
+    // Daqui para baixo o post EXISTE. Nada aqui pode virar "não foi possível
+    // publicar" — a pessoa tocaria de novo e criaria a duplicata.
+    irParaOPost(post);
+    await esperar(360);
+    cena.fechar();
+  }
+
+  /**
+   * Publicar termina VENDO o que foi publicado — e voltar dali não pode cair no
+   * compositor com o texto que acabou de virar post, onde um segundo "Publicar"
+   * criaria uma duplicata.
+   */
+  function irParaOPost(post: Post) {
+    if (!fromWorkout) {
+      // O compositor sai da pilha e o que estava embaixo (em geral o feed, com
+      // a rolagem e o cursor de paginação) continua vivo.
+      nav.replace("PostDetail", { post });
+      return;
+    }
+
+    // Veio do treino: embaixo está o check-in de um treino já encerrado, que
+    // ninguém quer rever ao voltar. Aqui a pilha é refeita — reaproveitando a
+    // rota de Tabs que já existe, senão as abas remontam e a pessoa perde a
+    // aba em que estava.
+    const tabs = nav.getState().routes.find((r) => r.name === "Tabs");
+    nav.reset({
+      index: 1,
+      routes: [
+        // A chave vem da rota de abas que já existe. Chave igual = mesma
+        // instância, sem remontar: a aba em que a pessoa estava, a rolagem do
+        // feed e o cursor da paginação continuam de pé. Com chave nova, ela
+        // voltaria do post caindo em "Hoje" com tudo recarregado.
+        { name: "Tabs" as const, key: tabs?.key },
+        { name: "PostDetail" as const, params: { post } },
+      ],
+    });
   }
 
   return (
@@ -239,7 +275,7 @@ export function CreatePostScreen() {
         <Button
           title="Publicar"
           size="lg"
-          onPress={(e) => handlePost(e)}
+          onPress={(e) => void handlePost(e)}
           loading={saving}
           disabled={!canPost || uploading}
           glow

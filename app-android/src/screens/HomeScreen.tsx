@@ -9,7 +9,13 @@ import { updateSettings } from "../api/settings";
 import { BadgeSobreposto } from "../components/Badge";
 import { EsperaLonga, PASSOS } from "../components/Espera";
 import { CenaLime, type Origem } from "../components/CenaLime";
-import { useCena, esperar, COBERTURA_MS } from "../components/CenaContext";
+import {
+  useCena,
+  origemDoToque,
+  esperar,
+  COBERTURA_MS,
+  type ToqueBruto,
+} from "../components/CenaContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
@@ -56,19 +62,22 @@ export function HomeScreen() {
   // Onde o dedo tocou: é daí que a gota nasce. Sem isso ela viria do centro,
   // e o efeito perderia a ligação com a causa.
   const [origemDaGota, setOrigemDaGota] = useState<Origem | null>(null);
+  // Gerar o plano leva uns trinta segundos. Quem quiser sair da cena e ver a
+  // Home enquanto isso, sai — a geração continua, e a EsperaLonga do card
+  // conta a mesma história em uma linha.
+  const [cenaDoPlano, setCenaDoPlano] = useState(true);
   const cena = useCena();
+
+  useEffect(() => {
+    if (generating) setCenaDoPlano(true);
+  }, [generating]);
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
   const programacao = user?.settings?.programacao ?? null;
   const seguePropria = programacao === "propria";
 
-  async function escolherProgramacao(
-    escolha: "plano" | "propria" | null,
-    evento?: { nativeEvent: { pageX: number; pageY: number } }
-  ) {
-    if (evento) {
-      setOrigemDaGota({ x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY });
-    }
+  async function escolherProgramacao(escolha: "plano" | "propria" | null, evento?: ToqueBruto) {
+    setOrigemDaGota(origemDoToque(evento));
     setEscolhendoProgramacao(true);
     try {
       await updateSettings(token!, { programacao: escolha });
@@ -229,13 +238,10 @@ export function HomeScreen() {
     );
   }
 
-  async function startToday(evento?: { nativeEvent: { pageX: number; pageY: number } }) {
+  async function startToday(evento?: ToqueBruto) {
     // Pela cena do provedor, não pela daqui: esta tela some por baixo da pilha
     // assim que o treino abre, e a cena tem que continuar na frente.
-    cena.abrir({
-      passos: PASSOS.comecarTreino,
-      origem: evento ? { x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY } : null,
-    });
+    cena.abrir({ passos: PASSOS.comecarTreino, origem: origemDoToque(evento) });
 
     // Passagem, não espera: o treino não fica meio segundo mais longe por causa
     // de um efeito. A troca acontece escondida atrás do lime.
@@ -311,7 +317,7 @@ export function HomeScreen() {
           <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
             {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
           </Txt>
-          <Button title="Começar treino" onPress={(e) => startToday(e)} size="lg" glow />
+          <Button title="Começar treino" onPress={(e) => void startToday(e)} size="lg" glow />
           <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
             <Txt variant="label" color={colors.text2}>
               Escolher outro treino
@@ -512,7 +518,12 @@ export function HomeScreen() {
       ) : null}
 
       {/* A cena. Fica por cima de tudo, inclusive da barra de abas. */}
-      <CenaLime visivel={generating} origem={origemDaGota} passos={PASSOS.plano} />
+      <CenaLime
+        visivel={generating && cenaDoPlano}
+        origem={origemDaGota}
+        passos={PASSOS.plano}
+        aoPedirSaida={() => setCenaDoPlano(false)}
+      />
 
       <QuickFoodAdd
         visible={quickAdd}

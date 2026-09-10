@@ -54,6 +54,7 @@ export function CenaLime({
   origem,
   passos,
   passoMs = PASSO_MS_PADRAO,
+  aoPedirSaida,
 }: {
   visivel: boolean;
   /** Onde o dedo tocou. Sem isso, nasce do centro. */
@@ -61,6 +62,8 @@ export function CenaLime({
   /** Uma frase só = passagem. Várias = companhia numa espera longa. */
   passos: readonly string[];
   passoMs?: number;
+  /** Voltar durante a cena. Sem isso o Modal engole o botão no Android. */
+  aoPedirSaida?: () => void;
 }) {
   const { width, height } = useWindowDimensions();
   const [montado, setMontado] = useState(false);
@@ -72,6 +75,7 @@ export function CenaLime({
   const halo = useRef(new Animated.Value(0)).current;
   const texto = useRef(new Animated.Value(0)).current;
   const saida = useRef(new Animated.Value(1)).current;
+  const animacaoDeSaida = useRef<Animated.CompositeAnimation | null>(null);
 
   // O raio que cobre a tela a partir de um ponto qualquer é a distância até o
   // canto mais distante. Sem isso, tocar perto da borda deixaria um canto sem
@@ -96,6 +100,11 @@ export function CenaLime({
     if (visivel) {
       setMontado(true);
       setPasso(0);
+      // Reabrir dentro dos 300ms da saída: sem parar a animação em curso, o
+      // callback dela ainda desmonta o Modal que acabou de reabrir, e a cena
+      // pisca.
+      animacaoDeSaida.current?.stop();
+      animacaoDeSaida.current = null;
       saida.setValue(1);
 
       if (semMovimento) {
@@ -145,16 +154,21 @@ export function CenaLime({
     }
 
     if (!montado) return;
-    Animated.timing(saida, {
+    const fim = Animated.timing(saida, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
-    }).start(() => setMontado(false));
+    });
+    animacaoDeSaida.current = fim;
+    fim.start(({ finished }) => {
+      if (finished) setMontado(false);
+    });
   }, [visivel, semMovimento, revelar, assentar, halo, texto, saida, montado]);
 
   // ---- Comandos descendo ----
   useEffect(() => {
-    if (!visivel) return;
+    // Passagem tem uma frase só: não há o que avançar.
+    if (!visivel || passos.length < 2) return;
     const t = setInterval(() => {
       setPasso((i) => {
         // Trava no último: voltar ao primeiro faria parecer que recomeçou.
@@ -176,7 +190,13 @@ export function CenaLime({
   const ultimo = passo === passos.length - 1;
 
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent>
+    <Modal
+      visible
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={aoPedirSaida}
+    >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: saida }]}>
         {/* A gota */}
         <Animated.View
