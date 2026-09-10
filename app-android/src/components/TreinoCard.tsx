@@ -3,6 +3,7 @@ import { View, TouchableOpacity } from "react-native";
 import { Txt } from "./ui";
 import { colors, radius, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
+import { linhasDoCard } from "../lib/crossfitResumo";
 import type { TreinoPublico } from "../api/social";
 
 // Como um treino se apresenta no perfil. O formato muda por esporte: corrida
@@ -27,7 +28,7 @@ function ritmo(segPorKm: number): string {
 
 /** Os três números que definem aquele treino, na ordem em que importam. */
 function destaques(t: TreinoPublico): { valor: string; rotulo: string }[] {
-  const m = t.metrics ?? {};
+  const m = (t.metrics ?? {}) as Record<string, number | undefined>;
 
   if (t.kind === "endurance" && (m.distanceKm ?? 0) > 0) {
     const out = [{ valor: `${numero(m.distanceKm!, 2)} km`, rotulo: "distância" }];
@@ -62,6 +63,7 @@ function quando(iso: string): string {
 export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress?: () => void }) {
   const cor = sportColor(treino.sportId);
   const stats = destaques(treino);
+  const linhasCrossfit = treino.crossfit ? linhasDoCard(treino.crossfit) : [];
 
   return (
     <TouchableOpacity
@@ -95,6 +97,19 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
           {treino.title}
         </Txt>
       )}
+
+      {/* CrossFit não cabe em três números: o que define o treino é o WOD e o
+          resultado. Aquecimento e mobilidade ficam para o detalhe. */}
+      {linhasCrossfit.map((linha, i) => (
+        <Txt
+          key={i}
+          variant={i === 0 ? "titleCard" : "body"}
+          color={i === 0 ? colors.text : colors.text2}
+          style={{ marginTop: i === 0 ? 2 : 0 }}
+        >
+          {linha}
+        </Txt>
+      ))}
 
       {stats.length > 0 && (
         <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm }}>

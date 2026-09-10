@@ -69,6 +69,37 @@ export type CreateActivityInput =
       };
     });
 
+/**
+ * As métricas desnormalizadas de uma atividade.
+ *
+ * Deixou de ser `Record<string, number>` quando o CrossFit passou a promover
+ * para cá o que precisa ser consultável: quais blocos, quais movimentos, e o
+ * resumo do WOD. Declarar o que existe é melhor que espalhar cast por tela.
+ */
+export interface ActivityMetrics {
+  minutes?: number;
+  volumeTotalKg?: number;
+  seriesValidas?: number;
+  distanceKm?: number;
+  avgPaceSecPerKm?: number;
+  speedKmh?: number;
+  elevationGainM?: number;
+  /** CrossFit: os tipos de bloco, na ordem em que aconteceram. */
+  blocos?: string[];
+  /** CrossFit: movimentos normalizados — alimenta "mais executados". */
+  movimentos?: string[];
+  wod?: {
+    slug: string | null;
+    familia: string | null;
+    formato: string;
+    escala: string;
+    scoreTipo: string | null;
+    scoreValor: number | null;
+    maiorMelhor: boolean | null;
+    capado: boolean;
+  };
+}
+
 export interface Activity {
   id: string;
   sportId: string;
@@ -78,8 +109,12 @@ export interface Activity {
   durationSec: number;
   visibility: "private" | "followers" | "public";
   notes: string;
-  metrics: Record<string, number>;
+  metrics: ActivityMetrics;
   payload?: unknown;
+  /** Treino de CrossFit já em blocos. O servidor normaliza os dois formatos. */
+  crossfit?: PayloadDeCrossfit | null;
+  perceivedEffort?: number | null;
+  feeling?: string | null;
   // Presente ao buscar por id (ex.: abrir treino de outra pessoa pelo feed).
   owner?: { id: string; name: string; username: string | null; avatarUrl: string } | null;
   // Post do compartilhamento — para curtir/comentar direto do detalhe.

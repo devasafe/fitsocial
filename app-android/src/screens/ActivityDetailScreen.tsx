@@ -8,6 +8,13 @@ import { RouteMap } from "../components/RouteMap";
 import { useAuth } from "../context/AuthContext";
 import { getActivity, type Activity } from "../api/activities";
 import { colors, spacing, sportColor } from "../theme";
+import { DetalheDoTreino } from "../components/crossfit/DetalheDoTreino";
+import {
+  metconDe,
+  prescricaoEmTexto,
+  resultadoEmTexto,
+  rotuloDaEscala,
+} from "../lib/crossfitResumo";
 import { sportLabel } from "../lib/sportLabel";
 import { clock, type GeoPoint } from "../lib/geo";
 import type { AppStackParams } from "../navigation/types";
@@ -90,6 +97,7 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
   }
 
   const p = (a.payload ?? {}) as Payload;
+  const metcon = metconDe(a.crossfit);
   const m = a.metrics ?? {};
   const stroke = sportColor(a.sportId);
   const when = new Date(a.startedAt).toLocaleString("pt-BR", {
@@ -151,22 +159,25 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
           </>
         ) : a.kind === "wod" ? (
           <>
-            <StatRow label="WOD" value={p.name ?? "—"} />
-            <StatRow label="Nível" value={(p.level ?? "rx").toUpperCase()} />
-            <StatRow
-              label="Resultado"
-              value={
-                p.resultTimeSec != null
-                  ? mmss(p.resultTimeSec)
-                  : p.resultRounds != null
-                    ? `${p.resultRounds} rounds`
-                    : p.resultReps != null
-                      ? `${p.resultReps} reps`
-                      : p.resultLoadKg != null
-                        ? `${p.resultLoadKg} kg`
-                        : "—"
-              }
-            />
+            {/* Vem dos blocos normalizados, não do payload cru: assim o mesmo
+                código serve para o formato antigo e para o novo. */}
+            {metcon ? (
+              <>
+                <StatRow label="WOD" value={metcon.nome?.trim() || prescricaoEmTexto(metcon)} />
+                <StatRow label="Escala" value={rotuloDaEscala(metcon.escala?.nivel)} />
+                {resultadoEmTexto(metcon) ? (
+                  <StatRow
+                    label={metcon.resultado?.capado ? "Resultado (no cap)" : "Resultado"}
+                    value={resultadoEmTexto(metcon)}
+                  />
+                ) : null}
+              </>
+            ) : null}
+            {(m.volumeTotalKg ?? 0) > 0 ? (
+              <StatRow label="Volume de força" value={`${Math.round(m.volumeTotalKg as number)} kg`} />
+            ) : null}
+            {a.durationSec > 0 ? <StatRow label="Duração" value={clock(a.durationSec)} /> : null}
+            {a.perceivedEffort ? <StatRow label="Esforço" value={`${a.perceivedEffort}/10`} /> : null}
           </>
         ) : (
           <>
@@ -177,21 +188,8 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
         )}
       </Card>
 
-      {/* Movimentos (WOD) */}
-      {a.kind === "wod" && p.movements && p.movements.length > 0 ? (
-        <Card>
-          <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
-            Movimentos
-          </Txt>
-          {p.movements.map((mv, i) => {
-            const parts: string[] = [];
-            if (mv.loadKg != null) parts.push(`${mv.loadKg} kg`);
-            if (mv.reps != null) parts.push(`${mv.reps} reps`);
-            if (mv.timeSec != null) parts.push(mmss(mv.timeSec));
-            return <StatRow key={i} label={mv.name} value={parts.join(" · ") || "—"} />;
-          })}
-        </Card>
-      ) : null}
+      {/* O treino inteiro, bloco a bloco, na ordem em que aconteceu. */}
+      {a.kind === "wod" && a.crossfit ? <DetalheDoTreino wod={a.crossfit} /> : null}
 
       {/* Splits (endurance) */}
       {p.splits && p.splits.length > 0 ? (

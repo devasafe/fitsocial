@@ -21,6 +21,7 @@ import { uploadImage } from "../api/uploads";
 import type { Activity } from "../api/activities";
 import { Button, Txt } from "../components/ui";
 import { sportLabel } from "../lib/sportLabel";
+import { legendaSugerida } from "../lib/crossfitResumo";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -52,7 +53,12 @@ export function CreatePostScreen() {
   const { token } = useAuth();
   const fromWorkout = route.params?.activity; // veio de um treino finalizado
   const [attached, setAttached] = useState<Activity | null>(fromWorkout ?? null);
-  const [text, setText] = useState("");
+  // O texto de um treino de CrossFit já vem pronto — e editável. Escrever do
+  // zero "Fran, 5:32, RX, Back Squat 100 kg" logo depois de treinar é o tipo de
+  // trabalho que o app tem os dados para poupar.
+  const [text, setText] = useState(
+    fromWorkout?.crossfit ? legendaSugerida(fromWorkout.crossfit, fromWorkout.perceivedEffort) : ""
+  );
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
