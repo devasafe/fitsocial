@@ -1,45 +1,18 @@
 import mongoose, { Schema, type HydratedDocument } from "mongoose";
 import { z } from "zod";
 import { ACTIVITY_KINDS, isValidSport } from "../services/sports.js";
+import { strengthPayloadSchema } from "./strength.js";
+import { wodPayloadV2Schema } from "./crossfit.js";
 
-// ---- Payload strength (Fase 2a) ----
-// Nível "caminho rápido" do docs/ESPORTES.md §4. Campos ricos (rpe, rir, tempo,
-// superset, assistida) entram junto do motor de PR em fatias posteriores.
-
-export const STRENGTH_SET_TYPES = [
-  "aquecimento",
-  "valida",
-  "drop",
-  "falha",
-  "rest_pause",
-  "backoff",
-] as const;
-
-export const strengthSetSchema = z.object({
-  order: z.number().int().min(0).optional(),
-  type: z.enum(STRENGTH_SET_TYPES).default("valida"),
-  weightKg: z.number().min(0).max(1000).default(0),
-  reps: z.number().int().min(0).max(1000).nullish(),
-  holdSec: z.number().min(0).max(86_400).nullish(),
-  done: z.boolean().default(true),
-  // Legado de transição: preserva entries de cardio do check-in (Esteira, Bicicleta…)
-  // até o formato `endurance` (Fase 2b). Não fazem parte do strength "de verdade".
-  durationMin: z.number().min(0).max(1440).nullish(),
-  distanceKm: z.number().min(0).max(1000).nullish(),
-});
-
-export const strengthExerciseSchema = z.object({
-  name: z.string().min(1).max(120),
-  order: z.number().int().min(0).optional(),
-  sets: z.array(strengthSetSchema).min(1),
-});
-
-export const strengthPayloadSchema = z.object({
-  variant: z.enum(["musculacao", "calistenia", "powerlifting", "lpo"]).default("musculacao"),
-  exercises: z.array(strengthExerciseSchema).min(1),
-});
-
-export type StrengthPayload = z.infer<typeof strengthPayloadSchema>;
+// Força e CrossFit moram em arquivos próprios: o primeiro porque os dois o
+// usam, o segundo porque é o formato mais rico do projeto.
+export {
+  STRENGTH_SET_TYPES,
+  strengthSetSchema,
+  strengthExerciseSchema,
+  strengthPayloadSchema,
+  type StrengthPayload,
+} from "./strength.js";
 
 // ---- Payloads dos demais formatos (Fase 2b, caminho rápido) ----
 // Nível mínimo do docs/ESPORTES.md §5/§7/§8. GPS/rota (Fase 3), intervalos,
@@ -110,7 +83,7 @@ export const wodMovementSchema = z.object({
   timeSec: z.number().int().min(0).max(36_000).nullish(),
 });
 
-export const wodPayloadSchema = z.object({
+export const wodPayloadV1Schema = z.object({
   name: z.string().min(1).max(80),
   scoreType: z.enum([
     "for_time",
@@ -133,6 +106,20 @@ export const wodPayloadSchema = z.object({
   // Composição do WOD movimento a movimento (descritiva): nome + carga/reps/tempo.
   movements: z.array(wodMovementSchema).max(30).optional(),
 });
+export type WodPayloadV1 = z.infer<typeof wodPayloadV1Schema>;
+
+/**
+ * Os dois formatos de WOD, e a ordem importa: v2 primeiro.
+ *
+ * O formato antigo (um WOD plano, com um bloco de força opcional pendurado)
+ * continua aceito porque existe APK instalado mandando ele. Trocar o schema por
+ * baixo quebraria o app no celular de quem não atualizou — e não há como
+ * atualizar todo mundo de uma vez.
+ *
+ * A leitura normaliza os dois para a forma de blocos (services/crossfit.ts), de
+ * modo que o resto do sistema conhece um formato só.
+ */
+export const wodPayloadSchema = z.union([wodPayloadV2Schema, wodPayloadV1Schema]);
 export type WodPayload = z.infer<typeof wodPayloadSchema>;
 
 // ---- Entrada de criação (união discriminada por kind) ----

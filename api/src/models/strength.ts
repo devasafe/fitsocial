@@ -1,0 +1,44 @@
+import { z } from "zod";
+
+// Séries e exercícios de força — extraídos de Activity.ts porque o CrossFit
+// reusa este schema tal e qual, e importar de Activity criaria um ciclo
+// (Activity precisa dos blocos de CrossFit, que precisam disto).
+
+// ---- Payload strength (Fase 2a) ----
+// Nível "caminho rápido" do docs/ESPORTES.md §4. Campos ricos (rpe, rir, tempo,
+// superset, assistida) entram junto do motor de PR em fatias posteriores.
+
+export const STRENGTH_SET_TYPES = [
+  "aquecimento",
+  "valida",
+  "drop",
+  "falha",
+  "rest_pause",
+  "backoff",
+] as const;
+
+export const strengthSetSchema = z.object({
+  order: z.number().int().min(0).optional(),
+  type: z.enum(STRENGTH_SET_TYPES).default("valida"),
+  weightKg: z.number().min(0).max(1000).default(0),
+  reps: z.number().int().min(0).max(1000).nullish(),
+  holdSec: z.number().min(0).max(86_400).nullish(),
+  done: z.boolean().default(true),
+  // Legado de transição: preserva entries de cardio do check-in (Esteira, Bicicleta…)
+  // até o formato `endurance` (Fase 2b). Não fazem parte do strength "de verdade".
+  durationMin: z.number().min(0).max(1440).nullish(),
+  distanceKm: z.number().min(0).max(1000).nullish(),
+});
+
+export const strengthExerciseSchema = z.object({
+  name: z.string().min(1).max(120),
+  order: z.number().int().min(0).optional(),
+  sets: z.array(strengthSetSchema).min(1),
+});
+
+export const strengthPayloadSchema = z.object({
+  variant: z.enum(["musculacao", "calistenia", "powerlifting", "lpo"]).default("musculacao"),
+  exercises: z.array(strengthExerciseSchema).min(1),
+});
+
+export type StrengthPayload = z.infer<typeof strengthPayloadSchema>;

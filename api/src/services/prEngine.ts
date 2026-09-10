@@ -1,6 +1,8 @@
 import type mongoose from "mongoose";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Activity } from "../models/Activity.js";
+import { normalizarWod, blocosDoTipo, fecharScore } from "./crossfit.js";
+import { resolverBenchmark } from "./benchmarks.js";
 
 // Motor de detecção de PR (Fase 2c). Ver docs/ESPORTES.md §4.4, §5.3, §7.3, §12.
 // Força e distância: "maior é melhor". Tempo: "menor é melhor". Aulas/horas:
@@ -34,7 +36,9 @@ type PrType =
   | "horas"
   | "wod_time"
   | "wod_score"
-  | "wod_load";
+  | "wod_load"
+  /** Maior sequência sem quebrar num movimento: 35 double-unders seguidos. */
+  | "skill_reps";
 
 const MIN_TYPES = new Set<PrType>(["best_time", "wod_time"]); // menor é melhor
 const MILESTONES: Partial<Record<PrType, number[]>> = {
@@ -176,29 +180,69 @@ interface WodPayloadLike {
   strengthBlock?: unknown;
 }
 
-const WOD_TIME_TYPES = new Set(["for_time", "rft", "chipper"]);
-const WOD_REP_TYPES = new Set(["for_reps", "tabata", "emom"]);
-
+/**
+ * Candidatos de um treino de CrossFit.
+ *
+ * Lê blocos — o formato antigo chega aqui já convertido por `normalizarWod`, de
+ * modo que existe um caminho só.
+ */
 function wodCandidates(payload: unknown): Candidate[] {
-  const p = (payload ?? {}) as WodPayloadLike;
+  const wod = normalizarWod(payload);
   const out: Candidate[] = [];
-  const name = (p.name ?? "").trim().toLowerCase();
-  const level = p.level ?? "rx";
 
-  if (name && p.scoreType) {
-    if (WOD_TIME_TYPES.has(p.scoreType) && (p.resultTimeSec ?? 0) > 0) {
-      out.push({ exerciseName: name, type: "wod_time", repRange: level, value: p.resultTimeSec as number, unit: "s" });
-    } else if (p.scoreType === "amrap" && p.resultRounds != null) {
-      out.push({ exerciseName: name, type: "wod_score", repRange: level, value: p.resultRounds, unit: "rounds" });
-    } else if (WOD_REP_TYPES.has(p.scoreType) && p.resultReps != null) {
-      out.push({ exerciseName: name, type: "wod_score", repRange: level, value: p.resultReps, unit: "reps" });
-    } else if (p.scoreType === "max_load" && p.resultLoadKg != null) {
-      out.push({ exerciseName: name, type: "wod_load", repRange: level, value: p.resultLoadKg, unit: "kg" });
+  // 1RM e carga máxima dos blocos de força, com o MESMO motor da musculação.
+  for (const bloco of blocosDoTipo(wod, "forca")) {
+    out.push(...strengthCandidates({ exercises: bloco.exercicios }));
+  }
+
+  // Recorde de skill: a maior sequência sem quebrar. É o número que mostra
+  // double-under saindo de 12 para 80 em três meses.
+  for (const bloco of blocosDoTipo(wod, "skill")) {
+    if ((bloco.melhorSequencia ?? 0) > 0) {
+      out.push({
+        exerciseName: bloco.movimento.trim().toLowerCase(),
+        type: "skill_reps",
+        repRange: null,
+        value: bloco.melhorSequencia as number,
+        unit: "reps",
+      });
     }
   }
 
-  // 1RM/carga do bloco de força da aula.
-  if (p.strengthBlock) out.push(...strengthCandidates(p.strengthBlock));
+  for (const metcon of blocosDoTipo(wod, "metcon")) {
+    const score = metcon.resultado;
+    if (!score) continue;
+
+    // Sem identidade estável não há recorde: "Fran" e "fran " digitados
+    // diferente virariam dois recordes que nunca se comparam. O slug do
+    // benchmark é a identidade; nome livre não serve.
+    const chave = metcon.benchmark?.slug ?? resolverBenchmark(metcon.nome)?.slug ?? null;
+    if (!chave) continue;
+
+    // Estourou o cap: o resultado é um parcial. Deixar competir faria "4 rounds
+    // no cap de 20min" derrubar um "terminou em 17:34" do quadro de recordes.
+    if (score.capado) continue;
+
+    const nivel = metcon.escala.nivel;
+    const fechado = fecharScore(score, metcon.prescricao.movimentos);
+
+    if (score.tipo === "tempo" && (score.tempoSec ?? 0) > 0) {
+      out.push({ exerciseName: chave, type: "wod_time", repRange: nivel, value: score.tempoSec as number, unit: "s" });
+    } else if (score.tipo === "carga" && (score.cargaKg ?? 0) > 0) {
+      out.push({ exerciseName: chave, type: "wod_load", repRange: nivel, value: score.cargaKg as number, unit: "kg" });
+    } else if (fechado.valor != null && fechado.valor > 0) {
+      // rounds_reps e reps compartilham o mesmo tipo de recorde: os dois são
+      // "quanto trabalho saiu", e o valor canônico já os deixa comparáveis.
+      out.push({
+        exerciseName: chave,
+        type: "wod_score",
+        repRange: nivel,
+        value: fechado.valor,
+        unit: score.tipo === "distancia" ? "m" : "reps",
+      });
+    }
+  }
+
   return out;
 }
 

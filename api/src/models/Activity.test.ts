@@ -75,7 +75,11 @@ describe("activityCreateSchema — formatos da Fase 2b", () => {
       },
     });
     expect(parsed.kind).toBe("wod");
-    if (parsed.kind === "wod") expect(parsed.payload.level).toBe("rx");
+    // O payload de wod virou união: o formato antigo continua aceito, e quem
+    // lê precisa dizer qual dos dois tem em mãos.
+    if (parsed.kind === "wod" && !("v" in parsed.payload)) {
+      expect(parsed.payload.level).toBe("rx");
+    }
   });
 
   it("aceita generic e exige activityName; limita a 3 métricas custom", () => {
