@@ -19,6 +19,14 @@ export interface StorageProvider {
   /** Nome do provider (para logs/diagnóstico). */
   readonly name: string;
   save(file: FileToSave): Promise<SavedFile>;
+  /**
+   * Remove um arquivo pela URL que `save` devolveu.
+   *
+   * Existe por causa da exclusão de conta: uma conta apagada cuja foto de
+   * perfil continua acessível na CDN não foi apagada. Silencioso quando o
+   * arquivo já não existe — apagar o que não está lá é o resultado desejado.
+   */
+  delete(url: string): Promise<void>;
 }
 
 /** Erro específico da camada de storage, para o middleware tratar. */

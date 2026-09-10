@@ -32,6 +32,7 @@ import { ChooseUsernameScreen } from "../screens/ChooseUsernameScreen";
 import { EditProfileScreen } from "../screens/EditProfileScreen";
 import { ConfiguracoesScreen } from "../screens/ConfiguracoesScreen";
 import { AlterarSenhaScreen } from "../screens/AlterarSenhaScreen";
+import { ExcluirContaScreen } from "../screens/ExcluirContaScreen";
 import { RegistrarScreen } from "../screens/RegistrarScreen";
 import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
@@ -237,6 +238,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="AlterarSenha"
             component={AlterarSenhaScreen}
             options={{ headerShown: true, title: "Alterar senha", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="ExcluirConta"
+            component={ExcluirContaScreen}
+            options={{ headerShown: true, title: "Excluir conta", ...headerStyle }}
           />
           <AppStack.Screen
             name="UserProfile"

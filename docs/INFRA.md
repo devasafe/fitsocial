@@ -109,3 +109,30 @@ administrativa fica registrada em `AdminAudit`, com o e-mail mascarado.
   API usa — ela tem chave própria, restrita ao bucket `fotos`).
 - **Acesso ao Mongo de fora**: por padrão fechado. Para manutenção, abra `is_public`
   temporariamente e **feche ao terminar**.
+
+## Backup do Mongo — verificado em 09/09/2026
+
+O backup do `mongodb-fitsocial` (`0 4 * * *`, diário às 04:00) **funciona**. Provado
+acelerando o agendamento para `* * * * *` pela API do Coolify e conferindo as execuções:
+5 rodadas, todas `success`, produzindo `mongo-dump-fitsocial-<epoch>.tar.gz` de ~27 KB.
+O agendamento foi restaurado em seguida.
+
+Duas armadilhas encontradas no caminho:
+
+- `GET /api/v1/databases/{uuid}/backups/{backup_uuid}` **não traz** `executions`. Só a
+  listagem (`.../backups`) traz. Consultar o endpoint de detalhe faz parecer que nada
+  rodou.
+- A listagem parece ignorar o `uuid` do banco: pedir os backups do `drop_marketplace`
+  devolveu o backup do FitSocial. O painel é a fonte de verdade sobre qual backup é de
+  qual banco.
+
+### O que ainda não está resolvido
+
+- **`save_s3: false`** — a cópia fica na mesma VPS que o banco. Se a máquina morrer, o
+  backup morre junto. Mandar para o MinIO local **não** resolve: mesmo servidor, mesmo
+  incêndio. Precisa de um destino fora daqui (R2, S3, Backblaze).
+- **`missing_backup_notification_days: 0`** — se o backup parar de rodar, ninguém fica
+  sabendo.
+- **Restauração nunca ensaiada.** Sabemos que o arquivo é gerado; não sabemos que ele
+  volta. Exige baixar um `.tar.gz` pelo painel e rodar `mongorestore` contra um Mongo
+  descartável.

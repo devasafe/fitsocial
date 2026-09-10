@@ -19,4 +19,12 @@ export class DiskStorage implements StorageProvider {
     await fs.promises.writeFile(path.join(UPLOADS_DIR, nome), file.buffer);
     return { url: `/uploads/${nome}` };
   }
+
+  async delete(url: string): Promise<void> {
+    // Só o nome do arquivo, e só dentro da pasta de uploads: `path.basename`
+    // corta qualquer "../" que venha numa URL montada à mão.
+    const nome = path.basename(url);
+    if (!url.includes("/uploads/") || !nome) return;
+    await fs.promises.rm(path.join(UPLOADS_DIR, nome), { force: true });
+  }
 }

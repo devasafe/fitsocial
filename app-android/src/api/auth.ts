@@ -49,3 +49,15 @@ export function updateMe(token: string, patch: { username?: string; name?: strin
 export function checkUsername(token: string, username: string) {
   return apiFetch<{ available: boolean }>(`/auth/check-username?username=${encodeURIComponent(username)}`, { token });
 }
+
+/**
+ * Exclusão definitiva da conta (LGPD). Não existe desativar: o que volta é uma
+ * conta nova, do zero, com o mesmo e-mail.
+ */
+export function excluirConta(token: string, senha: string) {
+  return apiFetch<{ data: { excluida: boolean } }>("/auth/me", {
+    method: "DELETE",
+    token,
+    body: { senha },
+  });
+}

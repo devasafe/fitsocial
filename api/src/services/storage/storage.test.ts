@@ -71,6 +71,7 @@ describe("factory de storage", () => {
     const fake: StorageProvider = {
       name: "fake",
       save: async () => ({ url: "https://fake/x.jpg" }),
+      delete: async () => {},
     };
     setStorageProvider(fake);
     expect(getStorageProvider()).toBe(fake);
