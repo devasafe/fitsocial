@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Txt } from "../components/ui";
 import { SegmentedControl, type Segment } from "../components/SegmentedControl";
+import { useContadores } from "../context/ContadoresContext";
 import { FeedScreen } from "./FeedScreen";
 import { DesafiosScreen } from "./DesafiosScreen";
 import { LeaderboardScreen } from "./LeaderboardScreen";
@@ -15,17 +16,21 @@ import type { AppStackParams } from "../navigation/types";
 
 type Seg = "seguindo" | "explorar" | "desafios" | "ranking";
 
-const SEGMENTS: Segment<Seg>[] = [
-  { key: "seguindo", label: "Seguindo" },
-  { key: "explorar", label: "Explorar" },
-  { key: "desafios", label: "Desafios" },
-  { key: "ranking", label: "Ranking" },
-];
+// O Ranking não tem badge: ele muda o tempo todo e nada ali é "não visto".
 
 export function ComunidadeScreen() {
   const insets = useSafeAreaInsets();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const { contadores } = useContadores();
   const [seg, setSeg] = useState<Seg>("explorar"); // abre na descoberta, não em "Seguindo"
+
+  const segmentos: Segment<Seg>[] = [
+    { key: "seguindo", label: "Seguindo", badge: contadores.feed },
+    { key: "explorar", label: "Explorar", badge: contadores.explore },
+    { key: "desafios", label: "Desafios", badge: contadores.desafios },
+    { key: "ranking", label: "Ranking" },
+  ];
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.gutter }}>
@@ -36,7 +41,7 @@ export function ComunidadeScreen() {
           </TouchableOpacity>
         </View>
         <SegmentedControl
-          segments={SEGMENTS}
+          segments={segmentos}
           value={seg}
           onChange={setSeg}
           style={{ marginTop: spacing.sm, marginBottom: spacing.sm }}

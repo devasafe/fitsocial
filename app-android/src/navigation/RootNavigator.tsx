@@ -17,6 +17,8 @@ import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
 import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { useContadores } from "../context/ContadoresContext";
+import { BadgeSobreposto } from "../components/Badge";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
 import { LeaderboardScreen } from "../screens/LeaderboardScreen";
@@ -63,6 +65,20 @@ const headerStyle = {
   headerTintColor: colors.text,
   headerShadowVisible: false,
 } as const;
+
+// Badge na aba: só a bolinha, sem número. Na barra inferior o número não muda
+// decisão nenhuma — ou tem coisa nova lá dentro, ou não tem.
+function IconeComunidade({ focused }: { focused: boolean }) {
+  const { contadores } = useContadores();
+  const novidades = contadores.feed + contadores.explore + contadores.desafios;
+  return (
+    <View>
+      <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>❒</Text>
+      {/* Some assim que a pessoa está na aba: ali ela já vê os badges por sub-visão. */}
+      {!focused && <BadgeSobreposto valor={novidades} ponto />}
+    </View>
+  );
+}
 
 function tabIcon(emoji: string) {
   return ({ focused }: { focused: boolean }) => (
@@ -113,7 +129,11 @@ function MainTabs() {
           },
         })}
       />
-      <Tab.Screen name="ComunidadeTab" component={ComunidadeScreen} options={{ title: "Comunidade", tabBarIcon: tabIcon("❒") }} />
+      <Tab.Screen
+        name="ComunidadeTab"
+        component={ComunidadeScreen}
+        options={{ title: "Comunidade", tabBarIcon: (p) => <IconeComunidade focused={p.focused} /> }}
+      />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Perfil", tabBarIcon: tabIcon("●") }} />
     </Tab.Navigator>
   );

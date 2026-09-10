@@ -12,6 +12,7 @@ import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from "@expo-google-
 import { AuthProvider } from "./src/context/AuthContext";
 import { PRCelebrationProvider } from "./src/components/PRCelebration";
 import { PrivacidadeTreinosProvider } from "./src/components/PrivacidadeTreinos";
+import { ContadoresProvider } from "./src/context/ContadoresContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { colors } from "./src/theme";
 
@@ -35,11 +36,13 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <StatusBar style="light" />
-        <PRCelebrationProvider>
-          <PrivacidadeTreinosProvider>
-          <RootNavigator />
-          </PrivacidadeTreinosProvider>
-        </PRCelebrationProvider>
+        <ContadoresProvider>
+          <PRCelebrationProvider>
+            <PrivacidadeTreinosProvider>
+              <RootNavigator />
+            </PrivacidadeTreinosProvider>
+          </PRCelebrationProvider>
+        </ContadoresProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

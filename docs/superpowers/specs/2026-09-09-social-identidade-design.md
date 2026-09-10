@@ -107,6 +107,22 @@ lastSeenAt Date
 índice único { user, area }
 ```
 
+> **Ajustes na Fase 4 (implementação):**
+>
+> **`notificacoes` saiu do ReadState.** A notificação já tem `read` por item, que é uma marca
+> mais fina que uma data. Manter as duas seria ter duas respostas para "isso é novo?" — e é
+> assim que o contador de notificação de qualquer app começa a mentir.
+>
+> **Explorar conta só quem você não segue.** Contando todo mundo, os mesmos três posts
+> apareceriam como `Seguindo 3` e `Explorar 3`: o badge prometeria seis novidades e entregaria
+> três.
+>
+> **A marca nasce na primeira leitura, não no cadastro.** Sem isso, quem já tinha conta abriria
+> o app no dia do deploy com "99+" em tudo — todo o histórico contaria como novidade.
+>
+> **A contagem para em 99.** O app mostra "99+", e o banco não varre a coleção inteira para
+> descobrir um número que ninguém vai ler.
+
 **O contador é derivado, nunca incrementado.** "Quantos itens novos" é
 `count(area, createdAt > lastSeenAt)`, calculado na leitura. Isso elimina de uma vez os
 quatro problemas que você listou: não duplica (não há o que somar duas vezes), não trava em

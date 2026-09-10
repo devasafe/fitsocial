@@ -4,6 +4,8 @@ import { notify } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import { useContadores } from "../context/ContadoresContext";
+import { BadgeSobreposto } from "../components/Badge";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
@@ -12,7 +14,6 @@ import { getCurrentPlan, generatePlan, adjustPlan, type Plan } from "../api/plan
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { getWaterDay, addWater, type WaterDay } from "../api/water";
-import { listNotifications } from "../api/notifications";
 import { coachLine } from "../lib/coachContext";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
@@ -27,11 +28,11 @@ function todayStr(): string {
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { user, token } = useAuth();
+  const { contadores, refrescar: refrescarContadores } = useContadores();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
   const [day, setDay] = useState<DaySummary | null>(null);
   const [water, setWater] = useState<WaterDay | null>(null);
-  const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [erroPlano, setErroPlano] = useState<string | null>(null);
@@ -71,17 +72,17 @@ export function HomeScreen() {
     } finally {
       setLoading(false);
     }
-    // Best-effort — sino e nutrição do dia nunca quebram o carregamento da Home.
-    listNotifications(token!)
-      .then((res) => setUnread(res.unread))
-      .catch(() => {});
+    // Best-effort — a nutrição do dia nunca quebra o carregamento da Home.
+    // O sino não busca mais aqui: o número vem do contexto que serve todos os
+    // badges, então não há dois lugares dizendo coisas diferentes.
+    void refrescarContadores();
     getDay(token!, todayStr())
       .then(setDay)
       .catch(() => {});
     getWaterDay(token!, todayStr())
       .then(setWater)
       .catch(() => {});
-  }, [token]);
+  }, [token, refrescarContadores]);
 
   useFocusEffect(
     useCallback(() => {
@@ -209,26 +210,7 @@ export function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} hitSlop={8}>
             <Txt variant="titleCard">🔔</Txt>
-            {unread > 0 && (
-              <View
-                style={{
-                  position: "absolute",
-                  top: -4,
-                  right: -6,
-                  minWidth: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  paddingHorizontal: 4,
-                  backgroundColor: colors.lime,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Txt variant="caption" color={colors.onLime} style={{ fontSize: 10, lineHeight: 14 }}>
-                  {unread > 9 ? "9+" : unread}
-                </Txt>
-              </View>
-            )}
+            <BadgeSobreposto valor={contadores.notificacoes} />
           </TouchableOpacity>
         </View>
       </View>

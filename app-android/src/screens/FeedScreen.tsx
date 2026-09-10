@@ -14,6 +14,8 @@ import { getFeed, getExplore, followUser, unfollowUser, type Post } from "../api
 import { PostCard } from "../components/PostCard";
 import { DenunciarSheet } from "../components/DenunciarSheet";
 import { useAcoesDePost } from "../lib/acoesDePost";
+import { useContadores } from "../context/ContadoresContext";
+import { useMarcarAoVerNovos } from "../lib/marcarVisto";
 import { Txt, Button, ErrorState } from "../components/ui";
 import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
@@ -27,6 +29,9 @@ export function FeedScreen({
   const { propsDoCard, denunciando, fecharDenuncia } = useAcoesDePost(() => void load());
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
+  const area = mode === "explore" ? "explore" : "feed";
+  const { contadores } = useContadores();
+  const marcacao = useMarcarAoVerNovos(area, contadores[area]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -140,6 +145,8 @@ export function FeedScreen({
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
+        onViewableItemsChanged={marcacao.onViewableItemsChanged}
+        viewabilityConfig={marcacao.viewabilityConfig}
         ListFooterComponent={
           loadingMore ? (
             <View style={{ paddingVertical: spacing.lg }}>
