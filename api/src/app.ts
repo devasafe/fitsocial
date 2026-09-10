@@ -16,6 +16,7 @@ import { nutritionRouter } from "./routes/nutrition.js";
 import { waterRouter } from "./routes/water.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { readStateRouter } from "./routes/readState.js";
+import { pushRouter } from "./routes/push.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
@@ -56,6 +57,7 @@ export function createApp() {
   app.use("/water", waterRouter);
   app.use("/notifications", notificationsRouter);
   app.use("/read-state", readStateRouter);
+  app.use("/push", pushRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
   app.use("/coach", coachRouter);

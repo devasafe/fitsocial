@@ -370,6 +370,29 @@ tem alguém esperando resposta do outro lado.
 lista de notificações inutilizada por publicações. O badge no Feed comunica a mesma coisa
 sem ocupar espaço.
 
+> **Ajustes na Fase 6 (implementação):**
+>
+> **Só dois assuntos empurram: comentário e "quem você segue publicou".** É a tabela acima,
+> cumprida à risca. Push interrompe — cada tipo que entra precisa valer uma pessoa parando o
+> que está fazendo.
+>
+> **A entrega agrupada virou janela de silêncio.** A spec pedia "5 novas publicações"
+> acumuladas por um worker. Este projeto não tem worker nem cron, de propósito
+> (`services/moderation.ts` registra a mesma decisão). A saída: no máximo um push de posts a
+> cada 6 horas por pessoa, e o número no texto vem do contador da Fase 4, que já sabe quantas
+> publicações aquela pessoa não viu. Mesma promessa, sem inventar infraestrutura.
+>
+> **A permissão é pedida nas Configurações, não na abertura.** Um pedido na primeira tela é o
+> pedido que a pessoa nega — e no iOS negar é definitivo: não dá para perguntar de novo, só
+> mandar a pessoa nas configurações do sistema.
+>
+> **O registro é chaveado pelo token do aparelho, não pelo par usuário+token.** Celular que
+> muda de dono muda de dono no servidor junto; senão o novo usuário recebe os avisos do
+> antigo.
+>
+> **A janela só é gravada quando algo foi entregue de fato.** Marcar um envio que não
+> aconteceu calaria o primeiro push de verdade, logo depois de a pessoa registrar o aparelho.
+
 ## Contra o spam
 
 Três travas, em ordem de importância:

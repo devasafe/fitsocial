@@ -19,6 +19,7 @@ import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { useContadores } from "../context/ContadoresContext";
 import { BadgeSobreposto } from "../components/Badge";
+import { PushSync } from "../components/PushSync";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
 import { LeaderboardScreen } from "../screens/LeaderboardScreen";
@@ -346,6 +347,7 @@ export function RootNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
+      {token ? <PushSync /> : null}
       {token ? (
         !user?.username ? (
           <AppStack.Navigator screenOptions={{ headerShown: false }}>

@@ -15,6 +15,7 @@ import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
 import { Comment } from "../models/Comment.js";
 import { createNotification } from "../services/notifications.js";
+import { enviarPush, avisarSeguidoresDePost } from "../services/push/index.js";
 import { editarPost, excluirPost } from "../services/postModeration.js";
 import { Report, MOTIVOS_DE_DENUNCIA } from "../models/Report.js";
 import { recordAudit } from "../services/adminAudit.js";
@@ -236,6 +237,10 @@ socialRouter.post(
     await post.populate("author", "name username avatarUrl");
     if (activity) await post.populate("activity", "kind sportId payload metrics durationSec title");
     res.status(201).json({ post: serializePost(post, new Set()) });
+
+    // Depois da resposta: quem publicou não espera o push dos seguidores sair.
+    // A janela de silêncio de cada um decide se ele recebe algo ou não.
+    void avisarSeguidoresDePost(req.user!._id, req.user!.name);
   })
 );
 
@@ -645,6 +650,15 @@ socialRouter.post(
       targetKind: "post",
       targetId: post._id,
     });
+
+    // O único push que sai na hora: tem alguém do outro lado esperando resposta.
+    if (!post.author.equals(req.user!._id)) {
+      void enviarPush(post.author, "comment", {
+        title: `${req.user!.name} comentou no seu post`,
+        body: text.slice(0, 120),
+        data: { tela: "post", postId: post._id.toString() },
+      });
+    }
 
     await comment.populate("author", "name avatarUrl");
     res.status(201).json({ comment: serializeComment(comment) });

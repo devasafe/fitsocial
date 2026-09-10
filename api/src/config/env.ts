@@ -81,6 +81,9 @@ export const env = {
   // bom, e passa de 45s quando trava. O Groq entrega o mesmo plano em 9-12s.
   // Esperar mais que isso é queimar tempo de quem está olhando a tela antes de
   // chamar quem responde rápido.
+  // Push. O envio funciona sem token, com limite mais apertado; com ele, o
+  // Expo também recusa quem não é dono do projeto.
+  expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? "",
   aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS ?? 25000),
   // Quantas vezes insistir na MESMA chave quando a falha é passageira (5xx).
   aiRetries: Number(process.env.AI_RETRIES ?? 1),

@@ -7,6 +7,7 @@ import React, {
   type ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { desligarPush } from "../lib/push";
 import {
   loginRequest,
   registerRequest,
@@ -76,10 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    // Antes de limpar: cancelar o registro precisa do token que está saindo.
+    // Sem isto, o celular continuaria recebendo os avisos de uma conta que não
+    // está mais nele.
+    if (token) await desligarPush(token);
     await AsyncStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
-  }, []);
+  }, [token]);
 
   const trocarToken = useCallback(async (novo: string) => {
     await AsyncStorage.setItem(TOKEN_KEY, novo);
