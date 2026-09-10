@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import opentype from "opentype.js";
 
@@ -28,6 +28,22 @@ const ARQUIVOS: Record<Fonte, string> = {
   corpo: "Archivo_500Medium.ttf",
   corpoForte: "Archivo_600SemiBold.ttf",
 };
+
+// Conferido no boot, e nao na primeira vez que alguem compartilha.
+//
+// As fontes viajam como arquivo, e arquivo pode nao ser empacotado — foi o que
+// aconteceu: o Dockerfile copiava so `src`, o servidor subia saudavel, o botao
+// aparecia, e o cartao so falhava para quem tentava usar. Erro de empacotamento
+// tem que aparecer no deploy. E aparece de graca: quando a imagem nova nao
+// sobe, o conteiner antigo continua servindo, entao ninguem fica sem app.
+for (const arquivo of Object.values(ARQUIVOS)) {
+  if (!existsSync(join(PASTA, arquivo))) {
+    throw new Error(
+      `Fonte ausente: ${join(PASTA, arquivo)}. ` +
+        "O cartao de compartilhar precisa dela — confira o COPY assets do Dockerfile."
+    );
+  }
+}
 
 // Parsear um .ttf custa alguns milissegundos, e um cartão desenha várias linhas.
 const cache = new Map<Fonte, opentype.Font>();

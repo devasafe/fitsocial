@@ -9,7 +9,10 @@ RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
-COPY tsconfig.json ./
+# tsconfig*.json e nao tsconfig.json: o build usa tsconfig.build.json, que
+# exclui os testes. Copiar so um dos dois quebra o build no conteiner e nao
+# aqui — foi o que aconteceu.
+COPY tsconfig*.json ./
 COPY src ./src
 RUN npm run build
 
@@ -27,6 +30,10 @@ RUN apt-get update  && apt-get install -y --no-install-recommends curl  && rm -r
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+# As fontes do cartao de compartilhar sao lidas em TEMPO DE EXECUCAO, a partir
+# de ./assets/fontes. Sem esta linha o servidor sobe, o app mostra o botao, e
+# so quem tenta compartilhar descobre que nao funciona.
+COPY assets ./assets
 # services/storage/disk.ts cria ./uploads ja no import do modulo, mesmo quando
 # STORAGE_PROVIDER=s3. Sem este diretorio gravavel, o processo morre no boot.
 RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
