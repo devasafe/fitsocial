@@ -143,7 +143,7 @@ export async function retencao(): Promise<Retencao> {
   const [acessos, atividades, posts] = await Promise.all([
     UserDailyActive.find({}, { user: 1, dia: 1 }).lean(),
     Activity.find({}, { user: 1, startedAt: 1 }).lean(),
-    Post.find({}, { author: 1, createdAt: 1 }).lean(),
+    Post.find({ deletedAt: null }, { author: 1, createdAt: 1 }).lean(),
   ]);
 
   // "Fulano esteve ativo no dia X", vindo de qualquer uma das fontes.
@@ -213,7 +213,7 @@ export async function panorama(dias: number): Promise<Panorama> {
     User.countDocuments({ status: "banned" }),
     User.countDocuments({ status: "suspended" }),
     Activity.countDocuments({}),
-    Post.countDocuments({}),
+    Post.countDocuments({ deletedAt: null }),
     ativosNaJanela(7),
     contarPorDia(User as never, "createdAt", dias),
     ativosPorDia(dias),

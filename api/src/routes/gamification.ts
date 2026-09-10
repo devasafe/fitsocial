@@ -19,7 +19,7 @@ const DAY = 24 * 60 * 60 * 1000;
 async function badgesFor(userId: mongoose.Types.ObjectId | string) {
   const [acts, posts, followers] = await Promise.all([
     Activity.find({ user: userId }).select("startedAt"),
-    Post.countDocuments({ author: userId }),
+    Post.countDocuments({ author: userId, deletedAt: null }),
     Follow.countDocuments({ following: userId }),
   ]);
   const stats = computeStats(acts.map((a) => ({ date: a.startedAt })));

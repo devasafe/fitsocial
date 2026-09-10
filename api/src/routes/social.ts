@@ -15,6 +15,9 @@ import { Follow } from "../models/Follow.js";
 import { Like } from "../models/Like.js";
 import { Comment } from "../models/Comment.js";
 import { createNotification } from "../services/notifications.js";
+import { editarPost, excluirPost } from "../services/postModeration.js";
+import { Report, MOTIVOS_DE_DENUNCIA } from "../models/Report.js";
+import { recordAudit } from "../services/adminAudit.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 import { getSport } from "../services/sports.js";
 
@@ -79,6 +82,8 @@ function serializePost(
     commentCount: post.commentCount,
     likedByMe: likedIds.has(post._id.toString()),
     createdAt: post.get("createdAt") as Date,
+    /** Presente quando o texto foi alterado — o app mostra "(editado)". */
+    editedAt: post.editedAt ?? null,
     author: {
       id: authorId,
       name: author.name,
@@ -244,7 +249,7 @@ socialRouter.get(
     const following = await Follow.find({ follower: me }).select("following");
     const authorIds = [...following.map((f) => f.following), me];
 
-    const posts = await Post.find({ author: { $in: authorIds }, hidden: { $ne: true } })
+    const posts = await Post.find({ author: { $in: authorIds }, hidden: { $ne: true }, deletedAt: null })
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("author", "name username avatarUrl")
@@ -268,6 +273,7 @@ socialRouter.get(
       before && !Number.isNaN(Date.parse(before)) ? { createdAt: { $lt: new Date(before) } } : {};
     // Conteúdo escondido pela moderação não aparece na descoberta.
     filter.hidden = { $ne: true };
+    filter.deletedAt = null;
 
     const posts = await Post.find(filter)
       .sort({ createdAt: -1 })
@@ -295,6 +301,11 @@ socialRouter.get(
     assertObjectId(req.params.id);
     const post = await Post.findById(req.params.id).populate("author", "name username avatarUrl")
       .populate("activity", "kind sportId payload metrics durationSec title");
+    // Quem chega por link ou notificação de um post excluído merece saber o
+    // que aconteceu, em vez de um "não encontrado" que parece erro do app.
+    if (post?.deletedAt) {
+      throw new HttpError(410, "Esta publicação não está mais disponível.");
+    }
     // Post escondido responde 404 para terceiros: existir e negar já entrega
     // que existe. O autor continua vendo o próprio conteúdo.
     if (!post || (post.hidden && !post.author._id.equals(req.user!._id))) {
@@ -305,6 +316,94 @@ socialRouter.get(
   })
 );
 
+// Editar o próprio post. Só o texto — ver services/postModeration.ts.
+socialRouter.patch(
+  "/posts/:id",
+  asyncHandler(async (req, res) => {
+    const { text } = z.object({ text: z.string().max(2000) }).parse(req.body);
+    const post = await editarPost(req.user!, req.params.id, text);
+    await post.populate("author", "name username avatarUrl");
+    await post.populate("activity", "kind sportId payload metrics durationSec title");
+    const likedIds = await likedSetFor(req.user!._id, [post._id]);
+    res.json({ data: serializePost(post, likedIds), meta: {} });
+  })
+);
+
+// Excluir o próprio post. Administrador também pode, em qualquer post.
+socialRouter.delete(
+  "/posts/:id",
+  asyncHandler(async (req, res) => {
+    const admin = req.user!.role === "admin";
+    const r = await excluirPost(req.user!, req.params.id, { comoAdmin: admin });
+
+    if (admin) {
+      const post = await Post.findById(req.params.id).select("author");
+      if (post && !post.author.equals(req.user!._id)) {
+        // Remoção de conteúdo alheio é ato administrativo: fica registrado.
+        await recordAudit({
+          actor: req.user!,
+          action: "post.remove",
+          targetKind: "post",
+          targetId: post._id,
+          reason: "remoção pelo painel",
+        });
+      }
+    }
+
+    res.json({ data: { excluido: true }, meta: r });
+  })
+);
+
+// Denunciar um post.
+const denunciaSchema = z.object({
+  reason: z.enum(MOTIVOS_DE_DENUNCIA),
+  details: z.string().max(500).optional(),
+});
+
+socialRouter.post(
+  "/posts/:id/report",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const { reason, details } = denunciaSchema.parse(req.body);
+
+    const post = await Post.findById(req.params.id).populate("author", "name email");
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
+
+    if (post.author._id.equals(req.user!._id)) {
+      // Para o próprio conteúdo existe excluir, não denunciar.
+      throw new HttpError(400, "Você não pode denunciar a sua própria publicação.");
+    }
+
+    const autor = post.author as unknown as { _id: mongoose.Types.ObjectId; name: string };
+
+    try {
+      await Report.create({
+        reporter: req.user!._id,
+        targetKind: "post",
+        targetId: post._id,
+        targetAuthor: autor._id,
+        reason,
+        details: details ?? "",
+        // Guardado agora porque o conteúdo pode sumir antes da análise.
+        snapshot: {
+          texto: post.text ?? "",
+          imageUrl: post.imageUrl ?? "",
+          autorLabel: autor.name,
+        },
+      });
+    } catch (err) {
+      // Índice único: já denunciou este conteúdo. Responder como sucesso evita
+      // dizer "você já denunciou", que não ajuda em nada quem está denunciando.
+      if ((err as { code?: number }).code !== 11000) throw err;
+    }
+
+    res.status(201).json({
+      data: { enviada: true },
+      meta: {},
+    });
+  })
+);
+
 // ---- curtidas (toggle) ----
 
 socialRouter.post(
@@ -312,7 +411,7 @@ socialRouter.post(
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
     const post = await Post.findById(req.params.id);
-    if (!post) throw new HttpError(404, "Post não encontrado");
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
 
     const result = await Like.updateOne(
       { user: req.user!._id, post: post._id },
@@ -340,7 +439,7 @@ socialRouter.delete(
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
     const post = await Post.findById(req.params.id);
-    if (!post) throw new HttpError(404, "Post não encontrado");
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
 
     const result = await Like.deleteOne({ user: req.user!._id, post: post._id });
     if (result.deletedCount && post.likeCount > 0) {
@@ -404,6 +503,7 @@ socialRouter.get(
 
     const filtroPosts = {
       author: user._id,
+      deletedAt: null,
       ...(user._id.equals(me) ? {} : { hidden: { $ne: true } }),
     };
     const filtroAtividades = await filtroDeAtividadesVisiveis(user._id, me);
@@ -496,7 +596,7 @@ socialRouter.get(
 
     // Quais desses treinos a pessoa também publicou no feed — o card mostra isso.
     const idsComPost = new Set(
-      (await Post.find({ activity: { $in: itens.map((a) => a._id) }, hidden: { $ne: true } })
+      (await Post.find({ activity: { $in: itens.map((a) => a._id) }, hidden: { $ne: true }, deletedAt: null })
         .select("activity"))
         .map((p) => p.activity?.toString())
         .filter(Boolean) as string[]
@@ -532,7 +632,7 @@ socialRouter.post(
     assertObjectId(req.params.id);
     const { text } = createCommentSchema.parse(req.body);
     const post = await Post.findById(req.params.id);
-    if (!post) throw new HttpError(404, "Post não encontrado");
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
 
     const comment = await Comment.create({ post: post._id, author: req.user!._id, text });
     post.commentCount += 1;
