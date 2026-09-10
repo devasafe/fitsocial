@@ -56,11 +56,16 @@ export function EsperaLonga({
 
 /** Etapas prontas para as esperas que se repetem no app. */
 export const PASSOS = {
+  // Os quatro primeiros são funcionais: mostram que está trabalhando, e cada um
+  // nomeia uma coisa que a pessoa reconhece do próprio cadastro. O último é
+  // outro tipo de frase — fica na tela quando o plano chega, e é o que a pessoa
+  // leva para o treino.
   plano: [
     "Lendo sua ficha…",
+    "Entendendo seu objetivo…",
     "Montando seu treino…",
-    "Ajustando a dieta…",
-    "Terminando os detalhes…",
+    "Ajustando sua dieta…",
+    "Bora evoluir 💪",
   ],
   dieta: ["Lendo sua ficha…", "Calculando as calorias…", "Montando as refeições…"],
   importarPlano: [
