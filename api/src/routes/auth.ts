@@ -5,6 +5,7 @@ import { signToken } from "../utils/token.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
 import { isFounder, founderMessage, ensureFounderPremium } from "../services/founders.js";
 import { assertAccountUsable } from "../services/moderation.js";
@@ -80,7 +81,7 @@ authRouter.post(
     await assertAccountUsable(user);
 
     await ensureFounderPremium(user);
-    const token = signToken(user._id.toString());
+    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion ?? 0 });
     res.json({ token, user: userPayload(user) });
   })
 );
@@ -95,27 +96,84 @@ authRouter.get(
   })
 );
 
+// Trocar a senha.
+const senhaSchema = z.object({
+  atual: z.string().min(1, "Informe a senha atual"),
+  nova: z.string().min(8, "A nova senha precisa ter ao menos 8 caracteres"),
+});
+
+authRouter.patch(
+  "/password",
+  requireAuth,
+  rateLimit({ windowMs: 15 * 60_000, max: 5, name: "troca-senha" }),
+  asyncHandler(async (req, res) => {
+    const { atual, nova } = senhaSchema.parse(req.body);
+    const user = req.user!;
+
+    if (!(await verifyPassword(atual, user.passwordHash))) {
+      throw new HttpError(400, "A senha atual não confere.");
+    }
+    if (atual === nova) {
+      throw new HttpError(400, "A nova senha precisa ser diferente da atual.");
+    }
+
+    user.passwordHash = await hashPassword(nova);
+    // Derruba as sessões antigas: se alguém entrou na conta, trocar a senha
+    // tem que expulsar essa pessoa — senão a troca não protege de nada.
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await user.save();
+
+    // E devolve um token novo, para quem trocou não ser deslogado junto.
+    const token = signToken(user._id.toString(), { tokenVersion: user.tokenVersion });
+
+    res.json({
+      data: { token },
+      meta: { sessoesEncerradas: true },
+    });
+  })
+);
+
 // Preferências de privacidade. Separadas de PATCH /me (que é identidade:
 // nome, foto, bio) porque mudam quem enxerga o quê, não quem a pessoa é.
 const settingsSchema = z.object({
   activitiesPublic: z.boolean().nullable().optional(),
   routesPublic: z.boolean().optional(),
+  notificacoes: z
+    .object({
+      novosPosts: z.boolean().optional(),
+      interacoes: z.boolean().optional(),
+      desafios: z.boolean().optional(),
+      sistema: z.boolean().optional(),
+    })
+    .optional(),
 });
+
+/** Forma única das preferências, para leitura e escrita devolverem o mesmo. */
+function preferencias(u: UserDoc) {
+  const s = (u.settings ?? {}) as {
+    activitiesPublic?: boolean | null;
+    routesPublic?: boolean;
+    notificacoes?: Partial<Record<string, boolean>> | null;
+  };
+  return {
+    activitiesPublic: s.activitiesPublic ?? null,
+    routesPublic: s.routesPublic ?? false,
+    notificacoes: {
+      novosPosts: s.notificacoes?.novosPosts ?? true,
+      interacoes: s.notificacoes?.interacoes ?? true,
+      desafios: s.notificacoes?.desafios ?? true,
+      sistema: s.notificacoes?.sistema ?? true,
+    },
+  };
+}
 
 authRouter.get(
   "/settings",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const s = req.user!.settings;
-    res.json({
-      data: {
-        // null = a pessoa ainda não decidiu; é o que faz o app perguntar
-        // depois do primeiro treino.
-        activitiesPublic: s?.activitiesPublic ?? null,
-        routesPublic: s?.routesPublic ?? false,
-      },
-      meta: {},
-    });
+    // activitiesPublic null = a pessoa ainda não decidiu; é o que faz o app
+    // perguntar depois do primeiro treino.
+    res.json({ data: preferencias(req.user!), meta: {} });
   })
 );
 
@@ -132,15 +190,12 @@ authRouter.patch(
     if (entrada.routesPublic !== undefined) {
       user.set("settings.routesPublic", entrada.routesPublic);
     }
+    for (const [chave, valor] of Object.entries(entrada.notificacoes ?? {})) {
+      if (valor !== undefined) user.set(`settings.notificacoes.${chave}`, valor);
+    }
     await user.save();
 
-    res.json({
-      data: {
-        activitiesPublic: user.settings?.activitiesPublic ?? null,
-        routesPublic: user.settings?.routesPublic ?? false,
-      },
-      meta: {},
-    });
+    res.json({ data: preferencias(user), meta: {} });
   })
 );
 

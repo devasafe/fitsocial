@@ -21,6 +21,8 @@ export type AppStackParams = {
   CheckIn: { session: Session };
   CreatePost: { activity?: Activity } | undefined;
   EditProfile: undefined;
+  Configuracoes: undefined;
+  AlterarSenha: undefined;
   UserProfile: { userId: string };
   Subscription: undefined;
   Leaderboard: undefined;

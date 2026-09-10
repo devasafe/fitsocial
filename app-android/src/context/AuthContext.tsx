@@ -24,6 +24,8 @@ interface AuthState {
   register: (name: string, email: string, password: string, username?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** Guarda um token novo sem refazer o login (usado ao trocar a senha). */
+  trocarToken: (novo: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -79,6 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const trocarToken = useCallback(async (novo: string) => {
+    await AsyncStorage.setItem(TOKEN_KEY, novo);
+    setToken(novo);
+  }, []);
+
   // Re-busca o usuário no backend (ex.: após concluir o onboarding).
   const refreshUser = useCallback(async () => {
     if (!token) return;
@@ -88,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout, refreshUser }}
+      value={{ user, token, loading, login, register, logout, refreshUser, trocarToken }}
     >
       {children}
     </AuthContext.Provider>
