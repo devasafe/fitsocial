@@ -546,6 +546,25 @@ TikTok   →  https://www.tiktok.com/search?q=<exercício>+execução
 Sem integração, sem chave de API, sem player embutido para o TikTok. A escolha fica lembrada
 para a próxima vez.
 
+> **Ajustes na Fase 7 (implementação):**
+>
+> **A escolha vale só para a busca externa.** Quando o exercício TEM vídeo em cache, o app
+> continua tocando o player do YouTube embutido — o cache guarda um `youtubeId`, e não existe
+> equivalente do TikTok para converter. Quem escolher TikTok e abrir um exercício com vídeo em
+> cache vai ver o YouTube. Trocar isso exigiria um cache por plataforma, o que é outro
+> trabalho.
+>
+> **A escolha mora no aparelho (AsyncStorage), não no servidor.** É sobre qual app você tem
+> instalado, não sobre quem você é.
+>
+> **Trocar de ideia mora nas Configurações → Treino → Vídeos de exercício.** O sheet promete
+> "dá para trocar em Configurações"; sem essa linha, a promessa seria falsa e a primeira
+> escolha seria definitiva.
+>
+> **Os termos de busca são diferentes por plataforma:** "execução correta" no YouTube, onde o
+> acervo é de vídeo-aula e o termo filtra bem; só "execução" no TikTok, onde o formato é curto
+> e a frase longa devolve pouca coisa.
+
 ---
 
 # 13. Critério de sucesso

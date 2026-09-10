@@ -22,6 +22,13 @@ import { Screen, Txt, Card, ErrorState } from "../components/ui";
 import { Skeleton } from "../components/Skeleton";
 import { confirmDialog, notify } from "../lib/notify";
 import { estadoDoPush, ligarPush, type EstadoDaPermissao } from "../lib/push";
+import { EscolherPlataformaSheet } from "../components/EscolherPlataformaSheet";
+import {
+  getPlataforma,
+  setPlataforma,
+  NOME_DA_PLATAFORMA,
+  type PlataformaDeVideo,
+} from "../lib/plataformaDeVideo";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import app from "../../app.json";
@@ -35,6 +42,8 @@ export function ConfiguracoesScreen() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [push, setPush] = useState<EstadoDaPermissao>("indisponivel");
+  const [plataforma, setPlataformaLocal] = useState<PlataformaDeVideo | null>(null);
+  const [trocandoPlataforma, setTrocandoPlataforma] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -52,6 +61,7 @@ export function ConfiguracoesScreen() {
       // Reconferido a cada abertura: a pessoa pode ter mexido na permissão nas
       // Configurações do sistema, e a chave aqui precisa contar a verdade.
       void estadoDoPush().then(setPush);
+      void getPlataforma().then(setPlataformaLocal);
     }, [carregar])
   );
 
@@ -207,9 +217,29 @@ export function ConfiguracoesScreen() {
         )}
       </Secao>
 
+      <Secao titulo="Treino">
+        <Linha
+          titulo="Vídeos de exercício"
+          // Sem escolha ainda, o app pergunta no primeiro toque do play.
+          detalhe={plataforma ? NOME_DA_PLATAFORMA[plataforma] : "Perguntar"}
+          onPress={() => setTrocandoPlataforma(true)}
+          ultima
+        />
+      </Secao>
+
       <Secao titulo="Sobre">
         <Linha titulo="Versão" detalhe={app.expo.version} ultima />
       </Secao>
+
+      <EscolherPlataformaSheet
+        visivel={trocandoPlataforma}
+        atual={plataforma}
+        aoFechar={() => setTrocandoPlataforma(false)}
+        aoEscolher={(p) => {
+          setPlataformaLocal(p);
+          void setPlataforma(p);
+        }}
+      />
 
       <Pressable onPress={sair} style={styles.sair} accessibilityRole="button">
         <Txt variant="body" color={colors.danger}>
