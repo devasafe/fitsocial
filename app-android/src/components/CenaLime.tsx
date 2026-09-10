@@ -43,6 +43,8 @@ import { colors, spacing } from "../theme";
 const PASSO_MS_PADRAO = 6500;
 const REVELACAO_MS = 460;
 const ASSENTAR_MS = 440;
+/** A pincelada cobre mais rápido: ela não é cerimônia, é a troca de tela. */
+const REVELACAO_RAPIDA_MS = 300;
 
 export interface Origem {
   x: number;
@@ -54,6 +56,7 @@ export function CenaLime({
   origem,
   passos,
   passoMs = PASSO_MS_PADRAO,
+  pincelada = false,
   aoPedirSaida,
 }: {
   visivel: boolean;
@@ -62,6 +65,12 @@ export function CenaLime({
   /** Uma frase só = passagem. Várias = companhia numa espera longa. */
   passos: readonly string[];
   passoMs?: number;
+  /**
+   * Só a tinta: sem texto, sem assentar, sem halo. Para ação instantânea e
+   * repetida, onde a cerimônia inteira viraria pedágio — ver o comentário do
+   * topo.
+   */
+  pincelada?: boolean;
   /** Voltar durante a cena. Sem isso o Modal engole o botão no Android. */
   aoPedirSaida?: () => void;
 }) {
@@ -119,6 +128,18 @@ export function CenaLime({
       assentar.setValue(0);
       texto.setValue(0);
 
+      if (pincelada) {
+        // Só a tinta subindo. Nada de texto nem de verde-tinta: o que vem por
+        // baixo é a folha, e ela é que tem que ser vista.
+        Animated.timing(revelar, {
+          toValue: 1,
+          duration: REVELACAO_RAPIDA_MS,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
+
       Animated.sequence([
         Animated.timing(revelar, {
           toValue: 1,
@@ -163,7 +184,7 @@ export function CenaLime({
     fim.start(({ finished }) => {
       if (finished) setMontado(false);
     });
-  }, [visivel, semMovimento, revelar, assentar, halo, texto, saida, montado]);
+  }, [visivel, semMovimento, pincelada, revelar, assentar, halo, texto, saida, montado]);
 
   // ---- Comandos descendo ----
   useEffect(() => {
@@ -184,7 +205,9 @@ export function CenaLime({
     return () => clearInterval(t);
   }, [visivel, passos.length, passoMs, texto]);
 
-  if (!montado) return null;
+  // Pincelada com movimento reduzido não tem o que mostrar: sem o crescimento,
+  // ela seria só um flash lime na cara. Melhor a folha abrir e pronto.
+  if (!montado || (semMovimento && pincelada)) return null;
 
   // Frase única é sempre destaque: ela É a mensagem, não uma etapa.
   const ultimo = passo === passos.length - 1;
@@ -239,6 +262,7 @@ export function CenaLime({
         />
 
         {/* Os comandos */}
+        {pincelada ? null : (
         <View style={styles.centro}>
           <Animated.View
             style={{
@@ -262,6 +286,7 @@ export function CenaLime({
             </Txt>
           </Animated.View>
         </View>
+        )}
       </Animated.View>
     </Modal>
   );

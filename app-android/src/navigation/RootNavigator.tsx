@@ -1,9 +1,17 @@
 import React from "react";
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+  type GestureResponderEvent,
+} from "react-native";
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator, type BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
 import { useAuth } from "../context/AuthContext";
+import { useCena, origemDoToque, esperar, PINCELADA_MS } from "../components/CenaContext";
 import { LoginScreen } from "../screens/LoginScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { HomeScreen } from "../screens/HomeScreen";
@@ -120,14 +128,31 @@ function tabIcon(emoji: string) {
 
 // Botão central lima elevado — a única peça com brilho (brief §2.7). Não é aba:
 // abre a folha de registrar atividade.
+//
+// A tinta lime sai daqui também, mas em PINCELADA: sem texto, sem cerimônia.
+// Este é o botão mais tocado do app e a folha já sobe sozinha — a cena inteira
+// aqui seria duas coisas se movendo ao mesmo tempo, e um pedágio de quase um
+// segundo toda vez que alguém quer registrar um treino. O que a pincelada faz é
+// cobrir a subida da folha, para a pessoa ver uma troca só.
 function CenterTabButton({ onPress }: BottomTabBarButtonProps) {
+  const cena = useCena();
+
+  async function abrirRegistro(e: GestureResponderEvent) {
+    const origem = origemDoToque(e);
+    cena.abrir({ passos: [], pincelada: true, origem });
+    await esperar(PINCELADA_MS);
+    onPress?.(e);
+    await esperar(240);
+    cena.fechar();
+  }
+
   return (
     <View style={styles.centerWrap}>
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityLabel="Registrar treino"
         activeOpacity={0.85}
-        onPress={(e) => onPress?.(e)}
+        onPress={(e) => void abrirRegistro(e)}
         style={styles.centerFab}
       >
         <Text style={styles.centerPlus}>+</Text>

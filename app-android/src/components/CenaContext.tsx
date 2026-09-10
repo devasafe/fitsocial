@@ -16,8 +16,10 @@ import { Platform } from "react-native";
 import { CenaLime, type Origem } from "./CenaLime";
 
 interface Pedido {
-  /** Uma frase só = passagem. Várias = companhia numa espera longa. */
+  /** Uma frase só = passagem. Várias = companhia numa espera longa. Nenhuma = pincelada. */
   passos: readonly string[];
+  /** Só a tinta, curta. Para ação instantânea e repetida. */
+  pincelada?: boolean;
   /** Onde o dedo tocou. Sem isso, nasce do centro. */
   origem?: Origem | null;
   passoMs?: number;
@@ -56,6 +58,7 @@ export function CenaProvider({ children }: { children: React.ReactNode }) {
         origem={pedido?.origem}
         passos={pedido?.passos ?? []}
         passoMs={pedido?.passoMs}
+        pincelada={pedido?.pincelada}
         aoPedirSaida={cena.fechar}
       />
     </CenaCtx.Provider>
@@ -74,6 +77,9 @@ export const COBERTURA_MS = 520;
 // armadilha. Passado este limite a cena sai e devolve a pessoa à tela dela,
 // com o botão ainda em carregamento. A ação continua; só a festa acaba.
 export const LIMITE_DE_CENA_MS = 6000;
+
+/** O quanto a pincelada leva para cobrir. Curto: ela é a troca, não a festa. */
+export const PINCELADA_MS = 300;
 
 export const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
