@@ -8,7 +8,9 @@ export type AiFeature =
   | "onboarding"
   | "plan_generate"
   | "plan_adjust"
-  | "plan_import";
+  | "plan_import"
+  // Dieta gerada sozinha, sem treino junto: consumo próprio no painel.
+  | "diet_generate";
 
 /** Motivo da falha, já classificado — o painel agrupa por isto. */
 export type AiErrorKind =

@@ -59,7 +59,8 @@ export function EditWorkoutScreen() {
     getCurrentPlan(token!)
       .then((p) => {
         setPlan(p);
-        if (p) {
+        // O treino pode não existir: quem segue a programação do box só tem dieta.
+        if (p?.workout) {
           const f = toForm(p.workout);
           setSplit(f.split);
           setDays(f.daysPerWeek);
@@ -129,7 +130,8 @@ export function EditWorkoutScreen() {
     }
     setSaving(true);
     try {
-      await updatePlan(token!, { workout, diet: plan.diet });
+      // Só o treino vai no corpo — mandar a dieta junto obrigaria a tê-la.
+      await updatePlan(token!, { workout });
       notify("Treino atualizado", "Suas mudanças foram salvas.", () => nav.goBack());
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
