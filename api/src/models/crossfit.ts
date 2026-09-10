@@ -38,10 +38,42 @@ export const movimentoSchema = z.object({
   distanciaM: z.number().min(0).max(100_000).nullish(),
   calorias: z.number().int().min(0).max(10_000).nullish(),
   duracaoSec: z.number().int().min(0).max(36_000).nullish(),
+  /** A carga que a PESSOA usou. O quadro quase nunca prescreve peso; quando
+   *  prescreve e ela escalou, isso vive em `escala.ajustes`. */
   carga: cargaSchema.nullish(),
+  /**
+   * "2 Rope Climb (cada)" — em treino de dupla, cada um faz a conta inteira,
+   * em vez de dividirem.
+   *
+   * Só faz sentido com `equipe` preenchida; sozinho não muda nada.
+   */
+  porPessoa: z.boolean().nullish(),
   notas: z.string().max(300).nullish(),
 });
 export type Movimento = z.infer<typeof movimentoSchema>;
+
+// ---- Equipe ---------------------------------------------------------------
+//
+// Metade do quadro de um box é em dupla, e o esforço não é o mesmo: 20
+// Chest-to-Bar revezados entre dois não é 20 sozinho. Por isso o resultado de
+// equipe NÃO entra no mesmo recorde do individual — ver services/prEngine.ts.
+
+export const MODOS_DE_EQUIPE = [
+  /** "Relay": um trabalha enquanto o outro descansa. */
+  "revezamento",
+  /** "Together": fazem ao mesmo tempo, contam junto. */
+  "junto",
+  /** Dividem a conta como quiserem: 40 burpees viram 20 e 20. */
+  "dividido",
+] as const;
+
+export const equipeSchema = z.object({
+  tamanho: z.number().int().min(2).max(20),
+  modo: z.enum(MODOS_DE_EQUIPE),
+  /** Quem estava junto. Texto livre: nem todo parceiro tem conta no app. */
+  parceiros: z.array(z.string().min(1).max(80)).max(20).nullish(),
+});
+export type Equipe = z.infer<typeof equipeSchema>;
 
 // ---- Escala ---------------------------------------------------------------
 //
@@ -106,16 +138,40 @@ export const TIPOS_DE_BLOCO = [
   "skill",
   "forca",
   "metcon",
+  "descanso",
   "cooldown",
 ] as const;
+
+export const FORMATOS_LIVRES = ["emom", "circuito", "livre"] as const;
 
 /** Aquecimento, mobilidade e cooldown têm a mesma forma: a diferença é o rótulo. */
 export const blocoLivreSchema = z.object({
   tipo: z.enum(["aquecimento", "mobilidade", "cooldown"]),
+  /**
+   * Aquecimento tem estrutura, não é lista solta: "EMOM 1'15\" × 4" é o
+   * formato mais comum de warm-up de box. Sem isto, o intervalo virava nota e
+   * a pessoa acabava registrando o aquecimento como se fosse WOD.
+   */
+  formato: z.enum(FORMATOS_LIVRES).nullish(),
+  /** EMOM = 60; o "1'15" do quadro = 75. */
+  intervaloSec: z.number().int().min(0).max(3600).nullish(),
   duracaoSec: z.number().int().min(0).max(36_000).nullish(),
   rounds: z.number().int().min(0).max(100).nullish(),
   movimentos: z.array(movimentoSchema).max(30).default([]),
   notas: z.string().max(1000).nullish(),
+});
+
+/**
+ * O REST entre as partes do WOD.
+ *
+ * Existia descanso DENTRO de um metcon (o work/rest de um Tabata), não entre
+ * blocos — e "REST 1'" aparece em quase todo quadro com mais de uma parte.
+ * Virava nota solta, e some da linha do tempo do treino.
+ */
+export const blocoDescansoSchema = z.object({
+  tipo: z.literal("descanso"),
+  duracaoSec: z.number().int().min(0).max(7200).nullish(),
+  notas: z.string().max(300).nullish(),
 });
 
 /** Praticar um movimento. `melhorSequencia` é o que vira recorde de skill. */
@@ -190,6 +246,16 @@ export const blocoMetconSchema = z.object({
 
   resultado: scoreSchema.nullish(),
   escala: escalaSchema.default({ nivel: "rx" }),
+  /** Preenchido quando foi em dupla ou equipe. Ausente = individual. */
+  equipe: equipeSchema.nullish(),
+  /**
+   * Junta partes do MESMO WOD.
+   *
+   * "AMRAP + FOR TIME" com Bloco A, descanso, Bloco B, descanso e um final é
+   * um treino só com três partes — e três resultados. Blocos que compartilham
+   * este rótulo aparecem juntos; a ordem no array dá o número da parte.
+   */
+  grupo: z.string().min(1).max(40).nullish(),
   /** Tempo ou reps por round. Opcional: alimenta análise de pacing depois. */
   rounds: z
     .array(
@@ -208,6 +274,7 @@ export const blocoSchema = z.discriminatedUnion("tipo", [
   blocoLivreSchema.extend({ tipo: z.literal("aquecimento") }),
   blocoLivreSchema.extend({ tipo: z.literal("mobilidade") }),
   blocoLivreSchema.extend({ tipo: z.literal("cooldown") }),
+  blocoDescansoSchema,
   blocoSkillSchema,
   blocoForcaSchema,
   blocoMetconSchema,
@@ -219,6 +286,8 @@ export type Bloco = z.infer<typeof blocoSchema>;
 export const wodPayloadV2Schema = z.object({
   v: z.literal(2),
   box: z.string().max(80).nullish(),
-  blocos: z.array(blocoSchema).min(1).max(12),
+  // 12 era pouco para um quadro com aquecimento, skill, tres partes de WOD e
+  // os descansos entre elas.
+  blocos: z.array(blocoSchema).min(1).max(24),
 });
 export type WodPayloadV2 = z.infer<typeof wodPayloadV2Schema>;

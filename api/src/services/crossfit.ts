@@ -207,7 +207,9 @@ export function movimentosDoTreino(wod: WodPayloadV2): string[] {
       vistos.add(chaveDoMovimento(bloco.movimento));
     } else if (bloco.tipo === "metcon") {
       for (const m of bloco.prescricao.movimentos) vistos.add(chaveDoMovimento(m.nome));
-    } else {
+    } else if (bloco.tipo !== "descanso") {
+      // Descanso nao tem movimento — e a lista de blocos deixou de ser
+      // "todos tem movimentos" no dia em que ele entrou.
       for (const m of bloco.movimentos) vistos.add(chaveDoMovimento(m.nome));
     }
   }

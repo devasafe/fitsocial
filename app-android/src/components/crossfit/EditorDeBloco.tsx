@@ -8,8 +8,15 @@ import { Sheet } from "../Sheet";
 import { MovimentosEditor } from "./MovimentosEditor";
 import { EditorDeForca } from "./EditorDeForca";
 import { EditorDeMetcon } from "./EditorDeMetcon";
-import { Campo, Linha, Secao, paraInteiro, paraSegundos, mmss } from "./campos";
-import type { Bloco, BlocoLivre, BlocoSkill, BlocoForca, BlocoMetcon } from "../../api/crossfit";
+import { Campo, Linha, Secao, Opcoes, paraInteiro, paraSegundos, mmss } from "./campos";
+import type {
+  Bloco,
+  BlocoLivre,
+  BlocoDescanso,
+  BlocoSkill,
+  BlocoForca,
+  BlocoMetcon,
+} from "../../api/crossfit";
 import { colors, spacing } from "../../theme";
 
 export const ROTULO_DO_BLOCO: Record<Bloco["tipo"], string> = {
@@ -18,6 +25,7 @@ export const ROTULO_DO_BLOCO: Record<Bloco["tipo"], string> = {
   skill: "Técnica / Skill",
   forca: "Força",
   metcon: "WOD / Metcon",
+  descanso: "Descanso",
   cooldown: "Cooldown",
 };
 
@@ -35,6 +43,9 @@ export function blocoNovo(tipo: Bloco["tipo"]): Bloco {
         prescricao: { movimentos: [{ nome: "" }] },
         escala: { nivel: "rx" },
       };
+    case "descanso":
+      // Um minuto é o REST mais comum entre partes de um WOD.
+      return { tipo: "descanso", duracaoSec: 60 };
     default:
       return { tipo, movimentos: [{ nome: "" }] };
   }
@@ -83,6 +94,16 @@ export function EditorDeBloco({
             />
           ) : rascunho.tipo === "skill" ? (
             <EditorSkill bloco={rascunho as BlocoSkill} aoMudar={setRascunho} />
+          ) : rascunho.tipo === "descanso" ? (
+            <Campo
+              rotulo="Quanto descansou"
+              valor={mmss((rascunho as BlocoDescanso).duracaoSec)}
+              aoMudar={(t) =>
+                setRascunho({ ...(rascunho as BlocoDescanso), duracaoSec: paraSegundos(t) })
+              }
+              placeholder="1:00"
+              autoFocus
+            />
           ) : (
             <EditorLivre bloco={rascunho as BlocoLivre} aoMudar={setRascunho} />
           )}
@@ -115,7 +136,13 @@ export function EditorDeBloco({
   );
 }
 
-/** Aquecimento, mobilidade e cooldown: rounds + movimentos, e só. */
+/**
+ * Aquecimento, mobilidade e cooldown.
+ *
+ * Ganhou formato porque "EMOM 1'15\" × 4" é o warm-up mais comum de box, e
+ * sem intervalo a pessoa acabava registrando o aquecimento como se fosse WOD
+ * só para ter onde escrever o tempo de cada rodada.
+ */
 function EditorLivre({
   bloco,
   aoMudar,
@@ -125,18 +152,39 @@ function EditorLivre({
 }) {
   return (
     <View>
-      <Linha>
-        <Campo
-          rotulo="Duração"
-          valor={mmss(bloco.duracaoSec)}
-          aoMudar={(t) => aoMudar({ ...bloco, duracaoSec: paraSegundos(t) })}
-          placeholder="mm:ss"
+      <Secao titulo="Como foi">
+        <Opcoes
+          valor={bloco.formato ?? "livre"}
+          opcoes={[
+            { id: "livre", label: "Solto" },
+            { id: "circuito", label: "Circuito" },
+            { id: "emom", label: "EMOM" },
+          ]}
+          aoEscolher={(id) => aoMudar({ ...bloco, formato: id === "livre" ? null : id })}
         />
+      </Secao>
+
+      <Linha>
+        {bloco.formato === "emom" ? (
+          <Campo
+            rotulo="A cada"
+            valor={mmss(bloco.intervaloSec)}
+            aoMudar={(t) => aoMudar({ ...bloco, intervaloSec: paraSegundos(t) })}
+            placeholder="1:15"
+          />
+        ) : (
+          <Campo
+            rotulo="Duração"
+            valor={mmss(bloco.duracaoSec)}
+            aoMudar={(t) => aoMudar({ ...bloco, duracaoSec: paraSegundos(t) })}
+            placeholder="mm:ss"
+          />
+        )}
         <Campo
           rotulo="Rounds"
           valor={bloco.rounds != null ? String(bloco.rounds) : ""}
           aoMudar={(t) => aoMudar({ ...bloco, rounds: paraInteiro(t) })}
-          placeholder="2"
+          placeholder="4"
           teclado="numeric"
         />
       </Linha>

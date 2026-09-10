@@ -20,8 +20,21 @@ export interface Movimento {
   distanciaM?: number | null;
   calorias?: number | null;
   duracaoSec?: number | null;
+  /** A carga que VOCÊ usou. O quadro quase nunca prescreve peso. */
   carga?: Carga | null;
+  /** "2 Rope Climb (cada)": em dupla, cada um faz a conta inteira. */
+  porPessoa?: boolean | null;
   notas?: string | null;
+}
+
+/** Metade do quadro de um box é em dupla, e o esforço não é o mesmo. */
+export type ModoDeEquipe = "revezamento" | "junto" | "dividido";
+
+export interface Equipe {
+  tamanho: number;
+  modo: ModoDeEquipe;
+  /** Texto livre: nem todo parceiro tem conta no app. */
+  parceiros?: string[] | null;
 }
 
 export type NivelDeEscala = "rx" | "rx_plus" | "scaled" | "iniciante" | "custom";
@@ -75,13 +88,26 @@ export type TipoDeBloco =
   | "skill"
   | "forca"
   | "metcon"
+  | "descanso"
   | "cooldown";
+
+export type FormatoLivre = "emom" | "circuito" | "livre";
 
 export interface BlocoLivre {
   tipo: "aquecimento" | "mobilidade" | "cooldown";
+  /** Aquecimento tem estrutura: "EMOM 1'15\" × 4" é o formato mais comum. */
+  formato?: FormatoLivre | null;
+  intervaloSec?: number | null;
   duracaoSec?: number | null;
   rounds?: number | null;
   movimentos: Movimento[];
+  notas?: string | null;
+}
+
+/** O REST entre as partes do WOD. */
+export interface BlocoDescanso {
+  tipo: "descanso";
+  duracaoSec?: number | null;
   notas?: string | null;
 }
 
@@ -125,11 +151,15 @@ export interface BlocoMetcon {
   };
   resultado?: Score | null;
   escala: Escala;
+  /** Preenchido quando foi em dupla ou equipe. Ausente = individual. */
+  equipe?: Equipe | null;
+  /** Junta partes do MESMO WOD: Bloco A, Bloco B e o final. */
+  grupo?: string | null;
   rounds?: { numero: number; tempoSec?: number | null; reps?: number | null }[] | null;
   notas?: string | null;
 }
 
-export type Bloco = BlocoLivre | BlocoSkill | BlocoForca | BlocoMetcon;
+export type Bloco = BlocoLivre | BlocoDescanso | BlocoSkill | BlocoForca | BlocoMetcon;
 
 export interface PayloadDeCrossfit {
   v: 2;

@@ -83,10 +83,13 @@ export function MovimentosEditor({
   movimentos,
   aoMudar,
   comCarga = true,
+  emEquipe = false,
 }: {
   movimentos: Movimento[];
   aoMudar: (movs: Movimento[]) => void;
   comCarga?: boolean;
+  /** Liga o "cada": só faz sentido quando o bloco é em dupla ou equipe. */
+  emEquipe?: boolean;
 }) {
   function atualizar(i: number, patch: Partial<Movimento>) {
     aoMudar(movimentos.map((m, j) => (j === i ? { ...m, ...patch } : m)));
@@ -177,11 +180,26 @@ export function MovimentosEditor({
                       },
                     })
                   }
-                  placeholder="carga"
+                  // A carga que VOCÊ usou. O quadro quase nunca prescreve
+                  // peso; quando prescreve e você escalou, isso vive na Escala.
+                  placeholder="quanto você usou"
                   teclado="numeric"
                 />
               ) : null}
             </Linha>
+
+            {/* "2 Rope Climb (cada)": em dupla, cada um faz a conta inteira,
+                em vez de dividirem entre os dois. */}
+            {emEquipe ? (
+              <Opcoes
+                valor={m.porPessoa ? "cada" : "total"}
+                opcoes={[
+                  { id: "total", label: "No total" },
+                  { id: "cada", label: "Cada um" },
+                ]}
+                aoEscolher={(id) => atualizar(i, { porPessoa: id === "cada" })}
+              />
+            ) : null}
 
             {comCarga && m.carga?.valor != null ? (
               <Opcoes
