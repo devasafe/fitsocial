@@ -32,6 +32,15 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       throw new HttpError(401, "Usuário não encontrado");
     }
 
+    // Trocar a senha derruba as sessões antigas.
+    //
+    // O `?? 0` não é detalhe: tokens emitidos antes deste campo existir não
+    // trazem `v`, e o default de tokenVersion é 0. Sem isso, subir esta versão
+    // deslogaria todo mundo que já estava usando o app.
+    if ((payload.v ?? 0) !== (user.tokenVersion ?? 0)) {
+      throw new HttpError(401, "Sua senha mudou. Entre de novo.");
+    }
+
     // Banimento e suspensão valem para tokens JÁ emitidos: o usuário é lido do
     // banco a cada requisição, então o corte é imediato.
     await assertAccountUsable(user);

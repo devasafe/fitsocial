@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, FlatList } from "react-native";
+import { View, StyleSheet, FlatList, Pressable } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -25,7 +25,7 @@ import { MetricTile, Button, Txt, Card, ErrorState } from "../components/ui";
 import { coachLine } from "../lib/coachContext";
 import { Skeleton } from "../components/Skeleton";
 import { notify } from "../lib/notify";
-import { colors, spacing } from "../theme";
+import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
 type Aba = "treinos" | "publicacoes" | "fotos";
@@ -42,7 +42,7 @@ const ABAS = [
 export function ProfileScreen() {
   const route = useRoute<RouteProp<AppStackParams, "UserProfile">>();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const { user: me, token, logout } = useAuth();
+  const { user: me, token } = useAuth();
   const { propsDoCard, denunciando, fecharDenuncia } = useAcoesDePost(() => void load());
   // Sem param => perfil próprio (aba); com param => perfil de outra pessoa.
   const targetId = route.params?.userId ?? me!.id;
@@ -228,12 +228,27 @@ export function ProfileScreen() {
 
           {data.isMe ? (
             <View style={styles.actions}>
-              <Button
-                title="Editar perfil"
-                variant="secondary"
-                onPress={() => nav.navigate("EditProfile")}
-              />
-              <Button title="Sair da conta" variant="ghost" onPress={logout} />
+              <View style={styles.acoesLinha}>
+                <Button
+                  title="Editar perfil"
+                  variant="secondary"
+                  onPress={() => nav.navigate("EditProfile")}
+                  style={styles.acaoPrincipal}
+                />
+                {/* Sair mudou de lugar: virou a última linha das Configurações,
+                    com confirmação. Aqui do lado de "Editar perfil" era fácil
+                    demais de tocar sem querer. */}
+                <Pressable
+                  onPress={() => nav.navigate("Configuracoes")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Configurações"
+                  style={styles.engrenagem}
+                >
+                  <Txt variant="body" color={colors.text2}>
+                    ⚙
+                  </Txt>
+                </Pressable>
+              </View>
             </View>
           ) : (
             <View style={styles.actions}>
@@ -302,6 +317,16 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: "row", gap: spacing.card, marginTop: spacing.lg },
   metric: { flex: 1 },
   actions: { gap: spacing.sm, marginTop: spacing.md },
+  acoesLinha: { flexDirection: "row", alignItems: "stretch", gap: spacing.sm },
+  acaoPrincipal: { flex: 1 },
+  engrenagem: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.chip,
+    paddingHorizontal: spacing.md,
+  },
   abas: { marginTop: spacing.lg, marginBottom: spacing.md },
   postsHeading: { marginTop: spacing.s32, marginBottom: spacing.xs },
   empty: { alignItems: "center", paddingVertical: spacing.lg },

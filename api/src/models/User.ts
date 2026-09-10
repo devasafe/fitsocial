@@ -68,7 +68,21 @@ const userSchema = new Schema(
        *  resultado, mas a rota começa e termina na porta de casa. No mesmo
        *  botão, alguém publicaria o endereço achando que publicou o tempo. */
       routesPublic: { type: Boolean, default: false },
+      /** O que a pessoa quer receber. Preparado para as notificações da
+       *  próxima fase; hoje só é lido e gravado. */
+      notificacoes: {
+        novosPosts: { type: Boolean, default: true },
+        interacoes: { type: Boolean, default: true },
+        desafios: { type: Boolean, default: true },
+        sistema: { type: Boolean, default: true },
+      },
     },
+    /** Sobe a cada troca de senha, derrubando as sessões antigas.
+     *
+     *  Tokens emitidos antes disto existir não trazem o campo. Por isso a
+     *  comparação usa (payload.v ?? 0) contra o default 0: subir esta versão
+     *  não desloga ninguém que já estava dentro. */
+    tokenVersion: { type: Number, default: 0 },
 
     // --- Assinatura ---
     // `tier` continua sendo a verdade que o app lê; estes campos dizem POR QUE
