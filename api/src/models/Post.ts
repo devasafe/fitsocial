@@ -7,6 +7,11 @@ const postSchema = new Schema(
     text: { type: String, default: "", trim: true, maxlength: 2000 },
     // MVP: URL da imagem (upload real de arquivo fica para uma etapa posterior).
     imageUrl: { type: String, default: "" },
+    /** Dimensões da imagem, para o app reservar a proporção certa antes de ela
+     *  carregar. Ausentes nos posts criados antes disto: o app cai no tamanho
+     *  que o próprio carregamento informa. */
+    imageWidth: { type: Number, default: null },
+    imageHeight: { type: Number, default: null },
     // Quando o post é o compartilhamento de uma atividade registrada (opcional).
     activity: { type: Schema.Types.ObjectId, ref: "Activity", default: undefined },
     // Denormalizados para o feed não precisar contar a cada leitura.

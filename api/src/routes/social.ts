@@ -80,6 +80,9 @@ function serializePost(
     id: post._id.toString(),
     text: post.text,
     imageUrl: post.imageUrl,
+    // Null nos posts antigos — o app se vira com o tamanho real da imagem.
+    imageWidth: post.imageWidth ?? null,
+    imageHeight: post.imageHeight ?? null,
     likeCount: post.likeCount,
     commentCount: post.commentCount,
     likedByMe: likedIds.has(post._id.toString()),
@@ -209,6 +212,9 @@ const createPostSchema = z
   .object({
     text: z.string().max(2000).optional(),
     imageUrl: z.string().url("URL de imagem inválida").optional(),
+    // Vêm da resposta do upload. Opcionais: o APK antigo não os envia.
+    imageWidth: z.number().int().positive().max(20_000).optional(),
+    imageHeight: z.number().int().positive().max(20_000).optional(),
     activityId: z.string().optional(),
   })
   .refine((b) => !!(b.text?.trim() || b.imageUrl || b.activityId), {
@@ -218,7 +224,9 @@ const createPostSchema = z
 socialRouter.post(
   "/posts",
   asyncHandler(async (req, res) => {
-    const { text, imageUrl, activityId } = createPostSchema.parse(req.body);
+    const { text, imageUrl, imageWidth, imageHeight, activityId } = createPostSchema.parse(
+      req.body
+    );
 
     // Anexo de treino: precisa existir e ser do próprio usuário.
     let activity: mongoose.Types.ObjectId | undefined;
@@ -233,6 +241,8 @@ socialRouter.post(
       author: req.user!._id,
       text: text?.trim() ?? "",
       imageUrl: imageUrl ?? "",
+      imageWidth: imageWidth ?? null,
+      imageHeight: imageHeight ?? null,
       ...(activity ? { activity } : {}),
     });
     await post.populate("author", "name username avatarUrl");

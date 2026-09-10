@@ -36,8 +36,10 @@ interface MovForm {
   tempo: string; // "mm:ss" ou segundos
 }
 
+// Sem `flex` aqui: empilhado, um item de coluna com flex:1 vira flex-basis 0
+// no react-native-web e o campo perde a altura. Quem precisa esticar numa
+// linha pede o flex no ponto de uso.
 const movInput = {
-  flex: 1,
   backgroundColor: colors.surface2,
   borderWidth: 1,
   borderColor: colors.line,
@@ -47,7 +49,6 @@ const movInput = {
   color: colors.text,
   fontSize: 15,
 } as const;
-const movCompact = { textAlign: "center", fontSize: 14 } as const;
 
 // Aceita "mm:ss" ou segundos puros. Vazio/zero → null.
 function parseTempo(s: string): number | null {
@@ -230,7 +231,7 @@ export function RegisterWodScreen({ route, navigation }: Props) {
                 onChangeText={(t) => setMov(i, { name: t })}
                 placeholder={`Movimento ${i + 1} (ex.: Back Squat)`}
                 placeholderTextColor={colors.text3}
-                style={movInput}
+                style={[movInput, { flex: 1 }]}
               />
               <TouchableOpacity onPress={() => removeMov(i)} hitSlop={8} style={{ paddingHorizontal: 4 }}>
                 <Txt variant="titleCard" color={colors.text3}>
@@ -238,10 +239,12 @@ export function RegisterWodScreen({ route, navigation }: Props) {
                 </Txt>
               </TouchableOpacity>
             </View>
-            <View style={{ flexDirection: "row", gap: spacing.sm }}>
-              <TextInput value={mv.kg} onChangeText={(t) => setMov(i, { kg: t })} placeholder="carga (kg)" placeholderTextColor={colors.text3} keyboardType="numeric" style={[movInput, movCompact]} />
-              <TextInput value={mv.reps} onChangeText={(t) => setMov(i, { reps: t })} placeholder="reps" placeholderTextColor={colors.text3} keyboardType="numeric" style={[movInput, movCompact]} />
-              <TextInput value={mv.tempo} onChangeText={(t) => setMov(i, { tempo: t })} placeholder="tempo (mm:ss)" placeholderTextColor={colors.text3} style={[movInput, movCompact]} />
+            {/* Empilhados: em três colunas sobravam ~58px de texto por campo e
+                "tempo (mm:ss)" nem aparecia inteiro. */}
+            <View style={{ gap: spacing.sm }}>
+              <TextInput value={mv.kg} onChangeText={(t) => setMov(i, { kg: t })} placeholder="carga (kg)" placeholderTextColor={colors.text3} keyboardType="numeric" style={movInput} />
+              <TextInput value={mv.reps} onChangeText={(t) => setMov(i, { reps: t })} placeholder="reps" placeholderTextColor={colors.text3} keyboardType="numeric" style={movInput} />
+              <TextInput value={mv.tempo} onChangeText={(t) => setMov(i, { tempo: t })} placeholder="tempo (mm:ss)" placeholderTextColor={colors.text3} style={movInput} />
             </View>
           </View>
         ))}

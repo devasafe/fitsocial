@@ -26,37 +26,45 @@ interface ExerciseForm {
   sets: SetForm[];
 }
 
-// Campo numérico compacto (carga/reps). Número grande, alvo de toque generoso.
+// Campo numérico com o rótulo em cima — o mesmo padrão do cadastro da pessoa
+// (OnboardingForm). Lado a lado, cada um ficava com metade da largura menos o
+// padding, e no navegador os dois nem cabiam: campo de texto não encolhe abaixo
+// da largura que o conteúdo pede, então a linha estourava para fora da tela.
 function NumInput({
   value,
   onChangeText,
+  label,
   placeholder,
 }: {
   value: string;
   onChangeText: (t: string) => void;
+  label: string;
   placeholder: string;
 }) {
   return (
-    <TextInput
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={colors.text3}
-      keyboardType="numeric"
-      style={{
-        flex: 1,
-        backgroundColor: colors.surface2,
-        borderWidth: 1,
-        borderColor: colors.line,
-        borderRadius: radius.chip,
-        paddingVertical: 12,
-        paddingHorizontal: spacing.md,
-        color: colors.text,
-        fontSize: 20,
-        fontVariant: ["tabular-nums"],
-        textAlign: "center",
-      }}
-    />
+    <View style={{ gap: spacing.xs }}>
+      <Txt variant="label" color={colors.text2}>
+        {label}
+      </Txt>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={colors.text3}
+        keyboardType="numeric"
+        style={{
+          backgroundColor: colors.surface2,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: radius.chip,
+          paddingVertical: 12,
+          paddingHorizontal: spacing.md,
+          color: colors.text,
+          fontSize: 20,
+          fontVariant: ["tabular-nums"],
+        }}
+      />
+    </View>
   );
 }
 
@@ -176,13 +184,23 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
               última vez: {last[ex.name].weightKg || 0} kg × {last[ex.name].reps || 0}
             </Txt>
           ) : null}
-          <Txt variant="label" color={colors.text2} style={{ marginBottom: 6 }}>
-            Séries — carga (kg) e repetições
-          </Txt>
           {ex.sets.map((s, si) => (
-            <View key={si} style={{ flexDirection: "row", gap: spacing.sm, marginBottom: spacing.sm }}>
-              <NumInput value={s.weightKg} onChangeText={(t) => setSet(ei, si, { weightKg: t })} placeholder="kg" />
-              <NumInput value={s.reps} onChangeText={(t) => setSet(ei, si, { reps: t })} placeholder="reps" />
+            <View key={si} style={{ gap: spacing.sm, marginBottom: spacing.md }}>
+              <Txt variant="caption" color={colors.text3}>
+                Série {si + 1}
+              </Txt>
+              <NumInput
+                value={s.weightKg}
+                onChangeText={(t) => setSet(ei, si, { weightKg: t })}
+                label="Carga (kg)"
+                placeholder="0"
+              />
+              <NumInput
+                value={s.reps}
+                onChangeText={(t) => setSet(ei, si, { reps: t })}
+                label="Repetições"
+                placeholder="0"
+              />
             </View>
           ))}
           <TouchableOpacity onPress={() => addSet(ei)} activeOpacity={0.7} style={{ paddingVertical: spacing.sm }}>
