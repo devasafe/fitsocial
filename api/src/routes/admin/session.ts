@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { User, verifyPassword } from "../../models/User.js";
-import { signToken } from "../../utils/token.js";
+import { signTokenForUser } from "../../utils/token.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { HttpError } from "../../utils/httpError.js";
 import { rateLimit } from "../../middleware/rateLimit.js";
@@ -42,7 +42,7 @@ adminSessionRouter.post(
       throw new HttpError(401, "Credenciais inválidas");
     }
 
-    const token = signToken(user._id.toString(), {
+    const token = signTokenForUser(user, {
       scope: "admin",
       expiresIn: env.adminSessionExpiresIn,
     });

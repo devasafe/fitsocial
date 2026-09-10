@@ -179,3 +179,52 @@ describe("Proteção contra força bruta", () => {
     expect(ultimo).toBe(429);
   });
 });
+
+describe("Sessão do painel depois de trocar a senha", () => {
+  const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+  it("entra de novo com a senha nova e o token FUNCIONA", async () => {
+    const email = "chefe-trocou@teste.com";
+    const u = await registrar(email);
+    await grantAdmin(email, { force: true });
+
+    await request(app)
+      .patch("/auth/password")
+      .set(auth(u.token))
+      .set("X-Forwarded-For", ipNovo())
+      .send({ atual: u.senha, nova: "senha-nova-bem-longa" })
+      .expect(200);
+
+    const sessao = await entrarNoPainel(email, "senha-nova-bem-longa");
+    expect(sessao.status).toBe(200);
+
+    // O ponto do teste é este. O login SEMPRE respondeu 200; o que estava
+    // quebrado era a requisição seguinte — o token do painel nascia sem o
+    // campo de versão, então qualquer versão diferente de zero o matava na
+    // hora. Quem trocasse a senha ficava trancado fora do painel para sempre,
+    // porque entrar de novo emitia outro token igualmente natimorto.
+    const usando = await request(app)
+      .get("/admin/users")
+      .set(auth(sessao.body.data.token as string));
+    expect(usando.status).toBe(200);
+  });
+
+  it("a sessão antiga do painel cai quando a senha muda", async () => {
+    const email = "chefe-sessao@teste.com";
+    const u = await registrar(email);
+    await grantAdmin(email, { force: true });
+    const antiga = (await entrarNoPainel(email, u.senha)).body.data.token as string;
+
+    expect((await request(app).get("/admin/users").set(auth(antiga))).status).toBe(200);
+
+    await request(app)
+      .patch("/auth/password")
+      .set(auth(u.token))
+      .set("X-Forwarded-For", ipNovo())
+      .send({ atual: u.senha, nova: "outra-senha-bem-longa" })
+      .expect(200);
+
+    // Trocar a senha tem que expulsar quem estava dentro, painel inclusive.
+    expect((await request(app).get("/admin/users").set(auth(antiga))).status).toBe(401);
+  });
+});
