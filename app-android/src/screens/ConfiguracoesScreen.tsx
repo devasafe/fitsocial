@@ -138,7 +138,13 @@ export function ConfiguracoesScreen() {
           onPress={() => nav.navigate("EditProfile")}
         />
         <Linha titulo="E-mail" detalhe={user?.email ?? ""} />
-        <Linha titulo="Alterar senha" onPress={() => nav.navigate("AlterarSenha")} ultima />
+        <Linha titulo="Alterar senha" onPress={() => nav.navigate("AlterarSenha")} />
+        <Linha
+          titulo="Excluir minha conta"
+          onPress={() => nav.navigate("ExcluirConta")}
+          perigosa
+          ultima
+        />
       </Secao>
 
       <Secao
@@ -284,15 +290,20 @@ function Linha({
   detalhe,
   onPress,
   ultima,
+  perigosa,
 }: {
   titulo: string;
   detalhe?: string;
   onPress?: () => void;
   ultima?: boolean;
+  /** Ação sem volta: sinalizada antes de a pessoa tocar, não depois. */
+  perigosa?: boolean;
 }) {
   const conteudo = (
     <View style={[styles.linha, ultima ? null : styles.divisoria]}>
-      <Txt variant="body">{titulo}</Txt>
+      <Txt variant="body" color={perigosa ? colors.danger : colors.text}>
+        {titulo}
+      </Txt>
       <View style={styles.direita}>
         {detalhe ? (
           <Txt variant="body" color={colors.text2} numberOfLines={1}>

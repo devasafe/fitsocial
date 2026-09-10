@@ -1,4 +1,4 @@
-import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, DeleteObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { randomKey, type FileToSave, type SavedFile, type StorageProvider } from "./provider.js";
 
 export interface S3StorageConfig {
@@ -30,5 +30,18 @@ export class S3Storage implements StorageProvider {
     );
     const base = this.cfg.publicBaseUrl.replace(/\/+$/, "");
     return { url: `${base}/${key}` };
+  }
+
+  async delete(url: string): Promise<void> {
+    const base = this.cfg.publicBaseUrl.replace(/\/+$/, "");
+    // URL de outro lugar (avatar de rede social, imagem antiga de outro
+    // provider): não é nossa para apagar, e tentar seria apagar por adivinhação.
+    if (!url.startsWith(`${base}/`)) return;
+
+    const key = url.slice(base.length + 1);
+    if (!key) return;
+    await this.cfg.client.send(
+      new DeleteObjectCommand({ Bucket: this.cfg.bucket, Key: key })
+    );
   }
 }

@@ -23,6 +23,7 @@ export type AppStackParams = {
   EditProfile: undefined;
   Configuracoes: undefined;
   AlterarSenha: undefined;
+  ExcluirConta: undefined;
   UserProfile: { userId: string };
   Subscription: undefined;
   Leaderboard: undefined;

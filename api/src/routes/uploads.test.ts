@@ -82,6 +82,7 @@ describe("Upload de imagens", () => {
         capturado.buffer = file.buffer;
         return { url: "https://cdn.fake/x.jpg" };
       },
+      delete: async () => {},
     });
     try {
       const comExif = await sharp({

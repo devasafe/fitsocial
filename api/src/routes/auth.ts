@@ -4,6 +4,7 @@ import { User, hashPassword, verifyPassword, publicUser, type UserDoc } from "..
 import { signToken } from "../utils/token.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
+import { excluirConta } from "../services/accountDeletion.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
@@ -130,6 +131,33 @@ authRouter.patch(
       data: { token },
       meta: { sessoesEncerradas: true },
     });
+  })
+);
+
+/**
+ * Exclusão de conta a pedido da pessoa (LGPD, art. 18, VI).
+ *
+ * Pede a senha porque é irreversível e porque um token roubado não pode
+ * apagar a vida de alguém. Não existe "desativar": o que a pessoa está
+ * pedindo é que o tratamento dos dados acabe, e conta desativada continua
+ * sendo tratamento.
+ */
+authRouter.delete(
+  "/me",
+  requireAuth,
+  rateLimit({ windowMs: 15 * 60_000, max: 5, name: "exclusao-conta" }),
+  asyncHandler(async (req, res) => {
+    const { senha } = z
+      .object({ senha: z.string().min(1, "Confirme sua senha") })
+      .parse(req.body);
+    const user = req.user!;
+
+    if (!(await verifyPassword(senha, user.passwordHash))) {
+      throw new HttpError(400, "A senha não confere.");
+    }
+
+    const resumo = await excluirConta(user);
+    res.json({ data: { excluida: true }, meta: resumo });
   })
 );
 
