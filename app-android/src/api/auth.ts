@@ -16,6 +16,8 @@ export interface AppUser {
     /** null = ainda não respondeu; é o que dispara a pergunta pós-treino. */
     activitiesPublic: boolean | null;
     routesPublic: boolean;
+    /** De onde vem o treino. null = ainda não escolheu. */
+    programacao?: "plano" | "propria" | null;
   };
 }
 

@@ -68,6 +68,17 @@ const userSchema = new Schema(
        *  resultado, mas a rota começa e termina na porta de casa. No mesmo
        *  botão, alguém publicaria o endereço achando que publicou o tempo. */
       routesPublic: { type: Boolean, default: false },
+      /** De onde vem o treino da pessoa.
+       *
+       *  "plano"   = o plano que o app gera
+       *  "propria" = programação do box, do treinador ou dela mesma
+       *  null      = ainda não escolheu
+       *
+       *  Existe porque o app assumia que todo mundo quer um plano gerado. Quem
+       *  faz CrossFit recebe a programação do box: pedir para gerar um plano de
+       *  musculação antes de deixar usar qualquer coisa é atrito puro, logo na
+       *  primeira tela. */
+      programacao: { type: String, enum: ["plano", "propria", null], default: null },
       /** O que a pessoa quer receber. Preparado para as notificações da
        *  próxima fase; hoje só é lido e gravado. */
       notificacoes: {
@@ -123,6 +134,8 @@ export function publicUser(user: UserDoc) {
       // null aqui é o que faz o app perguntar na conclusão do primeiro treino.
       activitiesPublic: user.settings?.activitiesPublic ?? null,
       routesPublic: user.settings?.routesPublic ?? false,
+      // A Home lê isto para saber se cobra um plano ou oferece registrar.
+      programacao: user.settings?.programacao ?? null,
     },
   };
 }
