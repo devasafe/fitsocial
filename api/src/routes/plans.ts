@@ -28,12 +28,26 @@ function serializePlan(plan: InstanceType<typeof Plan>) {
         sessions: raw.sessions.map((s) => ({ ...s, exercises: s.exercises.map((e) => ({ ...e })) })),
       })
     : null;
+  // Metade que falta sai como FORMA VAZIA, não como null.
+  //
+  // O app instalado faz `plan.workout.sessions.map(...)` sem guarda: um null
+  // ali fecha o app na abertura, e o sintoma ("crashou ao abrir") não aponta
+  // para "alguém zerou o treino em outro lugar". O app novo distingue por
+  // `sessions.length`, que funciona nos dois casos.
+  const treinoVazio = { split: "", daysPerWeek: 0, sessions: [] };
+  const dietaVazia = {
+    dailyCalories: 0,
+    macros: { proteinG: 0, carbsG: 0, fatG: 0 },
+    meals: [],
+    notes: "",
+  };
+
   return {
     id: plan._id.toString(),
     version: plan.version,
     summary: plan.summary,
-    workout,
-    diet: plan.diet ?? null,
+    workout: workout ?? treinoVazio,
+    diet: plan.diet ?? dietaVazia,
     disclaimer: plan.disclaimer,
     createdAt: plan.get("createdAt") as Date,
   };

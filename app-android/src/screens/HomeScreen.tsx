@@ -161,8 +161,11 @@ export function HomeScreen() {
 
   // Cada metade do plano existe por conta própria: dá para ter só a dieta
   // (quem treina pela programação do box) ou só o treino.
-  const temTreino = !!plan?.workout;
-  const temDieta = !!plan?.diet;
+  // Por CONTEÚDO, não por existência. O servidor devolve a metade que falta
+  // como forma vazia em vez de null — é o que impede o app instalado de fechar
+  // ao fazer `plan.workout.sessions.map(...)` sem guarda.
+  const temTreino = (plan?.workout?.sessions?.length ?? 0) > 0;
+  const temDieta = (plan?.diet?.meals?.length ?? 0) > 0;
   const todaySession = plan?.workout?.sessions?.[0];
 
   async function gerarDieta() {

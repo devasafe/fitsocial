@@ -56,8 +56,8 @@ export function TodayWorkoutScreen() {
   }
 
   // Ter plano não é mais o mesmo que ter treino: quem só gerou dieta chega
-  // aqui com plano e sem sessões.
-  if (!plan?.workout) {
+  // aqui com plano e com o treino vazio.
+  if (!plan?.workout?.sessions?.length) {
     return (
       <View style={styles.center}>
         <Txt variant="titleSection" style={{ textAlign: "center" }}>

@@ -80,7 +80,9 @@ describe("Dieta sozinha", () => {
     // O ponto: quem segue a programação do box quer a dieta sem carregar um
     // treino gerado que não vai usar.
     expect(r.body.plan.diet.dailyCalories).toBe(2400);
-    expect(r.body.plan.workout).toBeNull();
+    // A metade que falta sai como forma VAZIA, não null: o app instalado faz
+    // `plan.workout.sessions.map(...)` sem guarda e fecharia com null.
+    expect(r.body.plan.workout.sessions).toEqual([]);
   });
 
   it("preenche a metade que faltava quando já existe treino", async () => {
@@ -128,7 +130,7 @@ describe("Zerar", () => {
     await request(app).delete("/plans/current/workout").set(auth(u.token)).expect(200);
 
     const r = await atual(u.token);
-    expect(r.body.plan.workout).toBeNull();
+    expect(r.body.plan.workout.sessions).toEqual([]);
     expect(r.body.plan.diet.dailyCalories).toBe(2200);
     // Zerar o treino também devolve a escolha — é ela que decide o que a Home
     // mostra no lugar dele.
@@ -155,7 +157,7 @@ describe("Zerar", () => {
     await request(app).delete("/plans/current/diet").set(auth(u.token)).expect(200);
 
     const r = await atual(u.token);
-    expect(r.body.plan.diet).toBeNull();
+    expect(r.body.plan.diet.meals).toEqual([]);
     expect(r.body.plan.workout.split).toBe("ABC");
     expect(await programacao(u.id)).toBe("plano");
   });

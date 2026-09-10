@@ -79,7 +79,25 @@ describe("Coach chat", () => {
     expect(res.body.planAdjusted).toBe(false);
   });
 
-  it("ação de reajuste em conta grátis sinaliza premiumRequired", async () => {
+  it("sem plano para reajustar, NÃO cobra Premium", async () => {
+    mock.queue = [JSON.stringify({ reply: "Posso montar um!", action: "adjust_plan" })];
+    const res = await auth(request(app).post("/coach/messages").send({ content: "muda meu plano" }));
+
+    // Abrir a tela de assinatura para reajustar um plano que a pessoa não tem
+    // é cobrar por nada, no meio de uma conversa.
+    expect(res.body.premiumRequired).toBe(false);
+    expect(res.body.adjustPending).toBe(false);
+  });
+
+  it("ação de reajuste em conta grátis COM plano sinaliza premiumRequired", async () => {
+    await Plan.create({
+      user: userId,
+      version: 1,
+      summary: "inicial",
+      workout: { split: "x", daysPerWeek: 3, sessions: [{ day: "A", focus: "f", exercises: [] }] },
+      diet: { dailyCalories: 1, macros: { proteinG: 1, carbsG: 1, fatG: 1 }, meals: [], notes: "" },
+      disclaimer: "d",
+    });
     mock.queue = [JSON.stringify({ reply: "Posso reajustar, mas é Premium.", action: "adjust_plan" })];
     const res = await auth(request(app).post("/coach/messages").send({ content: "muda meu plano" }));
     expect(res.body.premiumRequired).toBe(true);

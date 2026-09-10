@@ -156,7 +156,7 @@ export const BENCHMARKS: readonly Benchmark[] = [
     notaRx: "70 kg / 47 kg",
   },
   {
-    slug: "cindy_hero_jt",
+    slug: "jt",
     nome: "JT",
     familia: "hero",
     formato: "for_time",

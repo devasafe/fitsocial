@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { normalizarWod } from "../services/crossfit.js";
+import { normalizarWod, paraFormatoAntigo } from "../services/crossfit.js";
 import { getBenchmark } from "../services/benchmarks.js";
 import { z } from "zod";
 import mongoose from "mongoose";
@@ -35,10 +35,13 @@ export function serializeActivity(a: InstanceType<typeof Activity>) {
     perceivedEffort: a.perceivedEffort ?? null,
     feeling: a.feeling ?? null,
     planLink: a.planLink ?? null,
-    payload: a.payload,
+    // O payload cru, mais os campos planos do formato antigo quando o treino
+    // foi gravado em blocos: é o que o app instalado sabe ler.
+    payload:
+      a.kind === "wod"
+        ? { ...paraFormatoAntigo(normalizarWod(a.payload)), ...(a.payload as object) }
+        : a.payload,
     // Forma normalizada em blocos, AO LADO do payload cru — não no lugar dele.
-    // O app instalado lê `payload.name`, `payload.movements`; trocar por baixo
-    // quebraria a tela de detalhe no celular de quem não atualizou.
     ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
     metrics: a.metrics,
     createdAt: a.get("createdAt") as Date,
