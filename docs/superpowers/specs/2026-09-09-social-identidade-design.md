@@ -211,6 +211,16 @@ Sobre          versão · termos · sair da conta
 `Sair` desce para o fim de tudo e ganha confirmação — hoje ele é um botão solto no perfil,
 sem confirmação (`ProfileScreen.tsx:188`), fácil de tocar sem querer.
 
+> **Ajuste na Fase 3 (implementação):** dois itens desta lista ficaram de fora, de propósito.
+>
+> **"Quem pode ver o perfil"** virou fase própria. Sem aprovação de seguidor, o botão não
+> tranca nada: qualquer pessoa aperta "Seguir" e entra na hora. Perfil privado de verdade
+> exige pedido de seguir com aceite — outro modelo, outra tela, outro fluxo de notificação.
+> Entregar a chave sem a fechadura seria pior que não ter a chave.
+>
+> **"Termos"** espera existir um documento para linkar. A linha entra no mesmo dia em que o
+> texto tiver URL.
+
 ---
 
 # 4. Fluxo de atividade
