@@ -5,6 +5,7 @@ import { Follow } from "../models/Follow.js";
 import { Challenge } from "../models/Challenge.js";
 import { ChallengeMember } from "../models/ChallengeMember.js";
 import { Notification } from "../models/Notification.js";
+import { preferenciasDe } from "./notifications.js";
 
 /** Acima disso o número perde o sentido: o badge mostra "99+". */
 export const TETO = 99;
@@ -51,11 +52,17 @@ async function marcasDeLeitura(user: Id): Promise<Record<Area, Date>> {
 const ateOTeto = { limit: TETO + 1 } as const;
 
 export async function contadores(user: Id): Promise<Contadores> {
-  const [marcas, seguindo, minhasInscricoes] = await Promise.all([
+  const [marcas, seguindo, minhasInscricoes, prefs] = await Promise.all([
     marcasDeLeitura(user),
     Follow.find({ follower: user }).select("following"),
     ChallengeMember.find({ user }).select("challenge"),
+    preferenciasDe(user),
   ]);
+
+  // "Novos posts" desligado silencia o badge do Feed, não só um push futuro:
+  // aquele badge É o aviso de que quem você segue publicou. Deixar ele aceso
+  // faria a chave prometer silêncio e entregar barulho.
+  const querSaberDePosts = prefs.novosPosts !== false;
 
   const seguidos = seguindo.map((f) => f.following);
   const inscritos = minhasInscricoes.map((m) => m.challenge);
@@ -64,7 +71,7 @@ export async function contadores(user: Id): Promise<Contadores> {
   const [feed, explore, desafios, notificacoes] = await Promise.all([
     // Seguindo: o que quem eu sigo publicou. O meu próprio post não é novidade
     // para mim, então fica fora.
-    seguidos.length
+    seguidos.length && querSaberDePosts
       ? Post.countDocuments(
           { author: { $in: seguidos }, createdAt: { $gt: marcas.feed }, ...visivel },
           ateOTeto

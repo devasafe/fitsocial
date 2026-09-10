@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Post } from "../models/Post.js";
 import { Notification } from "../models/Notification.js";
 import { Report } from "../models/Report.js";
+import { createNotification } from "./notifications.js";
 import { HttpError } from "../utils/httpError.js";
 import type { UserDoc } from "../models/User.js";
 
@@ -90,6 +91,21 @@ export async function excluirPost(
       },
     }
   );
+
+  // Quem apagou o próprio post sabe que apagou. Quem teve o post removido pela
+  // moderação, não — e descobrir sozinho que o conteúdo sumiu é pior do que ser
+  // avisado. Vai sem ator: dizer QUAL administrador decidiu transforma uma
+  // decisão da plataforma em briga com uma pessoa.
+  //
+  // Depois da limpeza acima de propósito: aquele deleteMany apaga tudo que
+  // aponta para este post, e levaria este aviso junto.
+  if (!ehAutor) {
+    await createNotification({
+      userId: post.author,
+      type: "post_removido",
+      text: "Sua publicação foi removida por não seguir as regras da comunidade.",
+    });
+  }
 
   return {
     notificacoesRemovidas: notifs.deletedCount ?? 0,

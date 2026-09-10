@@ -17,23 +17,31 @@ interface Actor {
 notificationsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
+    // Ordena por `updatedAt`: um assunto que agrupou algo novo acabou de
+    // acontecer, mesmo que a linha tenha nascido ontem.
     const notifs = await Notification.find({ user: req.user!._id })
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .limit(50)
       .populate("actor", "name avatarUrl");
     const unread = await Notification.countDocuments({ user: req.user!._id, read: false });
     res.json({
       data: notifs.map((n) => {
-        const a = n.actor as unknown as Actor;
+        const a = n.actor as unknown as Actor | null;
         return {
           id: n._id.toString(),
           type: n.type,
           text: n.text,
           read: n.read,
           createdAt: n.get("createdAt") as Date,
+          /** Quando o assunto agrupou, é este o instante que importa. */
+          atualizadaEm: n.get("updatedAt") as Date,
+          /** Quantas pessoas estão dentro desta linha. */
+          pessoas: Math.max(n.actors.length, 1),
           targetKind: n.targetKind,
           targetId: n.targetId?.toString() ?? null,
-          actor: { id: a._id.toString(), name: a.name, avatarUrl: a.avatarUrl ?? "" },
+          // Nulo em aviso da moderação: a decisão é da plataforma, não de um
+          // administrador com nome e rosto.
+          actor: a ? { id: a._id.toString(), name: a.name, avatarUrl: a.avatarUrl ?? "" } : null,
         };
       }),
       unread,

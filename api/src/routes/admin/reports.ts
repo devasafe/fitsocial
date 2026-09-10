@@ -8,6 +8,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { HttpError } from "../../utils/httpError.js";
 import { excluirPost } from "../../services/postModeration.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
+import { notificarVarios } from "../../services/notifications.js";
 
 export const adminReportsRouter = Router();
 
@@ -108,6 +109,20 @@ adminReportsRouter.post(
     const denuncia = await Report.findById(req.params.id);
     if (!denuncia) throw new HttpError(404, "Denúncia não encontrada");
 
+    // Quem denunciou fica sabendo o que aconteceu. Sem isso, denunciar é gritar
+    // num quarto vazio — e quem não vê resposta para de denunciar.
+    //
+    // A lista é colhida ANTES do update: depois dele não há mais como separar
+    // quem denunciou desta vez de quem já tinha sido avisado numa decisão
+    // anterior sobre o mesmo conteúdo.
+    const denunciantes = (
+      await Report.find({
+        targetKind: denuncia.targetKind,
+        targetId: denuncia.targetId,
+        status: { $in: ["pendente", "analisando"] },
+      }).select("reporter")
+    ).map((d) => d.reporter);
+
     // A decisão é registrada ANTES da remoção. Excluir um post já fecha as
     // denúncias pendentes sobre ele (services/postModeration.ts); se a ordem
     // fosse invertida, este update não encontraria mais nada para fechar e o
@@ -132,6 +147,14 @@ adminReportsRouter.post(
       }
     }
 
+    const avisados = await notificarVarios(denunciantes, {
+        type: "denuncia_resolvida",
+        text:
+          decision === "removido"
+            ? "Analisamos sua denúncia e o conteúdo foi removido. Obrigado por avisar."
+            : "Analisamos sua denúncia e o conteúdo não infringe as regras. Ele continua no ar.",
+    });
+
     await recordAudit({
       actor: req.user!,
       action: decision === "removido" ? "denuncia.removeu" : "denuncia.manteve",
@@ -143,6 +166,9 @@ adminReportsRouter.post(
       reason,
     });
 
-    res.json({ data: { decision, denunciasFechadas: r.modifiedCount ?? 0 }, meta: {} });
+    res.json({
+      data: { decision, denunciasFechadas: r.modifiedCount ?? 0, denunciantesAvisados: avisados },
+      meta: {},
+    });
   })
 );
