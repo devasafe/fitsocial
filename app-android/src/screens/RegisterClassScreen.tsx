@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { usePRCelebration } from "../components/PRCelebration";
+import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -25,6 +26,7 @@ export function RegisterClassScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
+  const perguntarPrivacidade = usePerguntaDePrivacidade();
   const [min, setMin] = useState("");
   const [sessionType, setSessionType] = useState<string | null>("aula_completa");
   const [gi, setGi] = useState(true);
@@ -63,6 +65,8 @@ export function RegisterClassScreen({ route, navigation }: Props) {
         payload: { modality: sportId, sessionType: sessionType ?? undefined, gi },
       });
       celebratePR(res.meta.newPRs ?? []);
+      // Só aparece para quem ainda não escolheu; o treino já está salvo.
+      perguntarPrivacidade();
       navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

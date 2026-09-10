@@ -5,11 +5,16 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import {
   getUserProfile,
+  getUserActivities,
   followUser,
   unfollowUser,
   type UserProfile,
+  type TreinoPublico,
+  type Post,
 } from "../api/social";
 import { PostCard } from "../components/PostCard";
+import { TreinoCard } from "../components/TreinoCard";
+import { SegmentedControl } from "../components/SegmentedControl";
 import { Avatar } from "../components/Avatar";
 import { Badges } from "../components/Badges";
 import { getBadges, type Badge } from "../api/gamification";
@@ -20,6 +25,17 @@ import { Skeleton } from "../components/Skeleton";
 import { notify } from "../lib/notify";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+
+type Aba = "treinos" | "publicacoes" | "fotos";
+
+/** A lista do perfil mostra treinos ou posts, conforme a aba. */
+type ItemDoPerfil = Post | TreinoPublico;
+
+const ABAS = [
+  { key: "treinos" as const, label: "Treinos" },
+  { key: "publicacoes" as const, label: "Publicações" },
+  { key: "fotos" as const, label: "Fotos" },
+];
 
 export function ProfileScreen() {
   const route = useRoute<RouteProp<AppStackParams, "UserProfile">>();
@@ -35,15 +51,22 @@ export function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Treinos primeiro: o perfil conta o que a pessoa faz, não o que ela postou.
+  const [aba, setAba] = useState<Aba>("treinos");
+  const [treinos, setTreinos] = useState<TreinoPublico[] | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [profile, b] = await Promise.all([
+      const [profile, b, t] = await Promise.all([
         getUserProfile(token!, targetId),
         getBadges(token!, targetId),
+        // Vem vazio quando a pessoa não tornou os treinos públicos — a aba
+        // então explica isso em vez de parecer que ela nunca treinou.
+        getUserActivities(token!, targetId).catch(() => ({ data: [], meta: { nextCursor: null } })),
       ]);
       setData(profile);
       setBadges(b.badges);
+      setTreinos(t.data);
       setError(false);
     } catch {
       setError(true);
@@ -121,11 +144,33 @@ export function ProfileScreen() {
     );
   }
 
+  // O que cada aba mostra. "Publicações" traz tudo que virou post, inclusive
+  // treino compartilhado: se está no feed, está aqui — regra fácil de prever.
+  const itensDaAba: ItemDoPerfil[] =
+    aba === "treinos"
+      ? treinos ?? []
+      : aba === "fotos"
+        ? data.posts.filter((p) => !!p.imageUrl)
+        : data.posts;
+
+  const textoVazio =
+    aba === "treinos"
+      ? data.isMe
+        ? "Você ainda não registrou treinos. O primeiro já aparece aqui."
+        : "Esta pessoa ainda não tem treinos públicos."
+      : aba === "fotos"
+        ? data.isMe
+          ? "Você ainda não publicou fotos."
+          : "Nenhuma foto por aqui ainda."
+        : data.isMe
+          ? "Você ainda não publicou nada. Treinos registrados aparecem na aba Treinos."
+          : "Nenhuma publicação ainda.";
+
   return (
     <FlatList
       style={styles.container}
-      data={data.posts}
-      keyExtractor={(p) => p.id}
+      data={itensDaAba}
+      keyExtractor={(item) => item.id}
       contentContainerStyle={styles.list}
       ListHeaderComponent={
         <>
@@ -147,7 +192,7 @@ export function ProfileScreen() {
           </View>
 
           <View style={styles.metrics}>
-            <MetricTile value={String(data.counts.posts)} label="Treinos" style={styles.metric} />
+            <MetricTile value={String(data.counts.treinos)} label="Treinos" style={styles.metric} />
             <MetricTile
               value={String(data.counts.followers)}
               label="Seguidores"
@@ -200,34 +245,41 @@ export function ProfileScreen() {
 
           {badges.length > 0 && <Badges badges={badges} />}
 
-          <Txt variant="titleSection" style={styles.postsHeading}>
-            Atividades
-          </Txt>
+          <View style={styles.abas}>
+            <SegmentedControl segments={ABAS} value={aba} onChange={setAba} />
+          </View>
         </>
       }
       ListEmptyComponent={
         <View style={styles.empty}>
           <Txt variant="body" color={colors.text2} style={styles.emptyText}>
-            {data.isMe
-              ? "Você ainda não publicou treinos. Registre o de hoje para começar seu histórico."
-              : "Ainda não há treinos publicados por aqui."}
+            {textoVazio}
           </Txt>
           {data.isMe ? (
             <Button
-              title="Publicar treino"
-              onPress={() => nav.navigate("CreatePost")}
+              title={aba === "treinos" ? "Registrar treino" : "Publicar"}
+              onPress={() =>
+                aba === "treinos" ? nav.navigate("Registrar") : nav.navigate("CreatePost")
+              }
               style={styles.emptyBtn}
             />
           ) : null}
         </View>
       }
-      renderItem={({ item }) => (
-        <PostCard
-          post={item}
-          onPressComments={(post) => nav.navigate("PostDetail", { post })}
-          onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
-        />
-      )}
+      renderItem={({ item }) =>
+        aba === "treinos" ? (
+          <TreinoCard
+            treino={item as TreinoPublico}
+            onPress={() => nav.navigate("ActivityDetail", { activityId: item.id })}
+          />
+        ) : (
+          <PostCard
+            post={item as Post}
+            onPressComments={(post) => nav.navigate("PostDetail", { post })}
+            onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
+          />
+        )
+      }
     />
   );
 }
@@ -243,6 +295,7 @@ const styles = StyleSheet.create({
   metrics: { flexDirection: "row", gap: spacing.card, marginTop: spacing.lg },
   metric: { flex: 1 },
   actions: { gap: spacing.sm, marginTop: spacing.md },
+  abas: { marginTop: spacing.lg, marginBottom: spacing.md },
   postsHeading: { marginTop: spacing.s32, marginBottom: spacing.xs },
   empty: { alignItems: "center", paddingVertical: spacing.lg },
   emptyText: { textAlign: "center", marginBottom: spacing.md },

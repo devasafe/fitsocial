@@ -12,6 +12,11 @@ export interface AppUser {
   // Amigo fundador (premium de presente) + mensagem pessoal, quando aplicável.
   isFounder?: boolean;
   founderMessage?: string | null;
+  settings?: {
+    /** null = ainda não respondeu; é o que dispara a pergunta pós-treino. */
+    activitiesPublic: boolean | null;
+    routesPublic: boolean;
+  };
 }
 
 interface AuthResponse {

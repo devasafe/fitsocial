@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { usePRCelebration } from "../components/PRCelebration";
+import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -28,6 +29,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
   const celebratePR = usePRCelebration();
+  const perguntarPrivacidade = usePerguntaDePrivacidade();
   const label = sportLabel(sportId);
   const [km, setKm] = useState("");
   const [min, setMin] = useState("");
@@ -76,6 +78,8 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         payload: { distanceM: Math.round(kmN * 1000) },
       });
       celebratePR(res.meta.newPRs ?? []);
+      // Só aparece para quem ainda não escolheu; o treino já está salvo.
+      perguntarPrivacidade();
       navigation.navigate("CreatePost", { activity: res.data });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
