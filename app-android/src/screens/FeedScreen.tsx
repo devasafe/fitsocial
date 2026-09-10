@@ -12,6 +12,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getFeed, getExplore, followUser, unfollowUser, type Post } from "../api/social";
 import { PostCard } from "../components/PostCard";
+import { DenunciarSheet } from "../components/DenunciarSheet";
+import { useAcoesDePost } from "../lib/acoesDePost";
 import { Txt, Button, ErrorState } from "../components/ui";
 import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
@@ -22,6 +24,7 @@ export function FeedScreen({
   mode = "following",
 }: { embedded?: boolean; mode?: "following" | "explore" } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const { propsDoCard, denunciando, fecharDenuncia } = useAcoesDePost(() => void load());
   const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -174,8 +177,14 @@ export function FeedScreen({
             onPressComments={(post) => nav.navigate("PostDetail", { post })}
             onToggleFollow={mode === "explore" ? handleToggleFollow : undefined}
             onPressActivity={(activityId) => nav.navigate("ActivityDetail", { activityId })}
+            {...propsDoCard(item, (post) => nav.navigate("EditarPost", { post }))}
           />
         )}
+      />
+      <DenunciarSheet
+        postId={denunciando}
+        visivel={!!denunciando}
+        aoFechar={fecharDenuncia}
       />
     </View>
   );

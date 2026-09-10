@@ -6,6 +6,7 @@ import { likePost, unlikePost, type Post } from "../api/social";
 import { colors, radius, spacing, sportColor } from "../theme";
 import { Card, Txt, Button } from "./ui";
 import { Avatar } from "./Avatar";
+import { MenuSheet, type AcaoDoMenu } from "./MenuSheet";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
 function timeAgo(iso: string): string {
@@ -78,12 +79,20 @@ export function PostCard({
   onPressComments,
   onToggleFollow,
   onPressActivity,
+  onEditar,
+  onExcluir,
+  onDenunciar,
 }: {
   post: Post;
   onPressAuthor?: (authorId: string) => void;
   onPressComments?: (post: Post) => void;
   // Presente só no Explorar: mostra "Seguir/Seguindo" no card (descoberta em 1 toque).
   onToggleFollow?: (authorId: string, next: boolean) => Promise<void>;
+  // Ações do menu (...). Cada tela decide quais passa — o card só mostra as
+  // que recebeu, então ação sem permissão simplesmente não aparece.
+  onEditar?: (post: Post) => void;
+  onExcluir?: (post: Post) => void;
+  onDenunciar?: (post: Post) => void;
   // Toque no card de treino → abre o treino completo.
   onPressActivity?: (activityId: string) => void;
 }) {
@@ -126,6 +135,33 @@ export function PostCard({
   }
 
   const when = timeAgo(post.createdAt);
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  // O menu mostra só o que a tela permitiu: editar e excluir chegam apenas nos
+  // posts próprios, denunciar apenas nos alheios. É a permissão virando
+  // interface — nada aparece cinza e sem função.
+  const acoes: AcaoDoMenu[] = [];
+  if (onEditar) {
+    acoes.push({ chave: "editar", rotulo: "Editar publicação", aoTocar: () => onEditar(post) });
+  }
+  if (onDenunciar) {
+    acoes.push({
+      chave: "denunciar",
+      rotulo: "Denunciar",
+      descricao: "O autor não fica sabendo quem denunciou",
+      aoTocar: () => onDenunciar(post),
+    });
+  }
+  if (onExcluir) {
+    acoes.push({
+      chave: "excluir",
+      rotulo: "Excluir publicação",
+      descricao: "Não dá para desfazer",
+      perigosa: true,
+      aoTocar: () => onExcluir(post),
+    });
+  }
+  const temMenu = acoes.length > 0;
 
   return (
     <Card style={styles.card}>
@@ -142,10 +178,23 @@ export function PostCard({
             {when ? (
               <Txt variant="caption" color={colors.text3}>
                 {when}
+                {post.editedAt ? " · editado" : ""}
               </Txt>
             ) : null}
           </View>
         </TouchableOpacity>
+        {temMenu ? (
+          <TouchableOpacity
+            onPress={() => setMenuAberto(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ paddingHorizontal: spacing.sm, paddingVertical: 2 }}
+            accessibilityLabel="Opções da publicação"
+          >
+            <Txt variant="titleCard" color={colors.text3}>
+              ···
+            </Txt>
+          </TouchableOpacity>
+        ) : null}
         {showFollow ? (
           <Button
             title={following ? "Seguindo" : "Seguir"}
@@ -227,6 +276,7 @@ export function PostCard({
           </Txt>
         </TouchableOpacity>
       </View>
+      <MenuSheet visivel={menuAberto} aoFechar={() => setMenuAberto(false)} acoes={acoes} />
     </Card>
   );
 }

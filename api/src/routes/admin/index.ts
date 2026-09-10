@@ -6,6 +6,7 @@ import { adminSessionRouter } from "./session.js";
 import { adminAiRouter } from "./ai.js";
 import { adminUsersRouter } from "./users.js";
 import { adminMetricsRouter } from "./metrics.js";
+import { adminReportsRouter } from "./reports.js";
 
 export const adminRouter = Router();
 
@@ -29,3 +30,4 @@ adminRouter.get(
 adminRouter.use("/ai", adminAiRouter);
 adminRouter.use("/users", adminUsersRouter);
 adminRouter.use("/metrics", adminMetricsRouter);
+adminRouter.use("/reports", adminReportsRouter);

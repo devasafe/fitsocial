@@ -126,7 +126,7 @@ activitiesRouter.get(
       // Compartilhar no feed torna o treino visível: quem publicou escolheu
       // mostrar. Fora isso, vale a preferência da pessoa e a visibilidade do
       // treino — antes esta checagem era pulada sempre que havia post.
-      const compartilhado = await Post.exists({ activity: a._id, hidden: { $ne: true } });
+      const compartilhado = await Post.exists({ activity: a._id, hidden: { $ne: true }, deletedAt: null });
       if (!compartilhado && !(await podeVerAtividade(a, me))) {
         throw new HttpError(404, "Atividade não encontrada");
       }
@@ -138,7 +138,7 @@ activitiesRouter.get(
       : null;
 
     // Post do compartilhamento (para curtir/comentar direto do detalhe).
-    const sharePost = await Post.findOne({ activity: a._id }).sort({ createdAt: 1 });
+    const sharePost = await Post.findOne({ activity: a._id, deletedAt: null }).sort({ createdAt: 1 });
     const post = sharePost
       ? {
           id: sharePost._id.toString(),
@@ -183,7 +183,7 @@ activitiesRouter.post(
 
     // Um treino, um post. Compartilhar de novo devolve o que já existe em vez
     // de encher o feed com o mesmo treino repetido.
-    const existente = await Post.findOne({ activity: a._id, hidden: { $ne: true } });
+    const existente = await Post.findOne({ activity: a._id, hidden: { $ne: true }, deletedAt: null });
     if (existente) {
       res.json({ data: { postId: existente._id.toString() }, meta: { jaCompartilhado: true } });
       return;

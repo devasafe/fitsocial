@@ -84,7 +84,7 @@ adminUsersRouter.get(
   asyncHandler(async (req, res) => {
     const u = await carregar(req.params.id);
     const [posts, atividades, auditoria] = await Promise.all([
-      Post.countDocuments({ author: u._id }),
+      Post.countDocuments({ author: u._id, deletedAt: null }),
       Activity.countDocuments({ user: u._id }),
       AdminAudit.find({ targetId: u._id }).sort({ createdAt: -1 }).limit(20),
     ]);

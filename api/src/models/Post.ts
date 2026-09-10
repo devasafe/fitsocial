@@ -12,8 +12,18 @@ const postSchema = new Schema(
     // Denormalizados para o feed não precisar contar a cada leitura.
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },
-    // Escondido pela moderação. Não é exclusão: desbanir devolve tudo.
+    // Escondido pela moderação de conta. Não é exclusão: desbanir devolve tudo.
     hidden: { type: Boolean, default: false, index: true },
+    /** Primeira edição do texto. O app mostra "(editado)" a partir daqui. */
+    editedAt: { type: Date, default: null },
+    /** Exclusão lógica.
+     *
+     *  Para quem usa, é exclusão: o post some de tudo no mesmo instante. A
+     *  linha fica porque uma denúncia em análise precisa do conteúdo, e porque
+     *  curtidas, comentários e notificações que apontam para cá precisam de um
+     *  destino que responda "não está mais disponível" em vez de quebrar. */
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

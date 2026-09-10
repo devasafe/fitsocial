@@ -3,6 +3,7 @@ import { buscarAdmin, sessao, type Admin } from "./api";
 import { Entrar } from "./pages/Entrar";
 import { Ia } from "./pages/Ia";
 import { Usuarios } from "./pages/Usuarios";
+import { Denuncias } from "./pages/Denuncias";
 
 // O Painel carrega o Recharts, que sozinho pesa mais que o resto do app
 // inteiro. Separado, a tela de login e a de usuários não pagam por ele.
@@ -69,6 +70,7 @@ export function App() {
           {[
             { id: "painel", rotulo: "Crescimento" },
             { id: "usuarios", rotulo: "Usuários" },
+            { id: "denuncias", rotulo: "Denúncias" },
             { id: "ia", rotulo: "Consumo de IA" },
           ].map((item) => (
             <button
@@ -99,6 +101,8 @@ export function App() {
       <main className="conteudo">
         {seccao === "usuarios" ? (
           <Usuarios token={token} />
+        ) : seccao === "denuncias" ? (
+          <Denuncias token={token} />
         ) : seccao === "ia" ? (
           <Ia token={token} />
         ) : (
