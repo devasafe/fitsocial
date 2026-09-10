@@ -126,10 +126,24 @@ function CorpoDoBloco({ bloco }: { bloco: Bloco }) {
     );
   }
 
+  // Descanso: o REST entre as partes do WOD. Tem duração e nada mais.
+  if (bloco.tipo === "descanso") {
+    return (
+      <Txt variant="body" color={colors.text2}>
+        {bloco.duracaoSec ? mmss(bloco.duracaoSec) : "Descanso"}
+        {bloco.notas ? `  ${bloco.notas}` : ""}
+      </Txt>
+    );
+  }
+
   // Aquecimento, mobilidade, cooldown.
   return (
     <View>
-      {bloco.rounds || bloco.duracaoSec ? (
+      {bloco.formato === "emom" && bloco.intervaloSec ? (
+        <Txt variant="body" color={colors.text2}>
+          {`EMOM ${mmss(bloco.intervaloSec)}${bloco.rounds ? ` × ${bloco.rounds}` : ""}`}
+        </Txt>
+      ) : bloco.rounds || bloco.duracaoSec ? (
         <Txt variant="body" color={colors.text2}>
           {[bloco.rounds ? `${bloco.rounds} rounds` : "", bloco.duracaoSec ? mmss(bloco.duracaoSec) : ""]
             .filter(Boolean)
@@ -147,6 +161,37 @@ function CorpoDoBloco({ bloco }: { bloco: Bloco }) {
   );
 }
 
+const MODO_DA_EQUIPE: Record<string, string> = {
+  revezamento: "revezando",
+  junto: "juntos",
+  dividido: "dividindo",
+};
+
+/**
+ * O rótulo do bloco.
+ *
+ * "AMRAP + FOR TIME" é um treino só com três partes — mostrar três cartões de
+ * "WOD / Metcon" empilhados faria parecer que a pessoa fez três treinos
+ * separados no mesmo dia.
+ */
+function rotuloDoBloco(bloco: Bloco, todos: Bloco[]): string {
+  if (bloco.tipo !== "metcon" || !bloco.grupo) return ROTULO_DO_BLOCO[bloco.tipo];
+
+  const irmaos = todos.filter((b) => b.tipo === "metcon" && b.grupo === bloco.grupo);
+  if (irmaos.length < 2) return bloco.grupo;
+
+  return `${bloco.grupo} · parte ${irmaos.indexOf(bloco) + 1} de ${irmaos.length}`;
+}
+
+/** "Bruno · revezando", ou "em dupla · revezando" quando não disse com quem. */
+function comQuem(bloco: Bloco): string | null {
+  if (bloco.tipo !== "metcon" || !bloco.equipe) return null;
+
+  const nomes = (bloco.equipe.parceiros ?? []).filter(Boolean);
+  const quem = nomes.length ? nomes.join(", ") : `em ${bloco.equipe.tamanho}`;
+  return `${quem} · ${MODO_DA_EQUIPE[bloco.equipe.modo] ?? bloco.equipe.modo}`;
+}
+
 export function DetalheDoTreino({ wod }: { wod: PayloadDeCrossfit }) {
   return (
     <View style={{ gap: spacing.card }}>
@@ -159,8 +204,13 @@ export function DetalheDoTreino({ wod }: { wod: PayloadDeCrossfit }) {
       {wod.blocos.map((bloco, i) => (
         <Card key={i} level={2}>
           <Txt variant="label" color={colors.lime} style={{ marginBottom: spacing.xs }}>
-            {ROTULO_DO_BLOCO[bloco.tipo].toUpperCase()}
+            {rotuloDoBloco(bloco, wod.blocos)}
           </Txt>
+          {comQuem(bloco) ? (
+            <Txt variant="caption" color={colors.text3} style={{ marginBottom: spacing.xs }}>
+              {comQuem(bloco)}
+            </Txt>
+          ) : null}
           <CorpoDoBloco bloco={bloco} />
           {bloco.notas ? (
             <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.sm }}>

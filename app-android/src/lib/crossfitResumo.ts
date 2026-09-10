@@ -19,6 +19,7 @@ export const ROTULO_DO_BLOCO: Record<Bloco["tipo"], string> = {
   skill: "Técnica",
   forca: "Força",
   metcon: "WOD",
+  descanso: "Descanso",
   cooldown: "Cooldown",
 };
 

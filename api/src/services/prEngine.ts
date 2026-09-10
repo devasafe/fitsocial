@@ -231,6 +231,14 @@ function wodCandidates(payload: unknown): Candidate[] {
     // no cap de 20min" derrubar um "terminou em 17:34" do quadro de recordes.
     if (score.capado) continue;
 
+    // Em dupla ou equipe o resultado é do TIME, não da pessoa.
+    //
+    // Vinte Chest-to-Bar revezados entre dois não é o mesmo esforço que vinte
+    // sozinho, e um "Relay" derrubaria o recorde individual de quem treina
+    // sério. Não gerar recorde é o mesmo tratamento que o time cap recebe: o
+    // treino fica no histórico, só não compete.
+    if (metcon.equipe) continue;
+
     const nivel = metcon.escala.nivel;
     const fechado = fecharScore(score, metcon.prescricao.movimentos);
 

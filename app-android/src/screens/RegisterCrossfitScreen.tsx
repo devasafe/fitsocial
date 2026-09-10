@@ -68,9 +68,12 @@ function resumo(b: Bloco): string[] {
           .filter(Boolean)
           .join(" · "),
       ].filter(Boolean);
+    case "descanso":
+      return [b.duracaoSec ? mmss(b.duracaoSec) : "Descanso"];
     default:
       return [
         [
+          b.formato === "emom" && b.intervaloSec ? `EMOM ${mmss(b.intervaloSec)}` : "",
           b.rounds ? `${b.rounds} rounds` : "",
           b.duracaoSec ? mmss(b.duracaoSec) : "",
           b.movimentos.filter((m) => m.nome.trim()).map(resumoDoMovimento).join(" · "),

@@ -131,6 +131,83 @@ export function EditorDeMetcon({
         />
       </Secao>
 
+      {/* ---- Sozinho ou em dupla ----
+          Metade do quadro de um box é em dupla, e o esforço não é o mesmo:
+          vinte Chest-to-Bar revezados entre dois não é vinte sozinho. Por isso
+          resultado de equipe NÃO entra no recorde individual. */}
+      <Secao titulo="Com quem">
+        <Opcoes
+          valor={bloco.equipe ? bloco.equipe.modo : "sozinho"}
+          opcoes={[
+            { id: "sozinho", label: "Sozinho" },
+            { id: "revezamento", label: "Revezando" },
+            { id: "junto", label: "Junto" },
+            { id: "dividido", label: "Dividindo" },
+          ]}
+          aoEscolher={(id) =>
+            aoMudar({
+              ...bloco,
+              equipe:
+                id === "sozinho"
+                  ? null
+                  : { tamanho: bloco.equipe?.tamanho ?? 2, modo: id, parceiros: bloco.equipe?.parceiros },
+            })
+          }
+        />
+
+        {bloco.equipe ? (
+          <>
+            <Linha>
+              <Campo
+                rotulo="Quantas pessoas"
+                valor={String(bloco.equipe.tamanho)}
+                aoMudar={(t) =>
+                  aoMudar({
+                    ...bloco,
+                    equipe: { ...bloco.equipe!, tamanho: Math.max(2, paraInteiro(t) ?? 2) },
+                  })
+                }
+                placeholder="2"
+                teclado="numeric"
+              />
+              <Campo
+                rotulo="Com quem (opcional)"
+                valor={(bloco.equipe.parceiros ?? []).join(", ")}
+                aoMudar={(t) =>
+                  aoMudar({
+                    ...bloco,
+                    equipe: {
+                      ...bloco.equipe!,
+                      parceiros: t
+                        .split(",")
+                        .map((n) => n.trim())
+                        .filter(Boolean),
+                    },
+                  })
+                }
+                placeholder="Bruno"
+              />
+            </Linha>
+            <Txt variant="caption" color={colors.text3}>
+              Treino em equipe fica no seu histórico, mas não entra no recorde —
+              revezado não compara com individual.
+            </Txt>
+          </>
+        ) : null}
+      </Secao>
+
+      {/* ---- Parte de um WOD maior ----
+          "AMRAP + FOR TIME" é um treino só com três partes e três resultados.
+          O rótulo junta o que é do mesmo WOD. */}
+      <Secao titulo="Faz parte de um WOD maior?">
+        <Campo
+          rotulo="Nome do WOD (deixe vazio se for solto)"
+          valor={bloco.grupo ?? ""}
+          aoMudar={(t) => aoMudar({ ...bloco, grupo: t.trim() ? t : null })}
+          placeholder="WOD"
+        />
+      </Secao>
+
       {/* ---- Prescrição: só os campos que o formato usa ---- */}
       <Secao titulo="O que estava no quadro">
         <Linha>
@@ -194,6 +271,7 @@ export function EditorDeMetcon({
         <MovimentosEditor
           movimentos={p.movimentos}
           aoMudar={(movs) => mudarPrescricao({ movimentos: movs })}
+          emEquipe={!!bloco.equipe}
         />
       </Secao>
 
