@@ -25,7 +25,9 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "NOTIFICATIONS",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "club.satriz.fitsocial"
     },
@@ -46,6 +48,12 @@
         }
       ]
     ],
-    "scheme": "fitsocial"
+    "scheme": "fitsocial",
+    "extra": {
+      "eas": {
+        "projectId": "8e75a861-e9b1-413d-bf6a-512a058b041d"
+      }
+    },
+    "owner": "audazzz"
   }
 }
