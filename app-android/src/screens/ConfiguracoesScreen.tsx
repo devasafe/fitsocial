@@ -95,7 +95,9 @@ export function ConfiguracoesScreen() {
       setSettings(data);
       // O perfil lê activitiesPublic do usuário em memória para saber se ainda
       // precisa fazer a pergunta pós-treino.
-      if (mudanca.activitiesPublic !== undefined) await refreshUser();
+      if (mudanca.activitiesPublic !== undefined || mudanca.programacao !== undefined) {
+        await refreshUser();
+      }
     } catch (err) {
       setSettings(anterior);
       notify("Não deu para salvar", (err as Error).message);
@@ -224,6 +226,29 @@ export function ConfiguracoesScreen() {
       </Secao>
 
       <Secao titulo="Treino">
+        <Linha
+          titulo="Como você treina"
+          detalhe={
+            settings?.programacao === "propria"
+              ? "Programação própria"
+              : settings?.programacao === "plano"
+                ? "Plano do app"
+                : "Perguntar"
+          }
+          onPress={() =>
+            // Alterna direto: são só dois estados, e um sheet para escolher
+            // entre dois seria uma tela a mais para dizer a mesma coisa.
+            settings
+              ? void salvar(
+                  { programacao: settings.programacao === "propria" ? "plano" : "propria" },
+                  {
+                    ...settings,
+                    programacao: settings.programacao === "propria" ? "plano" : "propria",
+                  }
+                )
+              : undefined
+          }
+        />
         <Linha
           titulo="Vídeos de exercício"
           // Sem escolha ainda, o app pergunta no primeiro toque do play.

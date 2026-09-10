@@ -5,6 +5,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { useContadores } from "../context/ContadoresContext";
+import { updateSettings } from "../api/settings";
 import { BadgeSobreposto } from "../components/Badge";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
@@ -27,7 +28,7 @@ function todayStr(): string {
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const { user, token } = useAuth();
+  const { user, token, refreshUser } = useAuth();
   const { contadores, refrescar: refrescarContadores } = useContadores();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
@@ -40,6 +41,24 @@ export function HomeScreen() {
   const [adjusting, setAdjusting] = useState(false);
   const [quickAdd, setQuickAdd] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
+  const [escolhendoProgramacao, setEscolhendoProgramacao] = useState(false);
+
+  // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
+  const programacao = user?.settings?.programacao ?? null;
+  const seguePropria = programacao === "propria";
+
+  async function escolherProgramacao(escolha: "plano" | "propria") {
+    setEscolhendoProgramacao(true);
+    try {
+      await updateSettings(token!, { programacao: escolha });
+      await refreshUser();
+      if (escolha === "plano") void handleGenerate();
+    } catch (err) {
+      notify("Não deu para salvar", (err as Error).message);
+    } finally {
+      setEscolhendoProgramacao(false);
+    }
+  }
 
   const reloadDay = useCallback(() => {
     getDay(token!, todayStr())
@@ -215,13 +234,48 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {!plan ? (
-        <Card level={2} style={{ marginTop: spacing.sm }}>
-          <Txt variant="titleCard">Seu plano ainda não foi criado</Txt>
-          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
-            Seu coach monta um treino e uma dieta sob medida a partir do seu perfil. Costuma levar
-            cerca de meio minuto.
+      {/* ---- Bloco de treino: muda conforme de onde vem a programação ---- */}
+      {plan ? (
+        /* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */
+        <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
+          <Txt variant="label" color={colors.text2}>
+            Treino de hoje
           </Txt>
+          <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
+            {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
+          </Txt>
+          <Button title="Começar treino" onPress={startToday} size="lg" glow />
+          <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
+            <Txt variant="label" color={colors.text2}>
+              Escolher outro treino
+            </Txt>
+          </TouchableOpacity>
+        </Card>
+      ) : seguePropria ? (
+        /* Quem segue a programação do box não tem "treino de hoje" para abrir —
+           tem um treino para registrar depois de fazer. */
+        <Card level={2} style={{ marginTop: spacing.sm }}>
+          <Txt variant="label" color={colors.text2}>
+            Hoje
+          </Txt>
+          <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
+            Treinou? Registra aqui.
+          </Txt>
+          <Button title="Registrar treino" onPress={() => navigation.navigate("Registrar")} size="lg" glow />
+          <TouchableOpacity onPress={() => navigation.navigate("MinhasAtividades")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
+            <Txt variant="label" color={colors.text2}>
+              Ver meus treinos
+            </Txt>
+          </TouchableOpacity>
+        </Card>
+      ) : (
+        /* Ainda não escolheu. Três caminhos, e nenhum deles é obrigatório. */
+        <Card level={2} style={{ marginTop: spacing.sm }}>
+          <Txt variant="titleCard">Como você treina?</Txt>
+          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
+            Dá para mudar depois, em Configurações.
+          </Txt>
+
           {erroPlano && !generating ? (
             <View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
               <Txt variant="body" color={colors.danger}>
@@ -239,82 +293,82 @@ export function HomeScreen() {
               </Txt>
             </View>
           ) : erroPlano ? null : (
-            <>
-              <Button title="Gerar meu plano" onPress={handleGenerate} size="lg" glow />
-              <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7} style={{ paddingVertical: spacing.md, alignItems: "center" }}>
+            <View style={{ gap: spacing.sm }}>
+              <Button
+                title="Montar um plano pra mim"
+                onPress={() => void escolherProgramacao("plano")}
+                size="lg"
+                glow
+                disabled={escolhendoProgramacao}
+              />
+              <Button
+                title="Sigo a programação do meu box"
+                variant="secondary"
+                onPress={() => void escolherProgramacao("propria")}
+                disabled={escolhendoProgramacao}
+              />
+              <TouchableOpacity onPress={() => navigation.navigate("ImportPlan")} activeOpacity={0.7} style={{ paddingVertical: spacing.sm, alignItems: "center" }}>
                 <Txt variant="bodyStrong" color={colors.text2}>
                   Já tenho um plano? Importar o meu
                 </Txt>
               </TouchableOpacity>
-            </>
-          )}
-        </Card>
-      ) : (
-        <>
-          {/* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */}
-          <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
-            <Txt variant="label" color={colors.text2}>
-              Treino de hoje
-            </Txt>
-            <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
-              {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
-            </Txt>
-            <Button title="Começar treino" onPress={startToday} size="lg" glow />
-            <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
-              <Txt variant="label" color={colors.text2}>
-                Escolher outro treino
-              </Txt>
-            </TouchableOpacity>
-          </Card>
-
-          {/* Progresso do dia/semana */}
-          {stats && (
-            <View style={{ flexDirection: "row", gap: spacing.card }}>
-              <View style={{ flex: 1, borderRadius: 20, padding: spacing.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line }}>
-                <Txt variant="metricLg" tabular color={colors.lime}>
-                  {stats.streak}
-                </Txt>
-                <Txt variant="label" color={colors.text2}>
-                  dias seguidos
-                </Txt>
-              </View>
-              <MetricTile value={String(stats.week)} label="na semana" style={{ flex: 1 }} />
-              <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />
             </View>
           )}
+        </Card>
+      )}
 
-          {/* Nutrição de hoje — registro rápido + porta do diário */}
-          <NutritionToday
-            day={day}
-            fallbackTarget={plan.diet.dailyCalories}
-            onOpen={() => navigation.navigate("Diario")}
-            onRegister={() => setQuickAdd(true)}
-          />
+      {/* ---- Daqui para baixo, nada depende de existir um plano ----
+           Antes tudo isto vivia dentro do ramo "tem plano": quem não tinha via
+           uma tela com um cartão só. Água, comida, constância e coach nunca
+           dependeram de plano nenhum — estavam escondidos atrás dele. */}
 
-          {/* Água de hoje */}
-          <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
+      {stats && (
+        <View style={{ flexDirection: "row", gap: spacing.card }}>
+          <View style={{ flex: 1, borderRadius: 20, padding: spacing.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line }}>
+            <Txt variant="metricLg" tabular color={colors.lime}>
+              {stats.streak}
+            </Txt>
+            <Txt variant="label" color={colors.text2}>
+              dias seguidos
+            </Txt>
+          </View>
+          <MetricTile value={String(stats.week)} label="na semana" style={{ flex: 1 }} />
+          <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />
+        </View>
+      )}
 
-          {/* Coach contextual */}
-          <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
-            <Card>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
-                <Txt variant="titleCard" color={colors.lime}>✦</Txt>
-                <Txt variant="titleCard">Seu coach</Txt>
-              </View>
-              {stats && (
-                <Txt variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
-                  {coachLine(stats)}
-                </Txt>
-              )}
-              <Txt variant="body" color={colors.text2}>
-                {plan.summary}
-              </Txt>
-              <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
-                Conversar com o coach ›
-              </Txt>
-            </Card>
-          </TouchableOpacity>
+      <NutritionToday
+        day={day}
+        fallbackTarget={plan?.diet.dailyCalories}
+        onOpen={() => navigation.navigate("Diario")}
+        onRegister={() => setQuickAdd(true)}
+      />
 
+      <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
+
+      {/* Coach contextual */}
+      <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
+            <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+            <Txt variant="titleCard">Seu coach</Txt>
+          </View>
+          {stats && (
+            <Txt variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
+              {coachLine(stats)}
+            </Txt>
+          )}
+          <Txt variant="body" color={colors.text2}>
+            {plan?.summary ?? "Pergunte sobre treino, técnica ou alimentação quando quiser."}
+          </Txt>
+          <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
+            Conversar com o coach ›
+          </Txt>
+        </Card>
+      </TouchableOpacity>
+
+      {plan ? (
+        <>
           {/* Referência: treino e dieta completos */}
           <NavRow title="Meu treino" sub={plan.workout.split} onPress={() => navigation.navigate("Workout", { workout: plan.workout })} />
           <NavRow title="Minha dieta" sub={`${plan.diet.dailyCalories} kcal por dia`} onPress={() => navigation.navigate("Diet", { diet: plan.diet })} />
@@ -342,7 +396,20 @@ export function HomeScreen() {
             {plan.disclaimer}
           </Txt>
         </>
-      )}
+      ) : seguePropria ? (
+        /* Discreto de propósito: a oferta continua disponível para quem mudar de
+           ideia, sem virar cobrança em toda abertura do app. */
+        <TouchableOpacity
+          onPress={() => void escolherProgramacao("plano")}
+          activeOpacity={0.7}
+          style={{ paddingVertical: spacing.md, alignItems: "center" }}
+          disabled={generating || escolhendoProgramacao}
+        >
+          <Txt variant="label" color={colors.text3}>
+            {generating ? passoDaEspera : "Quer que o coach monte um plano pra você?"}
+          </Txt>
+        </TouchableOpacity>
+      ) : null}
 
       <QuickFoodAdd
         visible={quickAdd}
@@ -362,10 +429,13 @@ export function HomeScreen() {
 
 // Card de nutrição do dia: kcal registradas vs meta + barra. Toque no card abre o
 // diário; "Registrar" abre o quick-add sem sair da Home.
-function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DaySummary | null; fallbackTarget: number; onOpen: () => void; onRegister: () => void }) {
+function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DaySummary | null; fallbackTarget?: number; onOpen: () => void; onRegister: () => void }) {
   const kcal = day?.totals.kcal ?? 0;
-  const target = day?.target?.dailyCalories ?? fallbackTarget;
-  const pct = target > 0 ? Math.min(1, kcal / target) : 0;
+  // Sem plano não há meta — e sem meta o card mostra só o que foi comido, em
+  // vez de "0 / 0 kcal". Registrar comida não devia depender de ter um plano.
+  const target = day?.target?.dailyCalories ?? fallbackTarget ?? 0;
+  const temMeta = target > 0;
+  const pct = temMeta ? Math.min(1, kcal / target) : 0;
   return (
     <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
       <Card>
@@ -380,13 +450,14 @@ function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DayS
         <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
           {kcal}
           <Txt variant="titleSection" color={colors.text2}>
-            {" "}
-            / {target} kcal
+            {temMeta ? ` / ${target} kcal` : " kcal"}
           </Txt>
         </Txt>
-        <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
-          <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.lime }} />
-        </View>
+        {temMeta ? (
+          <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
+            <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.lime }} />
+          </View>
+        ) : null}
       </Card>
     </TouchableOpacity>
   );

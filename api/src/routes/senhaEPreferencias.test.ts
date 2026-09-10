@@ -141,6 +141,46 @@ describe("Preferências", () => {
     expect(r.body.data.notificacoes.interacoes).toBe(true);
   });
 
+  it("nasce sem escolha de programação — o app é quem pergunta", async () => {
+    const u = await registrar();
+
+    const r = await request(app).get("/auth/settings").set(auth(u.token));
+
+    // null é o que faz a Home mostrar as opções em vez de cobrar um plano.
+    expect(r.body.data.programacao).toBeNull();
+  });
+
+  it("grava seguir a própria programação, e volta atrás", async () => {
+    const u = await registrar();
+
+    await request(app).patch("/auth/settings").set(auth(u.token))
+      .send({ programacao: "propria" }).expect(200);
+    expect((await request(app).get("/auth/settings").set(auth(u.token))).body.data.programacao)
+      .toBe("propria");
+
+    await request(app).patch("/auth/settings").set(auth(u.token))
+      .send({ programacao: "plano" }).expect(200);
+    expect((await request(app).get("/auth/settings").set(auth(u.token))).body.data.programacao)
+      .toBe("plano");
+  });
+
+  it("a escolha chega junto do usuário, não só em /settings", async () => {
+    const u = await registrar();
+    await request(app).patch("/auth/settings").set(auth(u.token)).send({ programacao: "propria" });
+
+    // A Home lê do usuário em memória; sem isto ela cobraria plano até um
+    // recarregamento de settings acontecer.
+    const me = await request(app).get("/auth/me").set(auth(u.token));
+    expect(me.body.user.settings.programacao).toBe("propria");
+  });
+
+  it("recusa valor inventado", async () => {
+    const u = await registrar();
+    const r = await request(app).patch("/auth/settings").set(auth(u.token))
+      .send({ programacao: "sei_la" });
+    expect(r.status).toBe(400);
+  });
+
   it("exige autenticação", async () => {
     expect((await request(app).get("/auth/settings")).status).toBe(401);
     expect((await request(app).patch("/auth/password").send({ atual: "a", nova: "b" })).status).toBe(401);

@@ -209,6 +209,7 @@ authRouter.delete(
 const settingsSchema = z.object({
   activitiesPublic: z.boolean().nullable().optional(),
   routesPublic: z.boolean().optional(),
+  programacao: z.enum(["plano", "propria"]).nullable().optional(),
   notificacoes: z
     .object({
       novosPosts: z.boolean().optional(),
@@ -224,11 +225,13 @@ function preferencias(u: UserDoc) {
   const s = (u.settings ?? {}) as {
     activitiesPublic?: boolean | null;
     routesPublic?: boolean;
+    programacao?: "plano" | "propria" | null;
     notificacoes?: Partial<Record<string, boolean>> | null;
   };
   return {
     activitiesPublic: s.activitiesPublic ?? null,
     routesPublic: s.routesPublic ?? false,
+    programacao: s.programacao ?? null,
     notificacoes: {
       novosPosts: s.notificacoes?.novosPosts ?? true,
       interacoes: s.notificacoes?.interacoes ?? true,
@@ -257,6 +260,9 @@ authRouter.patch(
 
     if (entrada.activitiesPublic !== undefined) {
       user.set("settings.activitiesPublic", entrada.activitiesPublic);
+    }
+    if (entrada.programacao !== undefined) {
+      user.set("settings.programacao", entrada.programacao);
     }
     if (entrada.routesPublic !== undefined) {
       user.set("settings.routesPublic", entrada.routesPublic);

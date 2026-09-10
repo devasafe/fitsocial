@@ -8,10 +8,15 @@ export interface PreferenciasDeNotificacao {
   sistema: boolean;
 }
 
+/** De onde vem o treino: o plano do app, ou a programação do box/treinador. */
+export type Programacao = "plano" | "propria";
+
 export interface Settings {
   /** null = a pessoa ainda não respondeu; é o que dispara a pergunta. */
   activitiesPublic: boolean | null;
   routesPublic: boolean;
+  /** null = ainda não escolheu; a Home mostra as opções. */
+  programacao: Programacao | null;
   notificacoes: PreferenciasDeNotificacao;
 }
 
