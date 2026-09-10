@@ -8,7 +8,9 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { notify } from "../lib/notify";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -46,6 +48,7 @@ function workoutStats(a: Activity): string[] {
 export function CreatePostScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const route = useRoute<RouteProp<AppStackParams, "CreatePost">>();
+  const insets = useSafeAreaInsets();
   const { token } = useAuth();
   const fromWorkout = route.params?.activity; // veio de um treino finalizado
   const [attached, setAttached] = useState<Activity | null>(fromWorkout ?? null);
@@ -124,7 +127,11 @@ export function CreatePostScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.inner}>
+      <ScrollView
+        style={styles.rolagem}
+        contentContainerStyle={styles.inner}
+        keyboardShouldPersistTaps="handled"
+      >
         <Txt variant="titleScreen" style={styles.title}>
           {attached ? "Compartilhar treino" : "Compartilhe sua evolução"}
         </Txt>
@@ -185,7 +192,13 @@ export function CreatePostScreen() {
           </TouchableOpacity>
         )}
 
-        <View style={styles.spacer} />
+      </ScrollView>
+
+      {/* O botão vive FORA da rolagem, colado no rodapé. Dentro dela, ele
+          desceria junto com a prévia da foto e sumiria da tela — que era
+          exatamente o problema. A ação principal não pode depender de a
+          pessoa descobrir que precisa rolar. */}
+      <View style={[styles.rodape, { paddingBottom: insets.bottom + spacing.md }]}>
         <Button
           title="Publicar"
           size="lg"
@@ -195,7 +208,7 @@ export function CreatePostScreen() {
           glow
         />
         {fromWorkout ? (
-          <TouchableOpacity onPress={done} activeOpacity={0.7} style={{ paddingVertical: spacing.md, alignItems: "center" }}>
+          <TouchableOpacity onPress={done} activeOpacity={0.7} style={styles.agoraNao}>
             <Txt variant="label" color={colors.text2}>
               Agora não
             </Txt>
@@ -208,7 +221,11 @@ export function CreatePostScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  inner: { flex: 1, padding: spacing.gutter },
+  rolagem: { flex: 1 },
+  // `flexGrow` e não `flex`: o conteúdo ocupa a tela quando é curto e cresce
+  // livremente quando é longo. Com `flex: 1` ele seria espremido na altura da
+  // tela, que é o que fazia o conteúdo transbordar sem rolar.
+  inner: { flexGrow: 1, padding: spacing.gutter },
   title: { marginTop: spacing.sm, marginBottom: spacing.lg },
   workoutCard: {
     flexDirection: "row",
@@ -246,5 +263,12 @@ const styles = StyleSheet.create({
   previewWrap: { marginTop: spacing.md },
   preview: { width: "100%", height: 260, borderRadius: radius.media, backgroundColor: colors.surface2 },
   removeBtn: { alignSelf: "center", paddingVertical: spacing.s12 },
-  spacer: { height: spacing.lg },
+  rodape: {
+    paddingHorizontal: spacing.gutter,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.bg,
+  },
+  agoraNao: { paddingVertical: spacing.md, alignItems: "center" },
 });
