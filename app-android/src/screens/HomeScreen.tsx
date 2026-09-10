@@ -8,6 +8,7 @@ import { useContadores } from "../context/ContadoresContext";
 import { updateSettings } from "../api/settings";
 import { BadgeSobreposto } from "../components/Badge";
 import { EsperaLonga, PASSOS } from "../components/Espera";
+import { GerandoPlano, type Origem } from "../components/GerandoPlano";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
@@ -51,12 +52,21 @@ export function HomeScreen() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [escolhendoProgramacao, setEscolhendoProgramacao] = useState(false);
   const [gerandoDieta, setGerandoDieta] = useState(false);
+  // Onde o dedo tocou: é daí que a gota nasce. Sem isso ela viria do centro,
+  // e o efeito perderia a ligação com a causa.
+  const [origemDaGota, setOrigemDaGota] = useState<Origem | null>(null);
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
   const programacao = user?.settings?.programacao ?? null;
   const seguePropria = programacao === "propria";
 
-  async function escolherProgramacao(escolha: "plano" | "propria" | null) {
+  async function escolherProgramacao(
+    escolha: "plano" | "propria" | null,
+    evento?: { nativeEvent: { pageX: number; pageY: number } }
+  ) {
+    if (evento) {
+      setOrigemDaGota({ x: evento.nativeEvent.pageX, y: evento.nativeEvent.pageY });
+    }
     setEscolhendoProgramacao(true);
     try {
       await updateSettings(token!, { programacao: escolha });
@@ -333,7 +343,7 @@ export function HomeScreen() {
             <View style={{ gap: spacing.sm }}>
               <Button
                 title="Montar um plano pra mim"
-                onPress={() => void escolherProgramacao("plano")}
+                onPress={(e) => void escolherProgramacao("plano", e)}
                 size="lg"
                 glow
                 disabled={escolhendoProgramacao}
@@ -485,6 +495,9 @@ export function HomeScreen() {
           {plan.disclaimer}
         </Txt>
       ) : null}
+
+      {/* A cena. Fica por cima de tudo, inclusive da barra de abas. */}
+      <GerandoPlano visivel={generating} origem={origemDaGota} passos={PASSOS.plano} />
 
       <QuickFoodAdd
         visible={quickAdd}

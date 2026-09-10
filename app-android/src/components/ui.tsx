@@ -11,6 +11,7 @@ import {
   type TextInputProps,
   type ViewStyle,
   type StyleProp,
+  type GestureResponderEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -61,7 +62,9 @@ export function Button({
   style,
 }: {
   title: string;
-  onPress?: () => void;
+  /** Recebe o toque — quem precisa da POSIÇÃO do dedo (a gota que abre a tela
+   *  de gerar plano) lê `nativeEvent.pageX/pageY`. Quem não precisa ignora. */
+  onPress?: (evento?: GestureResponderEvent) => void;
   variant?: BtnVariant;
   size?: BtnSize;
   loading?: boolean;
