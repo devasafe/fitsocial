@@ -9,6 +9,20 @@ import { Denuncias } from "./pages/Denuncias";
 // inteiro. Separado, a tela de login e a de usuários não pagam por ele.
 const Painel = lazy(() => import("./pages/Painel").then((m) => ({ default: m.Painel })));
 
+// As quatro seções, num lugar só: a lateral do desktop e a barra do celular
+// leem da mesma lista.
+//
+// `curto` existe porque "Consumo de IA" não cabe num quarto de 360px, e
+// truncar com reticências seria pior que escolher a palavra certa. Os glifos
+// são os mesmos do app (RootNavigator.tsx) — quatro símbolos não justificam
+// trazer uma biblioteca de ícones.
+const SECOES = [
+  { id: "painel", rotulo: "Crescimento", curto: "Crescimento", icone: "◆" },
+  { id: "usuarios", rotulo: "Usuários", curto: "Usuários", icone: "●" },
+  { id: "denuncias", rotulo: "Denúncias", curto: "Denúncias", icone: "⚑" },
+  { id: "ia", rotulo: "Consumo de IA", curto: "IA", icone: "▲" },
+] as const;
+
 export function App() {
   const [token, setToken] = useState<string | null>(() => sessao.ler());
   const [admin, setAdmin] = useState<Admin | null>(null);
@@ -55,11 +69,19 @@ export function App() {
     setAdmin(null);
   }
 
+  function irPara(id: string) {
+    window.location.hash = `#/${id}`;
+    setSeccao(id);
+  }
+
   if (verificando) return <div className="entrar" />;
   if (!token || !admin) return <Entrar aoEntrar={entrou} />;
 
   return (
     <div className="app">
+      {/* Lateral no desktop, barra inferior no celular. São elementos
+          diferentes no DOM, e não a mesma coisa reordenada por CSS: a ordem de
+          tabulação e a leitura por leitor de tela seguem o DOM, não o visual. */}
       <aside className="lateral">
         <div className="marca">
           <b>FitSocial</b>
@@ -67,19 +89,11 @@ export function App() {
         </div>
 
         <nav className="nav">
-          {[
-            { id: "painel", rotulo: "Crescimento" },
-            { id: "usuarios", rotulo: "Usuários" },
-            { id: "denuncias", rotulo: "Denúncias" },
-            { id: "ia", rotulo: "Consumo de IA" },
-          ].map((item) => (
+          {SECOES.map((item) => (
             <button
               key={item.id}
               aria-current={seccao === item.id ? "page" : undefined}
-              onClick={() => {
-                window.location.hash = `#/${item.id}`;
-                setSeccao(item.id);
-              }}
+              onClick={() => irPara(item.id)}
             >
               {item.rotulo}
             </button>
@@ -88,15 +102,23 @@ export function App() {
 
         <div className="rodape-lateral">
           <div style={{ color: "var(--texto-2)" }}>{admin.name}</div>
-          <button
-            className="discreto"
-            onClick={sair}
-            style={{ marginTop: 8, width: "100%" }}
-          >
+          <button className="discreto sair" onClick={sair}>
             Sair
           </button>
         </div>
       </aside>
+
+      {/* O título da seção não vem aqui: cada página já imprime o próprio h1. */}
+      <header className="cab-movel">
+        <div className="marca">
+          <b>FitSocial</b>
+          <span>painel</span>
+        </div>
+        <span className="quem">{admin.name}</span>
+        <button className="discreto" onClick={sair}>
+          Sair
+        </button>
+      </header>
 
       <main className="conteudo">
         {seccao === "usuarios" ? (
@@ -111,6 +133,21 @@ export function App() {
           </Suspense>
         )}
       </main>
+
+      <nav className="barra-inferior" aria-label="Seções">
+        {SECOES.map((item) => (
+          <button
+            key={item.id}
+            aria-current={seccao === item.id ? "page" : undefined}
+            onClick={() => irPara(item.id)}
+          >
+            <span className="icone" aria-hidden>
+              {item.icone}
+            </span>
+            {item.curto}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

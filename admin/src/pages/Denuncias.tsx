@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { buscarDenuncias, resolverDenuncia, type DenunciaAgrupada } from "../api";
 import { Dialogo } from "../components/Dialogo";
+import { empilharCamada, useCamada } from "../hooks/useCamada";
 
 const FILTROS = [
   { v: "pendente", r: "Pendentes" },
@@ -32,6 +33,11 @@ export function Denuncias({ token }: { token: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [decidindo, setDecidindo] = useState<{ item: DenunciaAgrupada; remover: boolean } | null>(null);
 
+  // Voltar e Esc fecham a folha. O hook observa o estado daqui porque é ele
+  // que existe antes e depois dela — dentro do Dialogo, o envio bem-sucedido
+  // desmonta o componente sem ele nunca ver "fechado".
+  useCamada(decidindo !== null, () => setDecidindo(null));
+
   const carregar = useCallback(async () => {
     setErro(null);
     try {
@@ -57,7 +63,7 @@ export function Denuncias({ token }: { token: string }) {
             porque a decisão é sobre o conteúdo, não sobre cada denúncia.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div className="filtros">
           {FILTROS.map((f) => (
             <button key={f.v} className="discreto" aria-pressed={status === f.v} onClick={() => setStatus(f.v)}>
               {f.r}
@@ -85,7 +91,7 @@ export function Denuncias({ token }: { token: string }) {
       ) : (
         lista.map((d) => (
           <div className="painel" key={d.reportId} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+            <div className="denuncia-linha">
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span className="num" style={{ fontSize: 20 }}>
@@ -94,11 +100,13 @@ export function Denuncias({ token }: { token: string }) {
                   <span style={{ color: "var(--texto-2)" }}>
                     {d.denuncias === 1 ? "denúncia" : "denúncias"}
                   </span>
-                  {!d.aindaNoAr && <span className="aviso">· o autor já apagou este post</span>}
+                  {!d.aindaNoAr && <span className="aviso">o autor já apagou este post</span>}
                 </div>
 
-                <div className="aviso" style={{ marginTop: 4 }}>
-                  {d.motivos.map((m) => MOTIVOS[m] ?? m).join(" · ")}
+                <div className="motivos">
+                  {d.motivos.map((m) => (
+                    <span key={m}>{MOTIVOS[m] ?? m}</span>
+                  ))}
                 </div>
 
                 <blockquote
@@ -118,25 +126,40 @@ export function Denuncias({ token }: { token: string }) {
                   <img
                     src={d.conteudo.imageUrl}
                     alt="Publicação denunciada"
-                    style={{ borderRadius: 10, maxHeight: 220, maxWidth: "100%" }}
+                    className="midia-denuncia"
                   />
                 )}
 
-                <div className="aviso" style={{ marginTop: 10 }}>
-                  {d.autor ? `por ${d.autor.nome}` : "autor desconhecido"}
-                  {d.autor?.status && d.autor.status !== "active" ? ` · conta ${d.autor.status}` : ""}
-                  {" · "}
-                  {quando(d.primeira)}
+                <div className="cartao-meta">
+                  <span>{d.autor ? `por ${d.autor.nome}` : "autor desconhecido"}</span>
+                  {d.autor?.status && d.autor.status !== "active" && (
+                    <span>conta {d.autor.status}</span>
+                  )}
+                  <span>{quando(d.primeira)}</span>
                 </div>
               </div>
 
               {status === "pendente" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 150 }}>
-                  <button className="discreto perigo" onClick={() => setDecidindo({ item: d, remover: true })}>
-                    Remover post
-                  </button>
-                  <button className="discreto" onClick={() => setDecidindo({ item: d, remover: false })}>
+                <div className="acoes-lateral">
+                  {/* Destrutivo por último: no celular estes dois ficam lado a
+                      lado, e o vermelho não pode ser o alvo mais à mão. */}
+                  <button
+                    className="discreto"
+                    onClick={() => {
+                      empilharCamada();
+                      setDecidindo({ item: d, remover: false });
+                    }}
+                  >
                     Manter post
+                  </button>
+                  <button
+                    className="discreto perigo"
+                    onClick={() => {
+                      empilharCamada();
+                      setDecidindo({ item: d, remover: true });
+                    }}
+                  >
+                    Remover post
                   </button>
                 </div>
               )}

@@ -2,7 +2,9 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: sem isso env(safe-area-inset-*) volta 0 no iOS,
+         o CSS parece certo e a barra inferior fica sob a barra de gestos. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="robots" content="noindex, nofollow" />
     <title>FitSocial — painel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
