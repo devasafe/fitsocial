@@ -5,6 +5,7 @@ import { User } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
 import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
 import { getSport } from "./sports.js";
+import { interpretarBlocos, normalizarWod } from "./crossfit.js";
 import { computeMetrics } from "./activityMetrics.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
@@ -30,7 +31,23 @@ export async function createActivity(
 
   let storedPayload: unknown = input.payload;
   let durationSec = input.durationSec ?? 0;
-  let metrics = computeMetrics(input);
+
+  // O interpretador roda AQUI, no salvamento — nunca na digitação.
+  //
+  // É o que preenche `lido` em cada bloco a partir do modo escrito, e é o que
+  // dá timer, tipo de score sugerido e a distinção entre WOD e descanso ao
+  // resto do sistema. Sem esta linha os blocos são gravados crus: o cartão
+  // mostra o aquecimento, o card do feed não sabe o que é descanso, e nada
+  // disso dá erro — só fica errado em silêncio.
+  //
+  // Rodar de novo em cima de um treino já salvo é seguro e desejado: `lido` é
+  // derivado, e reinterpretar é como todo treino antigo melhora quando o
+  // interpretador melhorar.
+  if (input.kind === "wod") {
+    storedPayload = interpretarBlocos(normalizarWod(input.payload));
+  }
+
+  let metrics = computeMetrics({ ...input, payload: storedPayload } as ActivityCreateInput);
 
   // Fase 3a: endurance com track de GPS — distância/tempo/melhores trechos
   // derivados do percurso no servidor.

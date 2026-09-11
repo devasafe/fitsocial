@@ -3,25 +3,46 @@
 // A ordem é a ordem do treino — é ela que preserva um chipper, onde 100 double
 // unders vêm antes de 50 wall balls. Por isso mover para cima/baixo existe.
 //
-// Cada movimento tem UMA medida principal ("quanto?"), e o campo muda conforme
-// a medida: reps, distância, calorias ou tempo. Mostrar os quatro ao mesmo
-// tempo daria quatro caixas vazias para quem só quer escrever "15 Wall Balls".
+// Cada movimento tem UMA medida ("quanto?"), e o campo muda conforme a unidade:
+// reps, metros, calorias ou tempo. Mostrar as quatro ao mesmo tempo daria
+// quatro caixas vazias para quem só quer escrever "15 Wall Balls".
+//
+// O NOME não leva número junto. Num campo só, o autocomplete acumularia
+// "10 Bíceps Curl", "12 Bíceps Curl" e "15 Bíceps Curl" como exercícios
+// distintos, e o acervo da pessoa apodreceria em um mês.
 
 import React from "react";
 import { View, TouchableOpacity } from "react-native";
 import { Txt } from "../ui";
-import { Campo, Linha, Opcoes, entradaBase, paraInteiro, paraNumero, paraRepScheme, paraSegundos, repSchemeParaTexto, mmss } from "./campos";
-import type { Movimento, UnidadeDeCarga } from "../../api/crossfit";
+import {
+  Campo,
+  CampoComSugestoes,
+  Linha,
+  Opcoes,
+  paraInteiro,
+  paraNumero,
+  paraRepScheme,
+  paraSegundos,
+  mmss,
+} from "./campos";
+import {
+  ROTULO_DO_ESCOPO,
+  type Escopo,
+  type Movimento,
+  type UnidadeDeCarga,
+  type UnidadeDeVolume,
+} from "../../api/crossfit";
 import { colors, radius, spacing } from "../../theme";
 
-type Medida = "reps" | "scheme" | "distancia" | "calorias" | "tempo";
+/** "escada" não é unidade do modelo: é reps com valor em lista. */
+type Medida = UnidadeDeVolume | "escada";
 
 const MEDIDAS: { id: Medida; label: string }[] = [
   { id: "reps", label: "Reps" },
-  { id: "scheme", label: "21-15-9" },
-  { id: "distancia", label: "Metros" },
-  { id: "calorias", label: "Calorias" },
-  { id: "tempo", label: "Tempo" },
+  { id: "escada", label: "21-15-9" },
+  { id: "metros", label: "Metros" },
+  { id: "cal", label: "Calorias" },
+  { id: "seg", label: "Tempo" },
 ];
 
 const UNIDADES: { id: UnidadeDeCarga; label: string }[] = [
@@ -31,52 +52,41 @@ const UNIDADES: { id: UnidadeDeCarga; label: string }[] = [
   { id: "corporal", label: "corporal" },
 ];
 
-/** Descobre a medida em uso, para reabrir o editor no campo certo. */
+const ESCOPOS_VISIVEIS: { id: Escopo; label: string }[] = [
+  { id: "individual", label: "Cada um faz tudo" },
+  { id: "dividido", label: "Dividido" },
+  { id: "cada", label: "Cada um" },
+  { id: "junto", label: "Juntos" },
+];
+
 function medidaDe(m: Movimento): Medida {
-  if (m.repScheme?.length) return "scheme";
-  if (m.distanciaM != null) return "distancia";
-  if (m.calorias != null) return "calorias";
-  if (m.duracaoSec != null) return "tempo";
-  return "reps";
+  if (!m.volume) return "reps";
+  if (Array.isArray(m.volume.valor)) return "escada";
+  return m.volume.unidade;
 }
 
-function valorDe(m: Movimento, medida: Medida): string {
-  switch (medida) {
-    case "scheme":
-      return repSchemeParaTexto(m.repScheme);
-    case "distancia":
-      return m.distanciaM != null ? String(m.distanciaM) : "";
-    case "calorias":
-      return m.calorias != null ? String(m.calorias) : "";
-    case "tempo":
-      return mmss(m.duracaoSec);
-    default:
-      return m.reps != null ? String(m.reps) : "";
-  }
+function textoDoValor(m: Movimento, medida: Medida): string {
+  const v = m.volume;
+  if (!v) return "";
+  if (medida === "escada") return Array.isArray(v.valor) ? v.valor.join("-") : String(v.valor);
+  if (Array.isArray(v.valor)) return v.valor.join("-");
+  return medida === "seg" ? mmss(v.valor) : String(v.valor);
 }
 
-/** Aplica a medida escolhida, limpando as outras: só uma vale por vez. */
+/** Aplica o que foi digitado à medida escolhida. Vazio apaga o volume. */
 function comMedida(m: Movimento, medida: Medida, texto: string): Movimento {
-  const limpo: Movimento = {
-    ...m,
-    reps: null,
-    repScheme: null,
-    distanciaM: null,
-    calorias: null,
-    duracaoSec: null,
-  };
-  switch (medida) {
-    case "scheme":
-      return { ...limpo, repScheme: paraRepScheme(texto) };
-    case "distancia":
-      return { ...limpo, distanciaM: paraNumero(texto) };
-    case "calorias":
-      return { ...limpo, calorias: paraInteiro(texto) };
-    case "tempo":
-      return { ...limpo, duracaoSec: paraSegundos(texto) };
-    default:
-      return { ...limpo, reps: paraInteiro(texto) };
+  if (!texto.trim()) return { ...m, volume: null };
+
+  if (medida === "escada") {
+    const escada = paraRepScheme(texto);
+    // Um número só numa escada ainda é um número: vira reps normal em vez de
+    // sumir enquanto a pessoa digita o primeiro dígito.
+    const valor = escada ?? paraInteiro(texto);
+    return valor == null ? { ...m, volume: null } : { ...m, volume: { valor, unidade: "reps" } };
   }
+
+  const valor = medida === "seg" ? paraSegundos(texto) : paraInteiro(texto);
+  return valor == null ? { ...m, volume: null } : { ...m, volume: { valor, unidade: medida } };
 }
 
 export function MovimentosEditor({
@@ -86,9 +96,9 @@ export function MovimentosEditor({
   emEquipe = false,
 }: {
   movimentos: Movimento[];
-  aoMudar: (movs: Movimento[]) => void;
+  aoMudar: (m: Movimento[]) => void;
   comCarga?: boolean;
-  /** Liga o "cada": só faz sentido quando o bloco é em dupla ou equipe. */
+  /** Só com time > 1 o escopo muda alguma conta. */
   emEquipe?: boolean;
 }) {
   function atualizar(i: number, patch: Partial<Movimento>) {
@@ -124,7 +134,8 @@ export function MovimentosEditor({
                 {i + 1}
               </Txt>
               <View style={{ flex: 1 }}>
-                <Campo
+                <CampoComSugestoes
+                  tipo="movimento"
                   valor={m.nome}
                   aoMudar={(t) => atualizar(i, { nome: t })}
                   placeholder="Movimento (ex.: Thruster)"
@@ -141,11 +152,17 @@ export function MovimentosEditor({
                 hitSlop={8}
                 disabled={i === movimentos.length - 1}
               >
-                <Txt variant="titleCard" color={i === movimentos.length - 1 ? colors.text3 : colors.text2}>
+                <Txt
+                  variant="titleCard"
+                  color={i === movimentos.length - 1 ? colors.text3 : colors.text2}
+                >
                   ↓
                 </Txt>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => aoMudar(movimentos.filter((_, j) => j !== i))} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => aoMudar(movimentos.filter((_, j) => j !== i))}
+                hitSlop={8}
+              >
                 <Txt variant="titleCard" color={colors.danger}>
                   ×
                 </Txt>
@@ -155,67 +172,101 @@ export function MovimentosEditor({
             <Opcoes
               valor={medida}
               opcoes={MEDIDAS}
-              aoEscolher={(id) => aoMudar(movimentos.map((mm, j) => (j === i ? comMedida(mm, id, "") : mm)))}
+              aoEscolher={(id) =>
+                aoMudar(
+                  movimentos.map((mm, j) =>
+                    j === i ? comMedida(mm, id, textoDoValor(mm, medidaDe(mm))) : mm
+                  )
+                )
+              }
             />
 
             <Linha>
               <Campo
-                valor={valorDe(m, medida)}
-                aoMudar={(t) => aoMudar(movimentos.map((mm, j) => (j === i ? comMedida(mm, medida, t) : mm)))}
-                placeholder={
-                  medida === "scheme" ? "21-15-9" : medida === "tempo" ? "mm:ss" : "quanto?"
+                valor={textoDoValor(m, medida)}
+                aoMudar={(t) =>
+                  aoMudar(movimentos.map((mm, j) => (j === i ? comMedida(mm, medida, t) : mm)))
                 }
-                teclado={medida === "scheme" || medida === "tempo" ? "default" : "numeric"}
-                flex={comCarga ? 1 : 2}
+                placeholder={
+                  medida === "escada" ? "21-15-9" : medida === "seg" ? "mm:ss" : "quanto?"
+                }
+                teclado={medida === "escada" || medida === "seg" ? "default" : "numeric"}
               />
-              {comCarga ? (
+              <Campo
+                rotulo="Séries"
+                valor={m.series != null ? String(m.series) : ""}
+                aoMudar={(t) => atualizar(i, { series: paraInteiro(t) })}
+                placeholder="3×"
+                teclado="numeric"
+              />
+            </Linha>
+
+            {comCarga ? (
+              <Linha>
                 <Campo
-                  valor={m.carga?.valor != null ? String(m.carga.valor) : ""}
+                  rotulo="Carga"
+                  valor={m.carga?.rx != null ? String(m.carga.rx) : ""}
                   aoMudar={(t) =>
                     atualizar(i, {
                       carga: {
-                        valor: paraNumero(t),
-                        unidade: m.carga?.unidade ?? "kg",
-                        texto: m.carga?.texto ?? null,
+                        ...(m.carga ?? { unidade: "kg" }),
+                        rx: paraNumero(t),
                       },
                     })
                   }
-                  // A carga que VOCÊ usou. O quadro quase nunca prescreve
-                  // peso; quando prescreve e você escalou, isso vive na Escala.
-                  placeholder="quanto você usou"
+                  placeholder="43"
                   teclado="numeric"
                 />
-              ) : null}
-            </Linha>
-
-            {/* "2 Rope Climb (cada)": em dupla, cada um faz a conta inteira,
-                em vez de dividirem entre os dois. */}
-            {emEquipe ? (
-              <Opcoes
-                valor={m.porPessoa ? "cada" : "total"}
-                opcoes={[
-                  { id: "total", label: "No total" },
-                  { id: "cada", label: "Cada um" },
-                ]}
-                aoEscolher={(id) => atualizar(i, { porPessoa: id === "cada" })}
-              />
+                {/* A segunda prescrição do quadro: o "/30" de "43/30". Fica
+                    sempre visível porque ela é do QUADRO, não da pessoa — e
+                    esconder atrás de um toque fez o campo nunca ser usado. */}
+                <Campo
+                  rotulo="Carga (2ª)"
+                  valor={m.carga?.rxF != null ? String(m.carga.rxF) : ""}
+                  aoMudar={(t) =>
+                    atualizar(i, {
+                      carga: {
+                        ...(m.carga ?? { unidade: "kg" }),
+                        rxF: paraNumero(t),
+                      },
+                    })
+                  }
+                  placeholder="30"
+                  teclado="numeric"
+                />
+              </Linha>
             ) : null}
 
-            {comCarga && m.carga?.valor != null ? (
+            {comCarga && (m.carga?.rx != null || m.carga?.rxF != null) ? (
               <Opcoes
                 valor={m.carga.unidade}
                 opcoes={UNIDADES}
-                aoEscolher={(id) =>
-                  atualizar(i, { carga: { ...m.carga!, unidade: id } })
-                }
+                aoEscolher={(id) => atualizar(i, { carga: { ...m.carga!, unidade: id } })}
               />
+            ) : null}
+
+            {/* "400m Run together" e "2 Rope Climb (cada)" no MESMO bloco: é
+                por isso que o escopo é de cada movimento, e não do bloco. */}
+            {emEquipe ? (
+              <View style={{ gap: 4 }}>
+                <Opcoes
+                  valor={m.escopo}
+                  opcoes={ESCOPOS_VISIVEIS}
+                  aoEscolher={(id) => atualizar(i, { escopo: id })}
+                />
+                <Txt variant="caption" color={colors.text3}>
+                  {ROTULO_DO_ESCOPO[m.escopo]}
+                </Txt>
+              </View>
             ) : null}
           </View>
         );
       })}
 
       <TouchableOpacity
-        onPress={() => aoMudar([...movimentos, { nome: "" }])}
+        onPress={() =>
+          aoMudar([...movimentos, { nome: "", volume: null, carga: null, escopo: "individual" }])
+        }
         activeOpacity={0.7}
         style={{
           borderWidth: 1,
@@ -234,22 +285,38 @@ export function MovimentosEditor({
   );
 }
 
-/** Resumo curto de um movimento, para o card do bloco. */
+/** Resumo curto de um movimento, para o card do bloco e para o preview. */
 export function resumoDoMovimento(m: Movimento): string {
-  const quanto = m.repScheme?.length
-    ? m.repScheme.join("-")
-    : m.reps != null
-      ? String(m.reps)
-      : m.distanciaM != null
-        ? `${m.distanciaM}m`
-        : m.calorias != null
-          ? `${m.calorias} cal`
-          : m.duracaoSec != null
-            ? mmss(m.duracaoSec)
-            : "";
+  const v = m.volume;
+  const quanto = !v
+    ? ""
+    : Array.isArray(v.valor)
+      ? v.valor.join("-")
+      : v.unidade === "metros"
+        ? `${v.valor}m`
+        : v.unidade === "cal"
+          ? `${v.valor} cal`
+          : v.unidade === "seg"
+            ? mmss(v.valor)
+            : String(v.valor);
+
+  const series = m.series ? `${m.series}×` : "";
+
   const carga =
-    m.carga?.valor != null
-      ? ` @ ${m.carga.valor}${m.carga.unidade === "percent_1rm" ? "% 1RM" : m.carga.unidade === "corporal" ? "" : ` ${m.carga.unidade}`}`
-      : "";
-  return `${quanto ? `${quanto} ` : ""}${m.nome}${carga}`.trim();
+    m.carga?.rx != null
+      ? ` @ ${m.carga.rx}${m.carga.rxF != null ? `/${m.carga.rxF}` : ""}${
+          m.carga.unidade === "percent_1rm"
+            ? "% 1RM"
+            : m.carga.unidade === "corporal"
+              ? ""
+              : ` ${m.carga.unidade}`
+        }`
+      : m.carga?.texto
+        ? ` @ ${m.carga.texto}`
+        : "";
+
+  const escopo =
+    m.escopo === "cada" ? " (cada)" : m.escopo === "junto" ? " (juntos)" : "";
+
+  return `${series}${quanto ? `${quanto} ` : ""}${m.nome}${carga}${escopo}`.trim();
 }

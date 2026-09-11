@@ -79,10 +79,13 @@ export function RegistrarScreen() {
         nav.navigate("RegisterGeneric", { sportId });
         break;
       case "wod":
-        // CrossFit tem tela própria, de blocos. Funcional/HIIT continua no
-        // formulário simples: um WOD e pronto é exatamente o que ele é.
-        if (sportId === "crossfit") nav.navigate("RegisterCrossfit", { sportId });
-        else nav.navigate("RegisterWod", { sportId });
+        // Uma tela só para todo kind "wod".
+        //
+        // Funcional e HIIT tinham formulário próprio porque o de CrossFit
+        // exigia escolher tipo de bloco antes de escrever qualquer coisa. No v3
+        // não exige: escreve-se o modo ("FOR TIME") e os movimentos, que é
+        // exatamente o que um WOD de funcional é.
+        nav.navigate("RegisterCrossfit", { sportId });
         break;
       default:
         notify("Em breve", `O registro de ${label} chega numa próxima atualização.`);

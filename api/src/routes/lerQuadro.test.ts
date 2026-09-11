@@ -221,3 +221,37 @@ describe("Registrar o treino colado", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("O interpretador roda no salvamento", () => {
+  it("todo bloco volta com `lido` preenchido a partir do modo", async () => {
+    // Eu tinha escrito `interpretarBlocos` e esquecido de chama-lo aqui. Nada
+    // dava erro: os blocos gravavam crus, e o sistema inteiro passava a nao
+    // saber o que era descanso nem qual score sugerir — em silencio.
+    const r = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        sportId: "crossfit",
+        kind: "wod",
+        payload: {
+          v: 3,
+          blocos: [
+            { modo: "AMRAP 6'", movimentos: [{ nome: "Burpee" }] },
+            { modo: "REST 1'", movimentos: [] },
+            { modo: "aquela parada do coach", movimentos: [] },
+          ],
+        },
+      })
+      .expect(201);
+
+    const blocos = r.body.data.crossfit.blocos;
+    expect(blocos[0].lido).toMatchObject({
+      familia: "amrap",
+      duracaoSec: 360,
+      scoreSugerido: "rounds_reps",
+    });
+    expect(blocos[1].lido).toMatchObject({ familia: "descanso", scoreSugerido: "nenhum" });
+    // O que ninguem entende nao bloqueia: vira "livre" e o treino salva igual.
+    expect(blocos[2].lido).toMatchObject({ familia: "livre" });
+  });
+});

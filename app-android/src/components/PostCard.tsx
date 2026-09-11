@@ -36,15 +36,6 @@ function mmss(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Composição de um movimento do WOD para o card: "100 kg · 5 reps · 3:20".
-function movLabel(mv: { loadKg: number | null; reps: number | null; timeSec: number | null }): string {
-  const parts: string[] = [];
-  if (mv.loadKg != null) parts.push(`${mv.loadKg} kg`);
-  if (mv.reps != null) parts.push(`${mv.reps} reps`);
-  if (mv.timeSec != null) parts.push(mmss(mv.timeSec));
-  return parts.join(" · ");
-}
-
 function HeartIcon({ filled, color }: { filled?: boolean; color: string }) {
   return (
     <Svg width={22} height={22} viewBox="0 0 24 24">
@@ -256,14 +247,9 @@ export function PostCard({
           {post.activity.movements && post.activity.movements.length > 0 ? (
             <View style={{ marginTop: spacing.sm, gap: 3 }}>
               {post.activity.movements.slice(0, 6).map((mv, i) => (
-                <View key={i} style={styles.wodRow}>
-                  <Txt variant="caption" color={colors.text} style={{ flex: 1 }}>
-                    {mv.name}
-                  </Txt>
-                  <Txt variant="caption" color={colors.text2} tabular>
-                    {movLabel(mv)}
-                  </Txt>
-                </View>
+                <Txt key={i} variant="caption" color={colors.text2}>
+                  {mv}
+                </Txt>
               ))}
               {post.activity.movements.length > 6 ? (
                 <Txt variant="caption" color={colors.text3}>

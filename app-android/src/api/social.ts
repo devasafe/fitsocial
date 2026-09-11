@@ -23,7 +23,15 @@ export interface PostActivity {
   sportId: string;
   title: string;
   stats: string[]; // ex.: ["5,2 km", "27:30", "5:18 /km"]
-  movements: { name: string; loadKg: number | null; reps: number | null; timeSec: number | null }[] | null;
+  /**
+   * Os movimentos já ESCRITOS pelo servidor: "21-15-9  Thruster  43/30 kg".
+   *
+   * Vinham como objeto e o card remontava a frase. Eram duas implementações da
+   * mesma formatação — esta e a do cartão de compartilhar — e as duas tinham
+   * que concordar sobre como se escreve um movimento. Agora é uma só, no
+   * servidor, e ela serve o feed e o cartão.
+   */
+  movements: string[] | null;
 }
 export interface Post {
   id: string;

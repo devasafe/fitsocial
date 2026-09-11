@@ -3,8 +3,13 @@
 // O card resume; o detalhe abre. A regra do card é dura de propósito: o WOD e o
 // que mais pesou, nada além. Aquecimento e mobilidade importam para quem
 // treinou, não para quem está passando o dedo no feed.
+//
+// O que mudou no v3: não existe mais "tipo de bloco" para filtrar. O bloco que
+// interessa é o que TEM RESULTADO — porque foi o que a pessoa se deu ao
+// trabalho de anotar, e é isso que faz dele o assunto.
 
-import type { Bloco, BlocoMetcon, BlocoForca, PayloadDeCrossfit } from "../api/crossfit";
+import type { Bloco, PayloadDeCrossfit, Score } from "../api/crossfit";
+import { resumoDoMovimento } from "../components/crossfit/MovimentosEditor";
 
 export function mmss(sec?: number | null): string {
   if (sec == null) return "";
@@ -13,39 +18,39 @@ export function mmss(sec?: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export const ROTULO_DO_BLOCO: Record<Bloco["tipo"], string> = {
-  aquecimento: "Aquecimento",
-  mobilidade: "Mobilidade",
-  skill: "Técnica",
-  forca: "Força",
-  metcon: "WOD",
-  descanso: "Descanso",
-  cooldown: "Cooldown",
-};
-
 const ROTULO_DA_ESCALA: Record<string, string> = {
   rx: "RX",
   rx_plus: "RX+",
   scaled: "Scaled",
   iniciante: "Iniciante",
   custom: "Adaptado",
+  adaptado: "Adaptado",
 };
 
 export function rotuloDaEscala(nivel?: string | null): string {
   return ROTULO_DA_ESCALA[nivel ?? "rx"] ?? "RX";
 }
 
-export function metconDe(wod?: PayloadDeCrossfit | null): BlocoMetcon | null {
-  return (wod?.blocos.find((b) => b.tipo === "metcon") as BlocoMetcon | undefined) ?? null;
+/** O bloco que representa o treino: o primeiro COM resultado. */
+export function blocoPrincipal(wod?: PayloadDeCrossfit | null): Bloco | null {
+  const blocos = wod?.blocos ?? [];
+  return (
+    blocos.find((b) => b.resultado) ??
+    blocos.find((b) => b.lido?.familia !== "descanso") ??
+    null
+  );
 }
 
-export function forcasDe(wod?: PayloadDeCrossfit | null): BlocoForca[] {
-  return (wod?.blocos.filter((b) => b.tipo === "forca") as BlocoForca[]) ?? [];
+export function blocosComResultado(wod?: PayloadDeCrossfit | null): Bloco[] {
+  return (wod?.blocos ?? []).filter((b) => b.resultado);
+}
+
+export function ehDescanso(b: Bloco): boolean {
+  return b.lido?.familia === "descanso";
 }
 
 /** "11:42", "7 + 12", "4 + 12 (cap)" — o resultado em uma linha. */
-export function resultadoEmTexto(metcon?: BlocoMetcon | null): string {
-  const r = metcon?.resultado;
+export function resultadoEmTexto(r?: Score | null): string {
   if (!r) return "";
   if (r.capado) return `${r.rounds ?? 0} + ${r.repsExtras ?? 0} (cap)`;
   switch (r.tipo) {
@@ -59,74 +64,77 @@ export function resultadoEmTexto(metcon?: BlocoMetcon | null): string {
       return `${r.cargaKg ?? 0} kg`;
     case "distancia":
       return `${r.distanciaM ?? 0} m`;
+    case "customizado":
+      return r.descricao ? `${r.reps ?? 0} — ${r.descricao}` : `${r.reps ?? 0}`;
     default:
       return "";
   }
 }
 
-/** Como o formato se chama para quem lê: "AMRAP 12'", "5 Rounds For Time". */
-export function prescricaoEmTexto(metcon?: BlocoMetcon | null): string {
-  if (!metcon) return "";
-  const p = metcon.prescricao;
-  switch (metcon.formato) {
-    case "amrap":
-      return p.duracaoSec ? `AMRAP ${Math.round(p.duracaoSec / 60)}'` : "AMRAP";
-    case "rft":
-      return p.rounds ? `${p.rounds} Rounds For Time` : "Rounds For Time";
-    case "emom":
-      return p.duracaoSec
-        ? `${p.intervaloSec && p.intervaloSec !== 60 ? `E${Math.round(p.intervaloSec / 60)}MOM` : "EMOM"} ${Math.round(p.duracaoSec / 60)}'`
-        : "EMOM";
-    case "tabata":
-      return "Tabata";
-    case "for_time":
-      return "For Time";
-    case "max_reps":
-      return "Max Reps";
-    case "max_load":
-      return "Carga máxima";
-    case "intervalo":
-      return p.intervaloSec ? `A cada ${mmss(p.intervaloSec)}` : "Intervalos";
-    default:
-      return metcon.formatoLivre ?? "";
-  }
-}
+/**
+ * O treino escrito de volta no formato do quadro.
+ *
+ * É o teste de aceite do briefing: se o preview não sai igual ao que o coach
+ * escreveria, tem informação faltando ou mal colocada no modelo. Por isso ele
+ * fica visível DURANTE o cadastro, e não só depois.
+ */
+export function comoNoQuadro(wod?: PayloadDeCrossfit | null): string {
+  const linhas: string[] = [];
 
-/** O maior peso levantado no treino, para o card mostrar o que pesou. */
-export function destaqueDeForca(wod?: PayloadDeCrossfit | null): string {
-  let melhor: { nome: string; kg: number } | null = null;
-  for (const bloco of forcasDe(wod)) {
-    for (const ex of bloco.exercicios) {
-      const kg = Math.max(0, ...ex.sets.map((s) => s.weightKg ?? 0));
-      if (kg > 0 && (!melhor || kg > melhor.kg)) melhor = { nome: ex.name, kg };
-    }
+  for (const bloco of wod?.blocos ?? []) {
+    const cabecalho = [bloco.nome, bloco.modo].filter(Boolean).join(" — ");
+    if (cabecalho) linhas.push(cabecalho.toUpperCase());
+
+    for (const m of bloco.movimentos) linhas.push(`- ${resumoDoMovimento(m)}`);
+
+    const resultado = resultadoEmTexto(bloco.resultado);
+    if (resultado) linhas.push(`= ${resultado} (${rotuloDaEscala(bloco.escala?.nivel)})`);
+
+    linhas.push("");
   }
-  return melhor ? `${melhor.nome} · ${melhor.kg} kg` : "";
+
+  if ((wod?.tamanhoDoTime ?? 1) > 1) {
+    const parceiros = wod?.parceiros?.length ? `: ${wod.parceiros.join(", ")}` : "";
+    linhas.push(`Em ${wod!.tamanhoDoTime}${parceiros}`);
+  }
+
+  return linhas.join("\n").trim();
 }
 
 /**
  * As duas ou três linhas do card.
  *
- * Deliberadamente curto: o WOD com o resultado, a força que mais pesou, e o
- * esforço. Quem quiser o aquecimento abre o treino.
+ * Deliberadamente curto: o bloco que tem resultado, e o esforço. Quem quiser o
+ * aquecimento abre o treino.
  */
 export function linhasDoCard(
   wod: PayloadDeCrossfit | null | undefined,
   rpe?: number | null
 ): string[] {
-  const metcon = metconDe(wod);
   const linhas: string[] = [];
+  const principal = blocoPrincipal(wod);
 
-  if (metcon) {
-    const titulo = metcon.nome?.trim() || prescricaoEmTexto(metcon);
-    const resultado = resultadoEmTexto(metcon);
-    const escala = rotuloDaEscala(metcon.escala?.nivel);
-    linhas.push([titulo, resultado, escala].filter(Boolean).join(" · "));
+  if (principal) {
+    const titulo = principal.nome?.trim() || principal.modo;
+    linhas.push(
+      [titulo, resultadoEmTexto(principal.resultado), rotuloDaEscala(principal.escala?.nivel)]
+        .filter(Boolean)
+        .join(" · ")
+    );
   }
 
-  const forca = destaqueDeForca(wod);
-  if (forca) linhas.push(forca);
+  // As outras partes do WOD que também têm resultado: um treino de três
+  // blocos tem três marcas, e mostrar só a primeira esconde duas.
+  const outras = blocosComResultado(wod).filter((b) => b !== principal);
+  if (outras.length) {
+    linhas.push(
+      outras
+        .map((b) => [b.nome || b.modo, resultadoEmTexto(b.resultado)].filter(Boolean).join(" "))
+        .join(" · ")
+    );
+  }
 
+  if ((wod?.tamanhoDoTime ?? 1) > 1) linhas.push(`Em ${wod!.tamanhoDoTime}`);
   if (rpe) linhas.push(`RPE ${rpe}`);
 
   return linhas.filter(Boolean);

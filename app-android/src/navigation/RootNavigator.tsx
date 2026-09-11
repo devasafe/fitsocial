@@ -50,7 +50,6 @@ import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
 import { RegisterClassScreen } from "../screens/RegisterClassScreen";
 import { RegisterGenericScreen } from "../screens/RegisterGenericScreen";
-import { RegisterWodScreen } from "../screens/RegisterWodScreen";
 import { LiveTrackScreen } from "../screens/LiveTrackScreen";
 import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import { MinhasAtividadesScreen } from "../screens/MinhasAtividadesScreen";
@@ -257,11 +256,6 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="RegisterGeneric"
             component={RegisterGenericScreen}
             options={{ ...transicaoDeFolha, headerShown: true, title: "Nova atividade", ...headerStyle }}
-          />
-          <AppStack.Screen
-            name="RegisterWod"
-            component={RegisterWodScreen}
-            options={{ ...transicaoDeFolha, headerShown: true, title: "Novo WOD", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterCrossfit"

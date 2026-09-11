@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { normalizarWod } from "../services/crossfit.js";
+import { interpretarModo } from "../services/crossfit/interpretarModo.js";
 import { lerQuadro } from "../services/ai/lerQuadro.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { getBenchmark } from "../services/benchmarks.js";
@@ -191,6 +192,26 @@ activitiesRouter.post(
     const { texto } = lerQuadroSchema.parse(req.body);
     const leitura = await lerQuadro(texto, { userId: req.user!._id.toString() });
     res.json({ data: leitura });
+  })
+);
+
+/**
+ * O que o servidor entende de um modo escrito. Não grava nada, não chama IA.
+ *
+ * Existe para o app poder ECOAR o entendimento embaixo do campo enquanto a
+ * pessoa monta o bloco — "AMRAP 6' → 6 minutos, resultado em rounds + reps".
+ * Sem isso, o campo de texto livre pediria fé: a pessoa digitaria e só
+ * descobriria depois de salvar se foi entendido.
+ *
+ * É rota, e não cópia do interpretador no app, porque duas implementações da
+ * mesma regra divergem — e aí a tela promete uma coisa e o banco guarda outra.
+ */
+const interpretarSchema = z.object({ modo: z.string().min(1).max(120) });
+activitiesRouter.post(
+  "/interpretar-modo",
+  asyncHandler(async (req, res) => {
+    const { modo } = interpretarSchema.parse(req.body);
+    res.json({ data: interpretarModo(modo) });
   })
 );
 
