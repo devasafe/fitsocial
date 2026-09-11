@@ -2,7 +2,7 @@
   "name": "fitsocial-api",
   "version": "0.1.0",
   "private": true,
-  "description": "API do FitSocial — rede social fitness com coach IA",
+  "description": "API do RUMO — rede social fitness com coach IA",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

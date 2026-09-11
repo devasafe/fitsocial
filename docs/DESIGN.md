@@ -91,9 +91,9 @@ Esta lista existe porque "escuro com verde neon" é o caminho mais rápido para 
 
 | Token | Hex | Uso |
 |---|---|---|
-| `lime` | `#C8FA4B` | Ação primária, marca, estado ativo, indicador de aba |
+| `lime` | `#3BCC06` | Ação primária, marca, estado ativo, indicador de aba |
 | `lime-dim` | `#9FCC33` | Pressionado, hover |
-| `lime-soft` | `#C8FA4B` a 12% | Fundo de chip ativo, realce de linha |
+| `lime-soft` | `#3BCC06` a 12% | Fundo de chip ativo, realce de linha |
 | `on-lime` | `#0E1310` | Texto e ícone sobre lima |
 
 **Semântica:** o positivo do app já é o lima — não crie um verde de sucesso separado.

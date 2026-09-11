@@ -44,7 +44,7 @@ const CORES = {
   texto: "#EDEBE1",
   texto2: "#A8AC9E",
   texto3: "#6E7469",
-  lime: "#C8FA4B",
+  lime: "#3BCC06",
 };
 
 export interface DadosDoCartao {

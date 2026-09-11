@@ -50,7 +50,7 @@ export const env = {
    *  projeto no Firebase, o nome do banco e as chaves "fitsocial.*" de
    *  armazenamento local. Mexer neles faz quem já tem o app instalar um app
    *  separado, ou perder a sessão. */
-  appName: process.env.APP_NAME ?? "FitSocial",
+  appName: process.env.APP_NAME ?? "RUMO",
 
   port: Number(process.env.PORT ?? 4000),
   mongoUri: required("MONGODB_URI", "mongodb://127.0.0.1:27017/fitsocial"),

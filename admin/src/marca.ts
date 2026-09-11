@@ -9,4 +9,4 @@
  * A chave "fitsocial.admin.token" do sessionStorage NAO acompanha: trocar
  * derruba a sessao de quem estiver com o painel aberto.
  */
-export const MARCA = "FitSocial";
+export const MARCA = "RUMO";
