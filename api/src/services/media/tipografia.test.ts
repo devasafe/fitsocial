@@ -63,6 +63,25 @@ describe("texto do cartão vira vetor sem perder pedaço", () => {
       expect(svg.length, `caneta em x=${x}`).toBeGreaterThan(500);
     }
   });
+
+  it("a linha de base com resíduo de float também desenha", () => {
+    // 132 * 1.02 = 134.64000000000001, e essa e a conta da altura do resultado
+    // no cartao. Com o x impecavel e o y assim, a frase INTEIRA virava NaN e o
+    // cartao saia sem o resultado — sem erro visivel para ninguem.
+    const suspeitos = [132 * 1.02, 300.1 + 0.2, 102.96000000000001, 47 * 0.78 + 220.3];
+
+    for (const y of suspeitos) {
+      const svg = textoEmVetor("5:32 RX 90 reps", {
+        x: 72,
+        y,
+        fonte: "displayForte",
+        tamanho: 132,
+        cor: "#fff",
+      });
+      expect(svg, `linha de base em y=${y}`).not.toContain("NaN");
+      expect(svg.length, `linha de base em y=${y}`).toBeGreaterThan(500);
+    }
+  });
 });
 
 describe("encurtar", () => {

@@ -107,6 +107,13 @@ export function textoEmVetor(
   const largura = larguraDoTexto(texto, fonte, tamanho);
   const inicio = ancora === "centro" ? x - largura / 2 : ancora === "direita" ? x - largura : x;
 
+  // A LINHA DE BASE tem o mesmo problema da caneta, e por muito tempo só a
+  // caneta foi tratada. `y` vem de uma pilha que soma alturas: `132 * 1.02` dá
+  // 134.64000000000001, e nessa linha de base a frase inteira vira NaN — mesmo
+  // com o x impecável. Aí a rede de segurança abaixo devolve vazio e o cartão
+  // sai com o resultado faltando, sem ninguém ver erro nenhum.
+  const linhaDeBase = Math.round(y * 100) / 100;
+
   const caminho = new opentype.Path();
   let caneta = inicio;
   for (let i = 0; i < lista.length; i++) {
@@ -117,7 +124,7 @@ export function textoEmVetor(
     // não reclama — ele para de desenhar no primeiro NaN, e a frase aparece
     // cortada no meio. Foi assim que o título do treino sumiu pela metade.
     caneta = Math.round(caneta * 100) / 100;
-    caminho.extend(g.getPath(caneta, y, tamanho));
+    caminho.extend(g.getPath(caneta, linhaDeBase, tamanho));
     caneta += (g.advanceWidth ?? 0) * escala;
     const proximo = lista[i + 1];
     if (proximo) caneta += font.getKerningValue(g, proximo) * escala;
