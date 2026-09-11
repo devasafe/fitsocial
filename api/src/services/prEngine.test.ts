@@ -116,13 +116,29 @@ describe("detectPRs — endurance (manual)", () => {
   });
 });
 
-async function logWod(over: Record<string, unknown>) {
+async function logWod(
+  over: { tempoSec?: number; nivel?: string; tamanhoDoTime?: number } = {}
+) {
   const activity = await Activity.create({
     user: userId,
     sportId: "crossfit",
     kind: "wod",
     startedAt: new Date(),
-    payload: { name: "Fran", scoreType: "for_time", level: "rx", ...over },
+    payload: {
+      v: 3,
+      tamanhoDoTime: over.tamanhoDoTime ?? 1,
+      blocos: [
+        {
+          modo: "21-15-9",
+          nome: "Fran",
+          movimentos: [
+            { nome: "Thruster", volume: { valor: [21, 15, 9], unidade: "reps" }, escopo: "individual" },
+          ],
+          resultado: { tipo: "tempo", tempoSec: over.tempoSec ?? 300 },
+          escala: { nivel: over.nivel ?? "rx" },
+        },
+      ],
+    },
     metrics: {},
   });
   return detectPRs(userId, activity);
@@ -130,19 +146,22 @@ async function logWod(over: Record<string, unknown>) {
 
 describe("detectPRs — wod", () => {
   it("celebra melhor tempo de benchmark e separa por nível", async () => {
-    await logWod({ resultTimeSec: 300 }); // baseline Rx
-    const faster = await logWod({ resultTimeSec: 270 }); // Rx mais rápido
+    await logWod({ tempoSec: 300 }); // baseline Rx
+    const faster = await logWod({ tempoSec: 270 }); // Rx mais rápido
     expect(faster.some((p) => p.type === "wod_time" && p.repRange === "rx")).toBe(true);
 
     // Scaled é recorde SEPARADO — primeiro scaled é linha de base, não celebra.
-    const scaled = await logWod({ level: "scaled", resultTimeSec: 400 });
+    const scaled = await logWod({ nivel: "scaled", tempoSec: 400 });
     expect(scaled).toHaveLength(0);
   });
 
-  it("extrai 1RM do bloco de força", async () => {
-    await logWod({ resultTimeSec: 250, strengthBlock: { exercises: [{ name: "Clean", sets: [{ type: "valida", weightKg: 60, reps: 3 }] }] } });
-    const news = await logWod({ resultTimeSec: 260, strengthBlock: { exercises: [{ name: "Clean", sets: [{ type: "valida", weightKg: 80, reps: 2 }] }] } });
-    expect(news.some((p) => p.type === "rm_estimado" && p.exerciseName === "Clean")).toBe(true);
+  it("treino de dupla não concorre com o individual", async () => {
+    await logWod({ tempoSec: 300 });
+
+    // Tempo muito melhor, mas a dois. Deixar competir derrubaria o recorde de
+    // quem fez o treino inteiro sozinho.
+    const dupla = await logWod({ tempoSec: 180, tamanhoDoTime: 2 });
+    expect(dupla.filter((p) => p.type === "wod_time")).toEqual([]);
   });
 });
 

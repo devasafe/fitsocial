@@ -8,8 +8,13 @@ import { Activity } from "../models/Activity.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Plan } from "../models/Plan.js";
 
-// Existe um APK distribuído para pessoas reais que manda e lê o formato ANTIGO.
-// Elas não atualizam. Cada teste aqui defende uma coisa que já quebrou uma vez.
+// Cada teste aqui defende uma regra que JÁ QUEBROU uma vez, em produção.
+//
+// O arquivo nasceu defendendo o APK 1.2.0, que mandava e lia o formato antigo
+// de WOD. Essa compatibilidade foi abandonada em 11/09/2026 — de propósito, com
+// os treinos antigos apagados junto. O que sobrou aqui não é sobre versão de
+// app: são regras de recorde que eu já quebrei sem querer e que ninguém vê
+// quebrar, porque elas falham em silêncio no histórico de quem treina.
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -44,12 +49,32 @@ async function registrar() {
   return { token: r.body.token as string, id: new mongoose.Types.ObjectId(r.body.user.id as string) };
 }
 
-/** Exatamente o corpo que o APK antigo monta em RegisterWodScreen. */
-function wodAntigo(extra: Record<string, unknown> = {}) {
+/** Um WOD de nome livre — o caso de quase todo mundo que registra. */
+function corpoDeWod(
+  over: {
+    nome?: string;
+    modo?: string;
+    nivel?: string;
+    resultado?: Record<string, unknown>;
+  } = {}
+) {
   return {
     sportId: "crossfit",
     kind: "wod",
-    payload: { name: "Treino A", scoreType: "for_time", level: "rx", resultTimeSec: 300, ...extra },
+    payload: {
+      v: 3,
+      blocos: [
+        {
+          modo: over.modo ?? "FOR TIME",
+          nome: over.nome ?? "Treino A",
+          movimentos: [
+            { nome: "Thruster", volume: { valor: 21, unidade: "reps" }, escopo: "individual" },
+          ],
+          resultado: over.resultado ?? { tipo: "tempo", tempoSec: 300 },
+          escala: { nivel: over.nivel ?? "rx" },
+        },
+      ],
+    },
   };
 }
 
@@ -58,16 +83,11 @@ const registrarWod = (t: string, corpo: Record<string, unknown>) =>
 
 const prs = (user: mongoose.Types.ObjectId) => PersonalRecord.find({ user }).lean();
 
-describe("O APK antigo continua funcionando", () => {
-  it("o payload no formato antigo continua sendo aceito", async () => {
-    const u = await registrar();
-    await registrarWod(u.token, wodAntigo()).expect(201);
-  });
-
+describe("Regras de recorde que ja quebraram", () => {
   it("WOD com nome livre AINDA gera recorde", async () => {
     const u = await registrar();
-    await registrarWod(u.token, wodAntigo({ resultTimeSec: 300 }));
-    await registrarWod(u.token, wodAntigo({ resultTimeSec: 280 }));
+    await registrarWod(u.token, corpoDeWod({ resultado: { tipo: "tempo", tempoSec: 300 } }));
+    await registrarWod(u.token, corpoDeWod({ resultado: { tipo: "tempo", tempoSec: 280 } }));
 
     // Eu tinha passado a exigir benchmark do catálogo, e isso parou de atualizar
     // o recorde de quem chama o WOD de "Treino A" — silenciosamente.
@@ -81,7 +101,7 @@ describe("O APK antigo continua funcionando", () => {
     const u = await registrar();
     await registrarWod(
       u.token,
-      wodAntigo({ scoreType: "amrap", resultTimeSec: null, resultRounds: 15 })
+      corpoDeWod({ modo: "AMRAP 20'", resultado: { tipo: "rounds_reps", rounds: 15 } })
     );
 
     const wod = (await prs(u.id)).find((p) => p.type === "wod_score");
@@ -93,7 +113,7 @@ describe("O APK antigo continua funcionando", () => {
 
   it('nível "adaptado" mantém a chave que já está gravada', async () => {
     const u = await registrar();
-    await registrarWod(u.token, wodAntigo({ level: "adaptado" }));
+    await registrarWod(u.token, corpoDeWod({ nivel: "adaptado" }));
 
     const wod = (await prs(u.id)).find((p) => p.type === "wod_time");
     // Converter para "custom" criaria um recorde novo ao lado do antigo, e a
@@ -101,42 +121,6 @@ describe("O APK antigo continua funcionando", () => {
     expect(wod?.repRange).toBe("adaptado");
   });
 
-  it("um treino gravado em BLOCOS continua legível pelo app antigo", async () => {
-    const u = await registrar();
-    await request(app)
-      .post("/activities")
-      .set(auth(u.token))
-      .send({
-        sportId: "crossfit",
-        kind: "wod",
-        payload: {
-          v: 2,
-          blocos: [
-            {
-              tipo: "metcon",
-              nome: "Fran",
-              formato: "for_time",
-              prescricao: { movimentos: [{ nome: "Thruster", reps: 21, carga: { valor: 43, unidade: "kg" } }] },
-              resultado: { tipo: "tempo", tempoSec: 332 },
-              escala: { nivel: "rx" },
-            },
-          ],
-        },
-      })
-      .expect(201);
-
-    const lista = await request(app).get("/activities").set(auth(u.token));
-    const p = lista.body.data[0].payload;
-
-    // O app antigo lê payload.name / .level / .resultTimeSec / .movements.
-    // Sem estes campos ele mostra "WOD: —" para tudo.
-    expect(p.name).toBe("Fran");
-    expect(p.level).toBe("rx");
-    expect(p.resultTimeSec).toBe(332);
-    expect(p.movements[0]).toMatchObject({ name: "Thruster", reps: 21, loadKg: 43 });
-    // E os blocos continuam ali para o app novo.
-    expect(lista.body.data[0].crossfit.blocos).toHaveLength(1);
-  });
 
   it("post sem dimensao de imagem continua sendo criado e servido", async () => {
     const u = await registrar();

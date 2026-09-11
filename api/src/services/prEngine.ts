@@ -1,7 +1,7 @@
 import type mongoose from "mongoose";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Activity } from "../models/Activity.js";
-import { normalizarWod, blocosDoTipo, fecharScore, chaveDoMovimento } from "./crossfit.js";
+import { normalizarWod, fecharScore, chaveDoMovimento } from "./crossfit.js";
 import { resolverBenchmark } from "./benchmarks.js";
 
 // Motor de detecção de PR (Fase 2c). Ver docs/ESPORTES.md §4.4, §5.3, §7.3, §12.
@@ -190,26 +190,23 @@ function wodCandidates(payload: unknown): Candidate[] {
   const wod = normalizarWod(payload);
   const out: Candidate[] = [];
 
-  // 1RM e carga máxima dos blocos de força, com o MESMO motor da musculação.
-  for (const bloco of blocosDoTipo(wod, "forca")) {
-    out.push(...strengthCandidates({ exercises: bloco.exercicios }));
-  }
+  // Em dupla ou equipe o resultado é do TIME, não da pessoa.
+  //
+  // Vinte Chest-to-Bar revezados entre dois não é o mesmo esforço que vinte
+  // sozinho, e um "Relay" derrubaria o recorde individual de quem treina
+  // sério. Não gerar recorde é o mesmo tratamento que o time cap recebe: o
+  // treino fica no histórico, só não compete.
+  //
+  // No v2 isto era por bloco (`metcon.equipe`); agora o tamanho do time é do
+  // treino inteiro, então a porta fecha uma vez só.
+  if (wod.tamanhoDoTime > 1) return out;
 
-  // Recorde de skill: a maior sequência sem quebrar. É o número que mostra
-  // double-under saindo de 12 para 80 em três meses.
-  for (const bloco of blocosDoTipo(wod, "skill")) {
-    if ((bloco.melhorSequencia ?? 0) > 0) {
-      out.push({
-        exerciseName: bloco.movimento.trim().toLowerCase(),
-        type: "skill_reps",
-        repRange: null,
-        value: bloco.melhorSequencia as number,
-        unit: "reps",
-      });
-    }
-  }
-
-  for (const metcon of blocosDoTipo(wod, "metcon")) {
+  // Todo bloco com resultado concorre — e nenhum sem.
+  //
+  // Antes a pergunta era "isso é metcon?", e dependia de um rótulo escolhido
+  // no cadastro: quem registrasse o WOD como "skill" não ganhava recorde
+  // nenhum. Aquecimento não tem resultado, logo não entra aqui sozinho.
+  for (const metcon of wod.blocos) {
     const score = metcon.resultado;
     if (!score) continue;
 
@@ -231,16 +228,12 @@ function wodCandidates(payload: unknown): Candidate[] {
     // no cap de 20min" derrubar um "terminou em 17:34" do quadro de recordes.
     if (score.capado) continue;
 
-    // Em dupla ou equipe o resultado é do TIME, não da pessoa.
-    //
-    // Vinte Chest-to-Bar revezados entre dois não é o mesmo esforço que vinte
-    // sozinho, e um "Relay" derrubaria o recorde individual de quem treina
-    // sério. Não gerar recorde é o mesmo tratamento que o time cap recebe: o
-    // treino fica no histórico, só não compete.
-    if (metcon.equipe) continue;
+    // Score customizado ("soma do pior round") não compete com nada: só quem
+    // escreveu sabe o que o número quer dizer.
+    if (score.tipo === "customizado") continue;
 
     const nivel = metcon.escala.nivel;
-    const fechado = fecharScore(score, metcon.prescricao.movimentos);
+    const fechado = fecharScore(score, metcon.movimentos);
 
     if (score.tipo === "tempo" && (score.tempoSec ?? 0) > 0) {
       out.push({ exerciseName: chave, type: "wod_time", repRange: nivel, value: score.tempoSec as number, unit: "s" });

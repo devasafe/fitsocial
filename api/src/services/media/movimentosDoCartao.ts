@@ -4,15 +4,10 @@
 // essa frase pronta: o `metrics.movimentos` guarda só as chaves ("thruster"),
 // que servem para consultar e não para ler.
 //
-// Três formatos de treino chegam aqui, e todos são reais em produção:
-//   - CrossFit v2, com blocos e `repScheme`;
-//   - o WOD antigo e plano (`payload.movements`), que o APK 1.2.0 ainda grava;
-//   - força, onde "3×10 Supino  60 kg" é o equivalente do movimento.
-//
 // Corrida e pedal não entram: ali o conteúdo é o percurso e o pace, e listar
 // "Corrida" embaixo de "5,2 km" não diz nada a ninguém.
 
-import type { Movimento, Bloco } from "../../models/crossfit.js";
+import type { Movimento, WodPayload } from "../../models/crossfit.js";
 import type { StrengthPayload } from "../../models/strength.js";
 
 /** Quantos cabem antes de o próprio layout cortar com "e mais N". */
@@ -24,73 +19,79 @@ function mmss(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** "21-15-9", "100 m", "20 cal", "1:00" — o "quanto" do movimento. */
-function quantidade(m: Movimento): string {
-  if (m.repScheme?.length) return m.repScheme.join("-");
-  if (m.reps != null) return String(m.reps);
-  if (m.distanciaM != null) return `${m.distanciaM} m`;
-  if (m.calorias != null) return `${m.calorias} cal`;
-  if (m.duracaoSec != null) return mmss(m.duracaoSec);
-  return "";
-}
-
 /** Decimal com vírgula: "62.5 kg" é um número escrito em outra língua. */
 function numero(v: number): string {
   return String(Math.round(v * 100) / 100).replace(".", ",");
 }
 
-/** "43 kg", "70% 1RM", "colete de 10 kg" — ou nada, que é o caso comum. */
+/** "21-15-9", "100 m", "20 cal", "1:00" — o "quanto" do movimento. */
+function quantidade(m: Movimento): string {
+  const v = m.volume;
+  if (!v) return "";
+  const valor = Array.isArray(v.valor) ? v.valor.join("-") : String(v.valor);
+
+  switch (v.unidade) {
+    case "metros":
+      return `${valor} m`;
+    case "cal":
+      return `${valor} cal`;
+    case "seg":
+      return Array.isArray(v.valor) ? `${valor} s` : mmss(v.valor);
+    default:
+      return valor;
+  }
+}
+
+/** "43 kg", "43/30 kg", "70% 1RM", "colete de 10 kg" — ou nada, o caso comum. */
 function carga(m: Movimento): string {
   const c = m.carga;
   if (!c) return "";
   if (c.texto) return c.texto;
-  if (c.valor == null) return "";
+  if (c.rx == null) return "";
+
+  // As duas prescrições do quadro na mesma linha, como o quadro escreve.
+  const valores = c.rxF != null ? `${numero(c.rx)}/${numero(c.rxF)}` : numero(c.rx);
+
   switch (c.unidade) {
     case "kg":
-      return `${numero(c.valor)} kg`;
+      return `${valores} kg`;
     case "lb":
-      return `${numero(c.valor)} lb`;
+      return `${valores} lb`;
     case "percent_1rm":
-      return `${numero(c.valor)}% 1RM`;
+      return `${valores}% 1RM`;
     default:
       // "corporal" e "livre" sem texto: o número sozinho não significaria nada.
       return "";
   }
 }
 
-function doCrossfit(blocos: Bloco[]): string[] {
-  const linhas: string[] = [];
+function umaLinha(m: Movimento): string {
+  const series = m.series ? `${m.series}×` : "";
+  const escopo = m.escopo === "cada" ? "(cada)" : m.escopo === "junto" ? "(junto)" : "";
 
-  for (const bloco of blocos) {
-    // Só o WOD. Aquecimento e mobilidade importam para quem treinou, não para
-    // quem vê o story — a mesma regra do card do feed.
-    if (bloco.tipo !== "metcon") continue;
-    for (const m of bloco.prescricao.movimentos) {
-      linhas.push(
-        [quantidade(m), m.nome, carga(m), m.porPessoa ? "(cada)" : ""]
-          .filter(Boolean)
-          .join("  ")
-      );
-    }
-  }
-
-  return linhas;
+  return [series + quantidade(m), m.nome, carga(m), escopo].filter(Boolean).join("  ");
 }
 
-interface MovimentoAntigo {
-  name: string;
-  reps?: number | null;
-  loadKg?: number | null;
+/**
+ * Os blocos que o cartão mostra.
+ *
+ * Os que têm resultado, porque resultado é o que a pessoa se deu ao trabalho de
+ * anotar. Nenhum tem: os que não são descanso nem "livre" — o que deixa
+ * aquecimento e mobilidade de fora, que é a mesma regra do card do feed.
+ */
+function blocosQueImportam(wod: WodPayload) {
+  const blocos = wod.blocos ?? [];
+  const comResultado = blocos.filter((b) => b.resultado);
+  if (comResultado.length) return comResultado;
+  return blocos.filter((b) => b.lido?.familia !== "descanso" && b.lido?.familia !== "livre");
 }
 
-function doWodAntigo(movimentos: MovimentoAntigo[]): string[] {
-  return movimentos
-    .filter((m) => m?.name)
-    .map((m) =>
-      [m.reps != null ? String(m.reps) : "", m.name, m.loadKg != null ? `${numero(m.loadKg)} kg` : ""]
-        .filter(Boolean)
-        .join("  ")
-    );
+function doCrossfit(wod: WodPayload): string[] {
+  // `?? []` não é paranoia: o payload chega CRU do Mongo (o campo é `Mixed`),
+  // sem passar pelo zod, então um bloco sem movimentos existe de verdade — o
+  // REST é exatamente isso. Aqui já quebrou com "Cannot read properties of
+  // undefined".
+  return blocosQueImportam(wod).flatMap((b) => (b.movimentos ?? []).map(umaLinha));
 }
 
 function daForca(exercicios: StrengthPayload["exercises"]): string[] {
@@ -107,7 +108,7 @@ function daForca(exercicios: StrengthPayload["exercises"]): string[] {
       return [
         reps != null ? `${usadas.length}×${reps}` : `${usadas.length} séries`,
         e.name,
-        peso > 0 ? `${Math.round(peso)} kg` : "",
+        peso > 0 ? `${numero(peso)} kg` : "",
       ]
         .filter(Boolean)
         .join("  ");
@@ -127,9 +128,7 @@ export function movimentosDoCartao(
   let linhas: string[] = [];
 
   if (Array.isArray(payload.blocos)) {
-    linhas = doCrossfit(payload.blocos as Bloco[]);
-  } else if (Array.isArray(payload.movements)) {
-    linhas = doWodAntigo(payload.movements as MovimentoAntigo[]);
+    linhas = doCrossfit(payload as unknown as WodPayload);
   } else if (kind === "strength" && Array.isArray(payload.exercises)) {
     linhas = daForca(payload.exercises as StrengthPayload["exercises"]);
   }

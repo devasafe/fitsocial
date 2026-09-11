@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { lerQuadro } from "../services/ai/lerQuadro.js";
 import { getAIProvider } from "../services/ai/index.js";
+import type { Movimento } from "../models/crossfit.js";
 
 /** Um quadro real, com tudo que costuma quebrar leitura automática:
  *  EMOM com intervalo quebrado, alternativa com "OU", revezamento, descanso
@@ -51,6 +52,22 @@ AMRAP + FOR TIME
 -40 BJO
 -20 C2B`;
 
+/** "21-15-9  Thruster  43/30 kg  (cada)" */
+function umaLinha(m: Movimento): string {
+  const v = m.volume;
+  const valor = v ? (Array.isArray(v.valor) ? v.valor.join("-") : String(v.valor)) : "";
+  const unidade = v && v.unidade !== "reps" ? ` ${v.unidade}` : "";
+  const carga = m.carga?.rx != null
+    ? `  ${m.carga.rx}${m.carga.rxF != null ? "/" + m.carga.rxF : ""} ${m.carga.unidade}`
+    : m.carga?.texto
+      ? `  ${m.carga.texto}`
+      : "";
+  const escopo = m.escopo !== "individual" ? `  (${m.escopo})` : "";
+  const series = m.series ? `${m.series}x` : "";
+
+  return `${series}${valor}${unidade}  ${m.nome}${carga}${escopo}`.trim();
+}
+
 async function main() {
   const caminho = process.argv[2];
   const texto = caminho ? readFileSync(caminho, "utf8") : EXEMPLO;
@@ -60,50 +77,29 @@ async function main() {
 
   const inicio = Date.now();
   const leitura = await lerQuadro(texto);
-  console.log(`\nleu em ${Date.now() - inicio}ms — ${leitura.blocos.length} blocos\n`);
+  console.log(
+    `\nleu em ${Date.now() - inicio}ms — ${leitura.blocos.length} blocos, time de ${leitura.tamanhoDoTime}\n`
+  );
 
   for (const [i, b] of leitura.blocos.entries()) {
-    const partes: string[] = [`${i + 1}. ${b.tipo}`];
+    const l = b.lido;
+    const estrutura = [
+      l?.familia,
+      l?.duracaoSec && `${l.duracaoSec}s`,
+      l?.timeCapSec && `cap ${l.timeCapSec}s`,
+      l?.intervaloSec && `janela ${l.intervaloSec}s`,
+      l?.rounds && `${l.rounds} rounds`,
+      l?.scoreSugerido && `score=${l.scoreSugerido}`,
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
-    if (b.tipo === "metcon") {
-      partes.push(b.formato);
-      if (b.nome) partes.push(`"${b.nome}"`);
-      if (b.grupo) partes.push(`grupo=${b.grupo}`);
-      if (b.equipe) partes.push(`equipe=${b.equipe.tamanho} ${b.equipe.modo}`);
-      const p = b.prescricao;
-      if (p.duracaoSec) partes.push(`${p.duracaoSec}s`);
-      if (p.timeCapSec) partes.push(`cap ${p.timeCapSec}s`);
-      if (p.intervaloSec) partes.push(`a cada ${p.intervaloSec}s`);
-      if (p.rounds) partes.push(`${p.rounds} rounds`);
-      console.log(partes.join(" · "));
-      for (const m of p.movimentos) {
-        const q = [
-          m.reps && `${m.reps} reps`,
-          m.repScheme?.join("-"),
-          m.distanciaM && `${m.distanciaM}m`,
-          m.calorias && `${m.calorias} cal`,
-          m.carga?.valor && `${m.carga.valor}${m.carga.unidade}`,
-          m.porPessoa && "(cada)",
-        ]
-          .filter(Boolean)
-          .join(" ");
-        console.log(`      - ${m.nome}${q ? "  " + q : ""}`);
-      }
-      // A regra que faz isto ser seguro.
-      if (b.resultado) console.log("      !! RESULTADO INVENTADO (deveria ter sido descartado)");
-    } else if (b.tipo === "descanso") {
-      console.log(`${partes.join(" · ")} · ${b.duracaoSec}s`);
-    } else if (b.tipo === "skill") {
-      console.log(`${partes.join(" · ")} · ${b.movimento}`);
-    } else if (b.tipo === "forca") {
-      console.log(`${partes.join(" · ")} · ${b.exercicios.map((e) => e.name).join(", ")}`);
-    } else {
-      if (b.formato) partes.push(b.formato);
-      if (b.intervaloSec) partes.push(`a cada ${b.intervaloSec}s`);
-      if (b.rounds) partes.push(`${b.rounds} rounds`);
-      console.log(partes.join(" · "));
-      for (const m of b.movimentos) console.log(`      - ${m.nome}  ${m.reps ?? ""}`);
-    }
+    console.log(`${i + 1}. "${b.modo}"${b.nome ? `  [${b.nome}]` : ""}`);
+    console.log(`      → ${estrutura}`);
+    for (const m of b.movimentos) console.log(`      - ${umaLinha(m)}`);
+
+    // A regra que faz isto ser seguro.
+    if (b.resultado) console.log("      !! RESULTADO INVENTADO (deveria ter sido descartado)");
   }
 
   if (leitura.observacao) console.log("\nobservação:", leitura.observacao);

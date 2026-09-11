@@ -2,7 +2,7 @@ import mongoose, { Schema, type HydratedDocument } from "mongoose";
 import { z } from "zod";
 import { ACTIVITY_KINDS, isValidSport } from "../services/sports.js";
 import { strengthPayloadSchema } from "./strength.js";
-import { wodPayloadV2Schema, wodPayloadV2Entrada } from "./crossfit.js";
+import { wodPayloadEntrada } from "./crossfit.js";
 
 // Força e CrossFit moram em arquivos próprios: o primeiro porque os dois o
 // usam, o segundo porque é o formato mais rico do projeto.
@@ -75,55 +75,19 @@ export const genericPayloadSchema = z.object({
 });
 export type GenericPayload = z.infer<typeof genericPayloadSchema>;
 
-// Movimento avulso de um WOD (composição do treino) — tudo opcional exceto o nome.
-export const wodMovementSchema = z.object({
-  name: z.string().min(1).max(80),
-  loadKg: z.number().min(0).max(1000).nullish(),
-  reps: z.number().int().min(0).max(100_000).nullish(),
-  timeSec: z.number().int().min(0).max(36_000).nullish(),
-});
-
-export const wodPayloadV1Schema = z.object({
-  name: z.string().min(1).max(80),
-  scoreType: z.enum([
-    "for_time",
-    "amrap",
-    "emom",
-    "rft",
-    "max_load",
-    "for_reps",
-    "tabata",
-    "chipper",
-  ]),
-  level: z.enum(["rx", "scaled", "adaptado"]).default("rx"),
-  resultTimeSec: z.number().int().min(0).max(36_000).nullish(),
-  resultRounds: z.number().min(0).max(1000).nullish(),
-  resultReps: z.number().int().min(0).max(100_000).nullish(),
-  resultLoadKg: z.number().min(0).max(1000).nullish(),
-  description: z.string().max(2000).nullish(),
-  // Bloco de força opcional — mesma forma do strength; de onde saem os 1RM (§6.1).
-  strengthBlock: strengthPayloadSchema.optional(),
-  // Composição do WOD movimento a movimento (descritiva): nome + carga/reps/tempo.
-  movements: z.array(wodMovementSchema).max(30).optional(),
-});
-export type WodPayloadV1 = z.infer<typeof wodPayloadV1Schema>;
-
 /**
- * Os dois formatos de WOD, e a ordem importa: v2 primeiro.
+ * O payload de um treino de CrossFit.
  *
- * O formato antigo (um WOD plano, com um bloco de força opcional pendurado)
- * continua aceito porque existe APK instalado mandando ele. Trocar o schema por
- * baixo quebraria o app no celular de quem não atualizou — e não há como
- * atualizar todo mundo de uma vez.
+ * Aqui viviam DOIS formatos, unidos: o v2 em blocos e um v1 plano, aceito
+ * porque havia APK instalado mandando ele. Os dois foram embora em 11/09/2026
+ * — o v1 com a decisão de não carregar compatibilidade com o APK 1.2.0, e o v2
+ * com a reescrita para `modo` em texto livre.
  *
- * A leitura normaliza os dois para a forma de blocos (services/crossfit.ts), de
- * modo que o resto do sistema conhece um formato só.
+ * Sobrou um formato só, e com ele sumiu a pergunta "de qual formato veio isto?"
+ * que atravessava métricas, PR, cards e detalhe.
  */
-// Entrada usa a versao com refine (ou tem bloco, ou tem o quadro escrito); a
-// leitura de dado ja gravado usa a solta, para nao recusar o que ja esta no
-// banco.
-export const wodPayloadSchema = z.union([wodPayloadV2Entrada, wodPayloadV1Schema]);
-export type WodPayload = z.infer<typeof wodPayloadSchema>;
+export const wodPayloadSchema = wodPayloadEntrada;
+export type WodPayload = z.infer<typeof wodPayloadEntrada>;
 
 // ---- Entrada de criação (união discriminada por kind) ----
 

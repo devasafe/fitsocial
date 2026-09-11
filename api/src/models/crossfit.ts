@@ -1,79 +1,135 @@
 import { z } from "zod";
-import { strengthExerciseSchema } from "./strength.js";
 
 // Modelo de um treino de CrossFit: blocos, na ordem em que aconteceram.
 //
 // Vive num arquivo próprio porque é o formato mais rico do projeto e Activity.ts
-// já carrega outros quatro. Ver docs/superpowers/specs/2026-09-10-crossfit-design.md.
+// já carrega outros quatro.
+//
+// ---------------------------------------------------------------------------
+// v3 — o que o coach escreveu manda; a estrutura é derivada
+// ---------------------------------------------------------------------------
+//
+// O v2 pedia que a pessoa escolhesse o tipo do bloco (aquecimento, skill,
+// força, metcon) e o formato (amrap, for_time, emom…) em dois enums, no
+// cadastro. Dois problemas, os dois reais:
+//
+//   1. O texto do quadro se perdia. Escolhido o enum, não dava mais para saber
+//      o que estava escrito lá — e portanto não dava para reinterpretar depois.
+//      Todo treino ficava congelado no entendimento do dia em que foi salvo.
+//   2. O enum é pedágio. "EMOM (1'15\") x 4" não é nenhuma das opções, e a
+//      pessoa era obrigada a mentir ou desistir.
+//
+// No v3 o `modo` é texto livre e é a FONTE DA VERDADE. O interpretador lê e
+// escreve o que entendeu em `lido`, que é cache: quando o interpretador
+// melhorar, roda de novo por cima do `modo` e todo treino antigo melhora junto.
+//
+// Ver docs/superpowers/specs/2026-09-11-cadastro-de-treino-briefing.md.
+// A regra que governa tudo, de lá: **o campo nunca bloqueia. A estrutura é
+// bônus, não pedágio.**
 
 // ---- Carga ----------------------------------------------------------------
 //
 // Nem todo movimento tem carga, e quando tem nem sempre é em quilos: "70 lb",
 // "50% do 1RM", "peso corporal" e "caixa de 20 in" são todos respostas válidas
-// para "quanto?". `valorKg` é derivado no servidor quando dá para converter — é
-// ele que o PR e os gráficos comparam, sem reinterpretar unidade a cada leitura.
+// para "quanto?".
+//
+// `rx` e `rxF` são as duas prescrições do quadro — o "43/30" escrito lá. Dois
+// campos, e não um texto "43/30", porque com um campo só o app nunca consegue
+// mostrar o peso certo para cada atleta nem ranquear por categoria, e essa
+// porta não reabre depois sem migração.
+//
+// Os campos `*Kg` são derivados no servidor quando dá para converter — são eles
+// que o PR e os gráficos comparam, sem reinterpretar unidade a cada leitura.
 
 export const UNIDADES_DE_CARGA = ["kg", "lb", "percent_1rm", "corporal", "livre"] as const;
 
 export const cargaSchema = z.object({
-  valor: z.number().min(0).max(10_000).nullish(),
+  /** A prescrição principal. No quadro misto "43/30", é o 43. */
+  rx: z.number().min(0).max(10_000).nullish(),
+  /** A segunda prescrição do quadro. No "43/30", é o 30. */
+  rxF: z.number().min(0).max(10_000).nullish(),
   unidade: z.enum(UNIDADES_DE_CARGA).default("kg"),
   /** Para o que não é número: "caixa de 20 in", "colete de 10 kg". */
   texto: z.string().max(60).nullish(),
-  valorKg: z.number().min(0).max(10_000).nullish(),
+  rxKg: z.number().min(0).max(10_000).nullish(),
+  rxFKg: z.number().min(0).max(10_000).nullish(),
 });
 export type Carga = z.infer<typeof cargaSchema>;
 
-// ---- Movimento ------------------------------------------------------------
+// ---- Volume ---------------------------------------------------------------
 //
-// A peça que faltava. O formato antigo só sabia nome + carga + reps + tempo, e
-// com isso "21-15-9", "400m Run" e "20 cal Row" não cabiam.
+// O v2 tinha cinco campos anuláveis — `reps`, `repScheme`, `distanciaM`,
+// `calorias`, `duracaoSec` — onde exatamente um deveria estar preenchido. Toda
+// leitura precisava testar os cinco na ordem certa, e nada impedia dois ao
+// mesmo tempo.
+//
+// Aqui é um campo com unidade. `valor` aceita lista porque "21-15-9" é uma
+// escada, e escada colada tem que virar escada — não três movimentos.
+
+export const UNIDADES_DE_VOLUME = ["reps", "seg", "metros", "cal"] as const;
+
+export const volumeSchema = z.object({
+  valor: z.union([
+    z.number().min(0).max(100_000),
+    z.array(z.number().min(0).max(10_000)).min(1).max(30),
+  ]),
+  unidade: z.enum(UNIDADES_DE_VOLUME).default("reps"),
+});
+export type Volume = z.infer<typeof volumeSchema>;
+
+// ---- Escopo ---------------------------------------------------------------
+//
+// Metade do quadro de um box é em dupla, e o esforço não é o mesmo: 20
+// Chest-to-Bar revezados entre dois não é 20 sozinho.
+//
+// No v2 isto vivia no BLOCO (`equipe.modo`), com um booleano `porPessoa` no
+// movimento. Por isso o quadro mais comum de todos — "400m Run together, 2
+// Rope Climb cada, 40 BJO" no MESMO bloco — não cabia: o bloco só aceitava um
+// modo para todos os movimentos.
+//
+// Aqui o escopo é de cada movimento. É o que muda a matemática do volume total
+// e do ranking; sem ele o app conta errado qualquer treino de dupla.
+
+export const ESCOPOS = [
+  /** Cada um faz o volume cheio. É o padrão, e o único que existe sozinho. */
+  "individual",
+  /** O volume é repartido entre o time ("Relay"): 40 burpees viram 20 e 20. */
+  "dividido",
+  /** O volume é POR atleta: total = valor × tamanho do time. */
+  "cada",
+  /** Fazem ao mesmo tempo e conta uma vez ("together"). */
+  "junto",
+] as const;
+export type Escopo = (typeof ESCOPOS)[number];
+
+// ---- Movimento ------------------------------------------------------------
 
 export const movimentoSchema = z.object({
-  nome: z.string().min(1).max(80),
-  /** Repetições fixas por round. */
-  reps: z.number().int().min(0).max(100_000).nullish(),
-  /** Repetições que MUDAM a cada round: [21, 15, 9]. */
-  repScheme: z.array(z.number().int().min(0).max(10_000)).max(30).nullish(),
-  distanciaM: z.number().min(0).max(100_000).nullish(),
-  calorias: z.number().int().min(0).max(10_000).nullish(),
-  duracaoSec: z.number().int().min(0).max(36_000).nullish(),
-  /** A carga que a PESSOA usou. O quadro quase nunca prescreve peso; quando
-   *  prescreve e ela escalou, isso vive em `escala.ajustes`. */
-  carga: cargaSchema.nullish(),
   /**
-   * "2 Rope Climb (cada)" — em treino de dupla, cada um faz a conta inteira,
-   * em vez de dividirem.
+   * O nome, e SÓ o nome.
    *
-   * Só faz sentido com `equipe` preenchida; sozinho não muda nada.
+   * O número não pode entrar aqui. Num campo só, o autocomplete acumula
+   * "10 Bíceps Curl", "12 Bíceps Curl" e "15 Bíceps Curl" como exercícios
+   * distintos, e o catálogo da pessoa apodrece em um mês. Quem junta os dois é
+   * a exibição, na hora de mostrar.
    */
-  porPessoa: z.boolean().nullish(),
+  nome: z.string().min(1).max(80),
+  /** Opcional de verdade: "Rope Climb" sem número é um movimento válido. */
+  volume: volumeSchema.nullish(),
+  /** O "3" de "3×10". Prescrição; o que saiu série a série é outro fluxo. */
+  series: z.number().int().min(0).max(200).nullish(),
+  carga: cargaSchema.nullish(),
+  /** Box jump, wall ball: a altura é prescrição, não observação. */
+  altura: z
+    .object({
+      valor: z.number().min(0).max(500),
+      unidade: z.enum(["cm", "in"]).default("cm"),
+    })
+    .nullish(),
+  escopo: z.enum(ESCOPOS).default("individual"),
   notas: z.string().max(300).nullish(),
 });
 export type Movimento = z.infer<typeof movimentoSchema>;
-
-// ---- Equipe ---------------------------------------------------------------
-//
-// Metade do quadro de um box é em dupla, e o esforço não é o mesmo: 20
-// Chest-to-Bar revezados entre dois não é 20 sozinho. Por isso o resultado de
-// equipe NÃO entra no mesmo recorde do individual — ver services/prEngine.ts.
-
-export const MODOS_DE_EQUIPE = [
-  /** "Relay": um trabalha enquanto o outro descansa. */
-  "revezamento",
-  /** "Together": fazem ao mesmo tempo, contam junto. */
-  "junto",
-  /** Dividem a conta como quiserem: 40 burpees viram 20 e 20. */
-  "dividido",
-] as const;
-
-export const equipeSchema = z.object({
-  tamanho: z.number().int().min(2).max(20),
-  modo: z.enum(MODOS_DE_EQUIPE),
-  /** Quem estava junto. Texto livre: nem todo parceiro tem conta no app. */
-  parceiros: z.array(z.string().min(1).max(80)).max(20).nullish(),
-});
-export type Equipe = z.infer<typeof equipeSchema>;
 
 // ---- Escala ---------------------------------------------------------------
 //
@@ -109,7 +165,15 @@ export type Escala = z.infer<typeof escalaSchema>;
 // servidor (services/crossfit.ts), senão dois apps em versões diferentes
 // gravariam números que não se comparam.
 
-export const TIPOS_DE_SCORE = ["tempo", "rounds_reps", "reps", "carga", "distancia"] as const;
+export const TIPOS_DE_SCORE = [
+  "tempo",
+  "rounds_reps",
+  "reps",
+  "carga",
+  "distancia",
+  /** "soma do pior round", "3 tentativas de 5" — o que não cabe nos de cima. */
+  "customizado",
+] as const;
 
 export const scoreSchema = z.object({
   tipo: z.enum(TIPOS_DE_SCORE),
@@ -120,6 +184,8 @@ export const scoreSchema = z.object({
   reps: z.number().int().min(0).max(100_000).nullish(),
   cargaKg: z.number().min(0).max(1000).nullish(),
   distanciaM: z.number().min(0).max(1_000_000).nullish(),
+  /** Só para `customizado`: o que esse número quer dizer. */
+  descricao: z.string().max(120).nullish(),
   /**
    * Estourou o time cap.
    *
@@ -130,132 +196,74 @@ export const scoreSchema = z.object({
 });
 export type Score = z.infer<typeof scoreSchema>;
 
-// ---- Blocos ---------------------------------------------------------------
+// ---- Leitura --------------------------------------------------------------
+//
+// O que o interpretador entendeu do `modo`. DERIVADO e descartável: nada aqui
+// é fonte de nada, e apagar tudo não perde informação — basta reinterpretar.
+//
+// `versao` existe para isso: quando o interpretador melhorar, uma varredura
+// acha todo bloco lido por versão antiga e reinterpreta. É o que o v2 não
+// permitia, porque lá o entendimento era a única cópia.
 
-export const TIPOS_DE_BLOCO = [
-  "aquecimento",
-  "mobilidade",
-  "skill",
-  "forca",
-  "metcon",
-  "descanso",
-  "cooldown",
-] as const;
-
-export const FORMATOS_LIVRES = ["emom", "circuito", "livre"] as const;
-
-/** Aquecimento, mobilidade e cooldown têm a mesma forma: a diferença é o rótulo. */
-export const blocoLivreSchema = z.object({
-  tipo: z.enum(["aquecimento", "mobilidade", "cooldown"]),
-  /**
-   * Aquecimento tem estrutura, não é lista solta: "EMOM 1'15\" × 4" é o
-   * formato mais comum de warm-up de box. Sem isto, o intervalo virava nota e
-   * a pessoa acabava registrando o aquecimento como se fosse WOD.
-   */
-  formato: z.enum(FORMATOS_LIVRES).nullish(),
-  /** EMOM = 60; o "1'15" do quadro = 75. */
-  intervaloSec: z.number().int().min(0).max(3600).nullish(),
-  duracaoSec: z.number().int().min(0).max(36_000).nullish(),
-  rounds: z.number().int().min(0).max(100).nullish(),
-  movimentos: z.array(movimentoSchema).max(30).default([]),
-  notas: z.string().max(1000).nullish(),
-});
-
-/**
- * O REST entre as partes do WOD.
- *
- * Existia descanso DENTRO de um metcon (o work/rest de um Tabata), não entre
- * blocos — e "REST 1'" aparece em quase todo quadro com mais de uma parte.
- * Virava nota solta, e some da linha do tempo do treino.
- */
-export const blocoDescansoSchema = z.object({
-  tipo: z.literal("descanso"),
-  duracaoSec: z.number().int().min(0).max(7200).nullish(),
-  notas: z.string().max(300).nullish(),
-});
-
-/** Praticar um movimento. `melhorSequencia` é o que vira recorde de skill. */
-export const blocoSkillSchema = z.object({
-  tipo: z.literal("skill"),
-  movimento: z.string().min(1).max(80),
-  formato: z.enum(["emom", "pratica_livre", "series"]).nullish(),
-  duracaoSec: z.number().int().min(0).max(36_000).nullish(),
-  intervaloSec: z.number().int().min(0).max(3600).nullish(),
-  series: z.number().int().min(0).max(200).nullish(),
-  repsPorSerie: z.number().int().min(0).max(10_000).nullish(),
-  /** "8 de 10 rounds completos" — tentativas=10, acertos=8. */
-  tentativas: z.number().int().min(0).max(1000).nullish(),
-  acertos: z.number().int().min(0).max(1000).nullish(),
-  /** "35 unbroken". */
-  melhorSequencia: z.number().int().min(0).max(100_000).nullish(),
-  carga: cargaSchema.nullish(),
-  notas: z.string().max(1000).nullish(),
-});
-
-/**
- * Força — o mesmo schema da musculação, sem uma linha nova.
- *
- * É o que faz série a série (Set 1 a 80 kg, Set 2 a 85…) e o motor de PR de 1RM
- * funcionarem aqui de graça, em vez de duplicar entidade.
- */
-export const blocoForcaSchema = z.object({
-  tipo: z.literal("forca"),
-  exercicios: z.array(strengthExerciseSchema).min(1).max(20),
-  notas: z.string().max(1000).nullish(),
-});
-
-export const FORMATOS_DE_METCON = [
-  "for_time",
+export const FAMILIAS_DE_MODO = [
   "amrap",
-  "emom",
+  "for_time",
   "rft",
+  "emom",
   "tabata",
   "intervalo",
   "max_reps",
   "max_load",
-  "outro",
+  "descanso",
+  /** Reconhecido como "sem estrutura de tempo": aquecimento, mobilidade, skill solto. */
+  "livre",
 ] as const;
+export type FamiliaDeModo = (typeof FAMILIAS_DE_MODO)[number];
 
-export const FAMILIAS_DE_BENCHMARK = ["girl", "hero", "open", "outro"] as const;
+/** A versão do interpretador. Subir aqui marca todo bloco antigo para releitura. */
+export const VERSAO_DO_INTERPRETADOR = 1;
 
-export const blocoMetconSchema = z.object({
-  tipo: z.literal("metcon"),
+export const leituraSchema = z.object({
+  familia: z.enum(FAMILIAS_DE_MODO).nullish(),
+  duracaoSec: z.number().int().min(0).max(36_000).nullish(),
+  timeCapSec: z.number().int().min(0).max(36_000).nullish(),
+  /** EMOM = 60, E2MOM = 120, o "1'15\"" do quadro = 75. */
+  intervaloSec: z.number().int().min(0).max(3600).nullish(),
+  rounds: z.number().int().min(0).max(1000).nullish(),
+  /** Sugestão, sempre sobrescrevível pela pessoa. `null` = ela escolhe. */
+  scoreSugerido: z.enum([...TIPOS_DE_SCORE, "nenhum"]).nullish(),
+  versao: z.number().int().min(0).max(1000).default(VERSAO_DO_INTERPRETADOR),
+});
+export type Leitura = z.infer<typeof leituraSchema>;
+
+// ---- Bloco ----------------------------------------------------------------
+//
+// Sem tipo no topo. Um bloco é um MODO e uma lista de movimentos — o que
+// diferencia aquecimento de WOD é o que está escrito no modo, e o
+// interpretador deduz o resto.
+//
+// O motor de PR mudou de pergunta junto com isto: em vez de "isso é metcon?",
+// ele pergunta "isso tem resultado?". Aquecimento nunca tem resultado, logo
+// nunca vira recorde — sem precisar de rótulo nenhum.
+
+export const blocoSchema = z.object({
+  /** O que o coach escreveu: "AMRAP 6'", "EMOM (1'15\") x 4", "REST 1'". */
+  modo: z.string().min(1).max(120),
+  /** "BLOCO A", "Fran", "Relay". Opcional. */
   nome: z.string().max(80).nullish(),
   /** Identidade estável do benchmark — é por ela que "Fran" compara com "Fran". */
   benchmark: z
     .object({
       slug: z.string().min(1).max(60),
-      familia: z.enum(FAMILIAS_DE_BENCHMARK).default("outro"),
+      familia: z.enum(["girl", "hero", "open", "outro"]).default("outro"),
     })
     .nullish(),
-  formato: z.enum(FORMATOS_DE_METCON),
-  formatoLivre: z.string().max(60).nullish(),
-
-  /** O que estava escrito no quadro. Separado do que aconteceu. */
-  prescricao: z.object({
-    rounds: z.number().int().min(0).max(1000).nullish(),
-    duracaoSec: z.number().int().min(0).max(36_000).nullish(),
-    timeCapSec: z.number().int().min(0).max(36_000).nullish(),
-    /** EMOM = 60, E2MOM = 120, "every 3 min" = 180. */
-    intervaloSec: z.number().int().min(0).max(3600).nullish(),
-    trabalhoSec: z.number().int().min(0).max(3600).nullish(),
-    descansoSec: z.number().int().min(0).max(3600).nullish(),
-    /** A ordem do array é a ordem do treino — é o que preserva um chipper. */
-    movimentos: z.array(movimentoSchema).max(40).default([]),
-  }),
-
+  /** A ordem do array é a ordem do treino — é o que preserva um chipper. */
+  movimentos: z.array(movimentoSchema).max(40).default([]),
+  /** Escrito no salvamento pelo interpretador. Nunca vem do cliente. */
+  lido: leituraSchema.nullish(),
   resultado: scoreSchema.nullish(),
   escala: escalaSchema.default({ nivel: "rx" }),
-  /** Preenchido quando foi em dupla ou equipe. Ausente = individual. */
-  equipe: equipeSchema.nullish(),
-  /**
-   * Junta partes do MESMO WOD.
-   *
-   * "AMRAP + FOR TIME" com Bloco A, descanso, Bloco B, descanso e um final é
-   * um treino só com três partes — e três resultados. Blocos que compartilham
-   * este rótulo aparecem juntos; a ordem no array dá o número da parte.
-   */
-  grupo: z.string().min(1).max(40).nullish(),
   /** Tempo ou reps por round. Opcional: alimenta análise de pacing depois. */
   rounds: z
     .array(
@@ -269,22 +277,13 @@ export const blocoMetconSchema = z.object({
     .nullish(),
   notas: z.string().max(1000).nullish(),
 });
-
-export const blocoSchema = z.discriminatedUnion("tipo", [
-  blocoLivreSchema.extend({ tipo: z.literal("aquecimento") }),
-  blocoLivreSchema.extend({ tipo: z.literal("mobilidade") }),
-  blocoLivreSchema.extend({ tipo: z.literal("cooldown") }),
-  blocoDescansoSchema,
-  blocoSkillSchema,
-  blocoForcaSchema,
-  blocoMetconSchema,
-]);
 export type Bloco = z.infer<typeof blocoSchema>;
 
 // ---- O payload ------------------------------------------------------------
 
-export const wodPayloadV2Schema = z.object({
-  v: z.literal(2),
+export const wodPayloadSchema = z.object({
+  v: z.literal(3),
+  nome: z.string().max(80).nullish(),
   box: z.string().max(80).nullish(),
   /**
    * O quadro, do jeito que estava escrito.
@@ -295,19 +294,25 @@ export const wodPayloadV2Schema = z.object({
    * registrável — e daqui a um ano ainda dá para saber o que o coach escreveu.
    */
   quadro: z.string().max(4000).nullish(),
-  // 12 era pouco para um quadro com aquecimento, skill, tres partes de WOD e
-  // os descansos entre elas.
-  //
-  // Sem mínimo: um treino colado do quadro cujo texto a leitura não conseguiu
-  // interpretar continua sendo um treino. O que não pode é vir vazio dos dois
-  // jeitos — daí o refine abaixo.
+  /** 1 = individual. Acima disso, o escopo de cada movimento passa a importar. */
+  tamanhoDoTime: z.number().int().min(1).max(20).default(1),
+  /** Quem estava junto. Texto livre: nem todo parceiro tem conta no app. */
+  parceiros: z.array(z.string().min(1).max(80)).max(20).nullish(),
+  /**
+   * 24 cabe um quadro com aquecimento, skill, três partes de WOD e os
+   * descansos entre elas.
+   *
+   * Sem mínimo: um treino colado do quadro cujo texto a leitura não conseguiu
+   * interpretar continua sendo um treino. O que não pode é vir vazio dos dois
+   * jeitos — daí o refine abaixo.
+   */
   blocos: z.array(blocoSchema).max(24).default([]),
 });
-export type WodPayloadV2 = z.infer<typeof wodPayloadV2Schema>;
+export type WodPayload = z.infer<typeof wodPayloadSchema>;
 
 /** O que a borda valida: ou tem bloco, ou tem o quadro escrito. Vazio dos dois
  *  lados não é treino nenhum. */
-export const wodPayloadV2Entrada = wodPayloadV2Schema.refine(
+export const wodPayloadEntrada = wodPayloadSchema.refine(
   (p) => p.blocos.length > 0 || !!p.quadro?.trim(),
   { message: "Monte ao menos um bloco, ou cole o quadro do treino" }
 );

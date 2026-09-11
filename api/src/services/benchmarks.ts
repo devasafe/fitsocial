@@ -34,7 +34,38 @@ export interface Benchmark {
   notaRx?: string;
 }
 
-const kg = (valor: number): Movimento["carga"] => ({ valor, unidade: "kg", valorKg: valor });
+// Construtores do catalogo. Sem eles cada entrada repetiria `escopo:
+// "individual"` e o `unidade` do volume - ruido que esconde o dado.
+const kg = (rx: number, rxF?: number): Movimento["carga"] => ({
+  rx,
+  rxF: rxF ?? null,
+  unidade: "kg",
+  rxKg: rx,
+  rxFKg: rxF ?? null,
+});
+
+const reps = (valor: number | number[]): Movimento["volume"] => ({ valor, unidade: "reps" });
+const metros = (valor: number): Movimento["volume"] => ({ valor, unidade: "metros" });
+const cal = (valor: number): Movimento["volume"] => ({ valor, unidade: "cal" });
+const seg = (valor: number): Movimento["volume"] => ({ valor, unidade: "seg" });
+
+/** Benchmark e prescricao individual: o escopo de time nao se aplica. */
+function mov(
+  nome: string,
+  volume?: Movimento["volume"],
+  carga?: Movimento["carga"],
+  notas?: string
+): Movimento {
+  return {
+    nome,
+    volume: volume ?? null,
+    carga: carga ?? null,
+    escopo: "individual",
+    series: null,
+    altura: null,
+    notas: notas ?? null,
+  };
+}
 
 export const BENCHMARKS: readonly Benchmark[] = [
   {
@@ -43,8 +74,8 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "girl",
     formato: "for_time",
     movimentos: [
-      { nome: "Thruster", repScheme: [21, 15, 9], carga: kg(43) },
-      { nome: "Pull Up", repScheme: [21, 15, 9] },
+      mov("Thruster", reps([21, 15, 9]), kg(43)),
+      mov("Pull Up", reps([21, 15, 9])),
     ],
     notaRx: "43 kg / 30 kg · pull-up",
   },
@@ -53,7 +84,7 @@ export const BENCHMARKS: readonly Benchmark[] = [
     nome: "Grace",
     familia: "girl",
     formato: "for_time",
-    movimentos: [{ nome: "Clean & Jerk", reps: 30, carga: kg(61) }],
+    movimentos: [mov("Clean & Jerk", reps(30), kg(61))],
     notaRx: "61 kg / 43 kg",
   },
   {
@@ -61,7 +92,7 @@ export const BENCHMARKS: readonly Benchmark[] = [
     nome: "Isabel",
     familia: "girl",
     formato: "for_time",
-    movimentos: [{ nome: "Snatch", reps: 30, carga: kg(61) }],
+    movimentos: [mov("Snatch", reps(30), kg(61))],
     notaRx: "61 kg / 43 kg",
   },
   {
@@ -71,9 +102,9 @@ export const BENCHMARKS: readonly Benchmark[] = [
     formato: "rft",
     rounds: 3,
     movimentos: [
-      { nome: "Run", distanciaM: 400 },
-      { nome: "Kettlebell Swing", reps: 21, carga: kg(24) },
-      { nome: "Pull Up", reps: 12 },
+      mov("Run", metros(400)),
+      mov("Kettlebell Swing", reps(21), kg(24)),
+      mov("Pull Up", reps(12)),
     ],
     notaRx: "24 kg / 16 kg",
   },
@@ -84,9 +115,9 @@ export const BENCHMARKS: readonly Benchmark[] = [
     formato: "amrap",
     duracaoSec: 20 * 60,
     movimentos: [
-      { nome: "Pull Up", reps: 5 },
-      { nome: "Push Up", reps: 10 },
-      { nome: "Air Squat", reps: 15 },
+      mov("Pull Up", reps(5)),
+      mov("Push Up", reps(10)),
+      mov("Air Squat", reps(15)),
     ],
   },
   {
@@ -95,8 +126,8 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "girl",
     formato: "for_time",
     movimentos: [
-      { nome: "Double Under", repScheme: [50, 40, 30, 20, 10] },
-      { nome: "Sit Up", repScheme: [50, 40, 30, 20, 10] },
+      mov("Double Under", reps([50, 40, 30, 20, 10])),
+      mov("Sit Up", reps([50, 40, 30, 20, 10])),
     ],
   },
   {
@@ -105,8 +136,8 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "girl",
     formato: "for_time",
     movimentos: [
-      { nome: "Deadlift", repScheme: [21, 15, 9], carga: kg(102) },
-      { nome: "Handstand Push Up", repScheme: [21, 15, 9] },
+      mov("Deadlift", reps([21, 15, 9]), kg(102)),
+      mov("Handstand Push Up", reps([21, 15, 9])),
     ],
     notaRx: "102 kg / 70 kg",
   },
@@ -115,7 +146,7 @@ export const BENCHMARKS: readonly Benchmark[] = [
     nome: "Karen",
     familia: "girl",
     formato: "for_time",
-    movimentos: [{ nome: "Wall Ball", reps: 150, carga: kg(9) }],
+    movimentos: [mov("Wall Ball", reps(150), kg(9))],
     notaRx: "9 kg / 6 kg",
   },
   {
@@ -124,8 +155,8 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "girl",
     formato: "for_time",
     movimentos: [
-      { nome: "Clean", repScheme: [21, 15, 9], carga: kg(61) },
-      { nome: "Ring Dip", repScheme: [21, 15, 9] },
+      mov("Clean", reps([21, 15, 9]), kg(61)),
+      mov("Ring Dip", reps([21, 15, 9])),
     ],
   },
   {
@@ -134,11 +165,11 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "hero",
     formato: "for_time",
     movimentos: [
-      { nome: "Run", distanciaM: 1609 },
-      { nome: "Pull Up", reps: 100 },
-      { nome: "Push Up", reps: 200 },
-      { nome: "Air Squat", reps: 300 },
-      { nome: "Run", distanciaM: 1609 },
+      mov("Run", metros(1609)),
+      mov("Pull Up", reps(100)),
+      mov("Push Up", reps(200)),
+      mov("Air Squat", reps(300)),
+      mov("Run", metros(1609)),
     ],
     notaRx: "com colete de 9 kg / 6 kg",
   },
@@ -149,9 +180,9 @@ export const BENCHMARKS: readonly Benchmark[] = [
     formato: "rft",
     rounds: 5,
     movimentos: [
-      { nome: "Deadlift", reps: 12, carga: kg(70) },
-      { nome: "Hang Power Clean", reps: 9, carga: kg(70) },
-      { nome: "Push Jerk", reps: 6, carga: kg(70) },
+      mov("Deadlift", reps(12), kg(70)),
+      mov("Hang Power Clean", reps(9), kg(70)),
+      mov("Push Jerk", reps(6), kg(70)),
     ],
     notaRx: "70 kg / 47 kg",
   },
@@ -161,9 +192,9 @@ export const BENCHMARKS: readonly Benchmark[] = [
     familia: "hero",
     formato: "for_time",
     movimentos: [
-      { nome: "Handstand Push Up", repScheme: [21, 15, 9] },
-      { nome: "Ring Dip", repScheme: [21, 15, 9] },
-      { nome: "Push Up", repScheme: [21, 15, 9] },
+      mov("Handstand Push Up", reps([21, 15, 9])),
+      mov("Ring Dip", reps([21, 15, 9])),
+      mov("Push Up", reps([21, 15, 9])),
     ],
   },
   {
@@ -174,11 +205,11 @@ export const BENCHMARKS: readonly Benchmark[] = [
     rounds: 3,
     duracaoSec: 17 * 60,
     movimentos: [
-      { nome: "Wall Ball", carga: kg(9) },
-      { nome: "Sumo Deadlift High Pull", carga: kg(35) },
-      { nome: "Box Jump" },
-      { nome: "Push Press", carga: kg(35) },
-      { nome: "Row" },
+      mov("Wall Ball", undefined, kg(9)),
+      mov("Sumo Deadlift High Pull", undefined, kg(35)),
+      mov("Box Jump"),
+      mov("Push Press", undefined, kg(35)),
+      mov("Row"),
     ],
   },
 ];

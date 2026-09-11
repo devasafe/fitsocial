@@ -1,10 +1,11 @@
 import type { StrengthPayload, ActivityCreateInput } from "../models/Activity.js";
 import {
   normalizarWod,
-  metconPrincipal,
-  blocosDoTipo,
+  blocoPrincipal,
   movimentosDoTreino,
   fecharScore,
+  volumeTotal,
+  cargaEmKg,
 } from "./crossfit.js";
 
 export interface StrengthMetrics {
@@ -47,34 +48,45 @@ export function computeMetrics(input: ActivityCreateInput): Record<string, unkno
  */
 export function computeWodMetrics(payload: unknown, durationSec: number): Record<string, unknown> {
   const wod = normalizarWod(payload);
-  const metcon = metconPrincipal(wod);
+  const metcon = blocoPrincipal(wod);
 
-  // Volume vem dos blocos de força, com o MESMO cálculo da musculação: só
-  // séries válidas entram.
+  // Volume prescrito: reps × carga, por movimento, já considerando o escopo do
+  // time (é para isso que `volumeTotal` existe).
+  //
+  // No v2 isto vinha das séries REALIZADAS de um bloco de força, que o v3 não
+  // guarda mais — prescrição e resultado passaram a ser coisas separadas, e o
+  // registro série a série é outro fluxo. O número mudou de significado: era
+  // "o que foi levantado", virou "o que estava no quadro".
   let volumeTotalKg = 0;
   let seriesValidas = 0;
-  for (const bloco of blocosDoTipo(wod, "forca")) {
-    const m = computeStrengthMetrics({ variant: "musculacao", exercises: bloco.exercicios });
-    volumeTotalKg += m.volumeTotalKg;
-    seriesValidas += m.seriesValidas;
+  for (const bloco of wod.blocos) {
+    for (const m of bloco.movimentos) {
+      const reps = volumeTotal(m, wod.tamanhoDoTime);
+      const kg = cargaEmKg(m.carga);
+      const series = m.series ?? 1;
+      if (reps != null && kg != null && m.volume?.unidade === "reps") {
+        volumeTotalKg += reps * kg * series;
+        seriesValidas += series;
+      }
+    }
   }
 
-  const score = metcon?.resultado
-    ? fecharScore(metcon.resultado, metcon.prescricao.movimentos)
-    : null;
+  const score = metcon?.resultado ? fecharScore(metcon.resultado, metcon.movimentos) : null;
 
   return {
     minutes: Math.round(durationSec / 60),
     volumeTotalKg,
     seriesValidas,
-    blocos: wod.blocos.map((b) => b.tipo),
+    // O que o interpretador entendeu de cada bloco. Era o `tipo` escolhido no
+    // cadastro; agora é derivado do que o coach escreveu.
+    blocos: wod.blocos.map((b) => b.lido?.familia ?? "livre"),
     movimentos: movimentosDoTreino(wod),
     ...(metcon
       ? {
           wod: {
             slug: metcon.benchmark?.slug ?? null,
             familia: metcon.benchmark?.familia ?? null,
-            formato: metcon.formato,
+            formato: metcon.lido?.familia ?? "livre",
             escala: metcon.escala.nivel,
             scoreTipo: score?.tipo ?? null,
             scoreValor: score?.valor ?? null,

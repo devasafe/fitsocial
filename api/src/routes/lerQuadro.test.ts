@@ -62,35 +62,29 @@ WOD
 
 describe("Ler o quadro da aula", () => {
   it("devolve os blocos montados e NAO grava nada", async () => {
+    // O modelo TRANSCREVE: copia o modo e separa movimentos. Quem deduz
+    // estrutura e o interpretador, no servidor.
     modelo.resposta = JSON.stringify({
       box: null,
+      tamanhoDoTime: 2,
       blocos: [
         {
-          tipo: "aquecimento",
-          formato: "emom",
-          intervaloSec: 75,
-          rounds: 4,
+          modo: 'EMOM (1\'15") x 4',
+          nome: "WARM-UP",
           movimentos: [
-            { nome: "Beat Swing", reps: 4 },
-            { nome: "Pull Up", reps: 2 },
+            { nome: "Beat Swing", volume: { valor: 4, unidade: "reps" } },
+            { nome: "Pull Up", volume: { valor: 2, unidade: "reps" } },
           ],
         },
         {
-          tipo: "metcon",
+          modo: "AMRAP 6'",
           nome: "Relay",
-          grupo: "WOD",
-          formato: "amrap",
-          equipe: { tamanho: 2, modo: "revezamento" },
-          prescricao: {
-            duracaoSec: 360,
-            movimentos: [
-              { nome: "Run", distanciaM: 100 },
-              { nome: "Rope Climb", reps: 2 },
-            ],
-          },
-          escala: { nivel: "rx" },
+          movimentos: [
+            { nome: "Run", volume: { valor: 100, unidade: "metros" }, escopo: "dividido" },
+            { nome: "Rope Climb", volume: { valor: 2, unidade: "reps" }, escopo: "dividido" },
+          ],
         },
-        { tipo: "descanso", duracaoSec: 60 },
+        { modo: "REST 1'", movimentos: [] },
       ],
       observacao: "",
     });
@@ -98,8 +92,17 @@ describe("Ler o quadro da aula", () => {
     const r = await ler(QUADRO_COLADO).expect(200);
 
     expect(r.body.data.blocos).toHaveLength(3);
-    expect(r.body.data.blocos[0]).toMatchObject({ formato: "emom", intervaloSec: 75, rounds: 4 });
-    expect(r.body.data.blocos[2]).toMatchObject({ tipo: "descanso", duracaoSec: 60 });
+    expect(r.body.data.tamanhoDoTime).toBe(2);
+
+    // O modo chega como foi escrito...
+    expect(r.body.data.blocos[0].modo).toBe('EMOM (1\'15") x 4');
+    // ...e a estrutura vem do interpretador, nao do modelo.
+    expect(r.body.data.blocos[0].lido).toMatchObject({
+      familia: "emom",
+      intervaloSec: 75,
+      rounds: 4,
+    });
+    expect(r.body.data.blocos[2].lido).toMatchObject({ familia: "descanso", duracaoSec: 60 });
 
     // Quem grava é a pessoa, depois de conferir.
     expect(await Activity.countDocuments({})).toBe(0);
@@ -109,11 +112,9 @@ describe("Ler o quadro da aula", () => {
     modelo.resposta = JSON.stringify({
       blocos: [
         {
-          tipo: "metcon",
+          modo: "21-15-9",
           nome: "Fran",
-          formato: "for_time",
-          prescricao: { movimentos: [{ nome: "Thruster", repScheme: [21, 15, 9] }] },
-          escala: { nivel: "rx" },
+          movimentos: [{ nome: "Thruster", volume: { valor: [21, 15, 9], unidade: "reps" } }],
           // O quadro NÃO tem isto. Se passasse, viraria um recorde de 5:32 que
           // a pessoa nunca fez, no histórico que ela usa para saber se evoluiu.
           resultado: { tipo: "tempo", tempoSec: 332 },
@@ -174,14 +175,15 @@ describe("Registrar o treino colado", () => {
         kind: "wod",
         date: "2026-09-10",
         payload: {
-          v: 2,
+          v: 3,
           quadro: QUADRO_COLADO,
           blocos: [
             {
-              tipo: "metcon",
+              modo: "AMRAP 6'",
               nome: "Relay",
-              formato: "amrap",
-              prescricao: { duracaoSec: 360, movimentos: [{ nome: "Run", distanciaM: 100 }] },
+              movimentos: [
+                { nome: "Run", volume: { valor: 100, unidade: "metros" }, escopo: "dividido" },
+              ],
               resultado: { tipo: "rounds_reps", rounds: 7, repsExtras: 1 },
               escala: { nivel: "rx" },
             },
@@ -205,7 +207,7 @@ describe("Registrar o treino colado", () => {
         sportId: "crossfit",
         kind: "wod",
         date: "2026-09-10",
-        payload: { v: 2, quadro: QUADRO_COLADO, blocos: [] },
+        payload: { v: 3, quadro: QUADRO_COLADO, blocos: [] },
       })
       .expect(201);
   });
@@ -214,7 +216,7 @@ describe("Registrar o treino colado", () => {
     const r = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${token}`)
-      .send({ sportId: "crossfit", kind: "wod", date: "2026-09-10", payload: { v: 2, blocos: [] } });
+      .send({ sportId: "crossfit", kind: "wod", date: "2026-09-10", payload: { v: 3, blocos: [] } });
 
     expect(r.status).toBe(400);
   });

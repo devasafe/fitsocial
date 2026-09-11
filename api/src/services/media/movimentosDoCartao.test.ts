@@ -1,94 +1,134 @@
 import { describe, it, expect } from "vitest";
 import { movimentosDoCartao } from "./movimentosDoCartao.js";
 
-describe("movimentosDoCartao", () => {
-  it("formata o metcon v2 com repScheme e carga", () => {
-    const linhas = movimentosDoCartao("wod", {
-      blocos: [
-        {
-          tipo: "metcon",
-          formato: "for_time",
-          escala: { nivel: "rx" },
-          prescricao: {
-            movimentos: [
-              { nome: "Thruster", repScheme: [21, 15, 9], carga: { valor: 43, unidade: "kg" } },
-              { nome: "Pull Up", repScheme: [21, 15, 9] },
-            ],
-          },
-        },
-      ],
-    });
+/** Um bloco cru, como ele chega do Mongo: sem `lido`, sem defaults do zod. */
+const bloco = (modo: string, movimentos: unknown[], extra: object = {}) => ({
+  modo,
+  movimentos,
+  ...extra,
+});
 
-    expect(linhas).toEqual(["21-15-9  Thruster  43 kg", "21-15-9  Pull Up"]);
+const wod = (blocos: unknown[]) => ({ v: 3, blocos });
+
+describe("movimentosDoCartao", () => {
+  it("formata a escada com as duas cargas do quadro", () => {
+    const linhas = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco(
+          "21-15-9",
+          [
+            {
+              nome: "Thruster",
+              volume: { valor: [21, 15, 9], unidade: "reps" },
+              carga: { rx: 43, rxF: 30, unidade: "kg" },
+              escopo: "individual",
+            },
+            {
+              nome: "Pull Up",
+              volume: { valor: [21, 15, 9], unidade: "reps" },
+              escopo: "individual",
+            },
+          ],
+          { resultado: { tipo: "tempo", tempoSec: 332 } }
+        ),
+      ])
+    );
+
+    expect(linhas).toEqual(["21-15-9  Thruster  43/30 kg", "21-15-9  Pull Up"]);
   });
 
-  it("usa distância, calorias e duração quando não há reps", () => {
-    const linhas = movimentosDoCartao("wod", {
-      blocos: [
-        {
-          tipo: "metcon",
-          prescricao: {
-            movimentos: [
-              { nome: "Run", distanciaM: 400 },
-              { nome: "Row", calorias: 20 },
-              { nome: "Plank", duracaoSec: 90 },
-            ],
-          },
-        },
-      ],
-    });
+  it("usa a unidade do volume, e não um campo por medida", () => {
+    const linhas = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("FOR TIME", [
+          { nome: "Run", volume: { valor: 400, unidade: "metros" }, escopo: "individual" },
+          { nome: "Row", volume: { valor: 20, unidade: "cal" }, escopo: "individual" },
+          { nome: "Plank", volume: { valor: 90, unidade: "seg" }, escopo: "individual" },
+        ]),
+      ])
+    );
 
     expect(linhas).toEqual(["400 m  Run", "20 cal  Row", "1:30  Plank"]);
   });
 
-  it("marca o que cada um faz inteiro em treino de dupla", () => {
-    const [linha] = movimentosDoCartao("wod", {
-      blocos: [
-        {
-          tipo: "metcon",
-          equipe: { tamanho: 2, modo: "revezamento" },
-          prescricao: { movimentos: [{ nome: "Rope Climb", reps: 2, porPessoa: true }] },
-        },
-      ],
-    });
+  it("mostra o escopo quando ele muda a conta", () => {
+    const linhas = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("FOR TIME 7'", [
+          { nome: "Run", volume: { valor: 400, unidade: "metros" }, escopo: "junto" },
+          { nome: "Rope Climb", volume: { valor: 2, unidade: "reps" }, escopo: "cada" },
+          { nome: "BJO", volume: { valor: 40, unidade: "reps" }, escopo: "dividido" },
+        ]),
+      ])
+    );
 
-    expect(linha).toBe("2  Rope Climb  (cada)");
+    expect(linhas[0]).toBe("400 m  Run  (junto)");
+    expect(linhas[1]).toBe("2  Rope Climb  (cada)");
+    // "dividido" é o comportamento esperado de um Relay: não precisa dizer.
+    expect(linhas[2]).toBe("40  BJO");
   });
 
-  it("deixa de fora aquecimento, técnica e descanso", () => {
-    const linhas = movimentosDoCartao("wod", {
-      blocos: [
-        { tipo: "aquecimento", movimentos: [{ nome: "Beat Swing", reps: 4 }] },
-        { tipo: "skill", movimento: "Rope Climb" },
-        { tipo: "descanso", duracaoSec: 60 },
-        { tipo: "metcon", prescricao: { movimentos: [{ nome: "Burpee", reps: 20 }] } },
-      ],
-    });
+  it("mostra os blocos COM resultado, e ignora o resto", () => {
+    const linhas = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("WARM-UP", [{ nome: "Beat Swing", volume: { valor: 4, unidade: "reps" } }]),
+        bloco("REST 1'", []),
+        bloco("AMRAP 6'", [{ nome: "Burpee", volume: { valor: 20, unidade: "reps" } }], {
+          resultado: { tipo: "rounds_reps", rounds: 7 },
+        }),
+      ])
+    );
 
     expect(linhas).toEqual(["20  Burpee"]);
   });
 
-  it("junta os movimentos de todos os metcons, na ordem", () => {
-    const linhas = movimentosDoCartao("wod", {
-      blocos: [
-        { tipo: "metcon", prescricao: { movimentos: [{ nome: "Run", distanciaM: 100 }] } },
-        { tipo: "descanso", duracaoSec: 60 },
-        { tipo: "metcon", prescricao: { movimentos: [{ nome: "C2B", reps: 10 }] } },
-      ],
-    });
+  it("sem resultado nenhum, deixa de fora descanso e aquecimento", () => {
+    const linhas = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("WARM-UP", [{ nome: "Beat Swing", volume: { valor: 4, unidade: "reps" } }], {
+          lido: { familia: "livre", versao: 1 },
+        }),
+        bloco("REST 1'", [], { lido: { familia: "descanso", versao: 1 } }),
+        bloco("AMRAP 6'", [{ nome: "Burpee", volume: { valor: 20, unidade: "reps" } }], {
+          lido: { familia: "amrap", versao: 1 },
+        }),
+      ])
+    );
 
-    expect(linhas).toEqual(["100 m  Run", "10  C2B"]);
+    expect(linhas).toEqual(["20  Burpee"]);
   });
 
-  it("lê o WOD plano que o APK antigo ainda grava", () => {
-    const linhas = movimentosDoCartao("wod", {
-      movements: [
-        { name: "Thruster", reps: 45, loadKg: 43 },
-        { name: "Pull Up", reps: 45 },
-      ],
-    });
+  it("bloco sem movimentos não derruba o cartão", () => {
+    // O payload chega CRU do Mongo, sem os defaults do zod: `movimentos` pode
+    // simplesmente não existir. Ja quebrou aqui com "Cannot read properties of
+    // undefined".
+    expect(() =>
+      movimentosDoCartao("wod", { v: 3, blocos: [{ modo: "REST 1'" }] })
+    ).not.toThrow();
+  });
 
-    expect(linhas).toEqual(["45  Thruster  43 kg", "45  Pull Up"]);
+  it("séries aparecem quando o quadro prescreve", () => {
+    const [linha] = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("SKILL / STRENGTH", [
+          {
+            nome: "Back Squat",
+            series: 5,
+            volume: { valor: 5, unidade: "reps" },
+            carga: { rx: 100, unidade: "kg" },
+            escopo: "individual",
+          },
+        ]),
+      ])
+    );
+
+    expect(linha).toBe("5×5  Back Squat  100 kg");
   });
 
   it("resume força em séries × reps, ignorando aquecimento", () => {
@@ -105,20 +145,23 @@ describe("movimentosDoCartao", () => {
       ],
     });
 
-    expect(linhas).toEqual(["2×10  Supino  63 kg"]);
+    expect(linhas).toEqual(["2×10  Supino  62,5 kg"]);
   });
 
   it("não inventa carga em peso corporal", () => {
-    const [linha] = movimentosDoCartao("wod", {
-      blocos: [
-        {
-          tipo: "metcon",
-          prescricao: {
-            movimentos: [{ nome: "Push Up", reps: 30, carga: { valor: 0, unidade: "corporal" } }],
+    const [linha] = movimentosDoCartao(
+      "wod",
+      wod([
+        bloco("AMRAP 10'", [
+          {
+            nome: "Push Up",
+            volume: { valor: 30, unidade: "reps" },
+            carga: { rx: 0, unidade: "corporal" },
+            escopo: "individual",
           },
-        },
-      ],
-    });
+        ]),
+      ])
+    );
 
     expect(linha).toBe("30  Push Up");
   });
@@ -129,11 +172,12 @@ describe("movimentosDoCartao", () => {
   });
 
   it("corta em oito: o cartão não é a ficha do treino", () => {
-    const muitos = Array.from({ length: 14 }, (_, i) => ({ nome: `Mov ${i}`, reps: 10 }));
-    const linhas = movimentosDoCartao("wod", {
-      blocos: [{ tipo: "metcon", prescricao: { movimentos: muitos } }],
-    });
+    const muitos = Array.from({ length: 14 }, (_, i) => ({
+      nome: `Mov ${i}`,
+      volume: { valor: 10, unidade: "reps" },
+      escopo: "individual",
+    }));
 
-    expect(linhas).toHaveLength(8);
+    expect(movimentosDoCartao("wod", wod([bloco("FOR TIME", muitos)]))).toHaveLength(8);
   });
 });

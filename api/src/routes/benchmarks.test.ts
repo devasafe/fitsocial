@@ -46,7 +46,7 @@ function fazerWod(
     kind: "wod",
     startedAt: new Date(Date.now() - opts.dias * 86_400_000),
     durationSec: 600,
-    payload: { v: 2, blocos: [] },
+    payload: { v: 3, quadro: "WOD", blocos: [] },
     metrics: {
       wod: {
         slug: opts.slug,
@@ -135,7 +135,7 @@ describe("Histórico de benchmark", () => {
       sportId: "crossfit",
       kind: "wod",
       startedAt: new Date(),
-      payload: { v: 2, blocos: [] },
+      payload: { v: 3, quadro: "WOD", blocos: [] },
       metrics: { wod: { slug: null, escala: "rx", scoreValor: 300 } },
     });
 

@@ -204,21 +204,23 @@ describe("Cartao para compartilhar fora do app", () => {
       date: "2026-09-10",
       durationSec: 900,
       payload: {
+        v: 3,
+        tamanhoDoTime: 2,
         blocos: [
-          { tipo: "aquecimento", movimentos: [{ nome: "Beat Swing", reps: 4 }] },
-          { tipo: "descanso", duracaoSec: 60 },
           {
-            tipo: "metcon",
-            formato: "amrap",
+            modo: "WARM-UP",
+            movimentos: [{ nome: "Beat Swing", volume: { valor: 4, unidade: "reps" } }],
+            lido: { familia: "livre", versao: 1 },
+          },
+          { modo: "REST 1'", movimentos: [], lido: { familia: "descanso", versao: 1 } },
+          {
+            modo: "AMRAP 6'",
+            nome: "Relay",
             escala: { nivel: "rx" },
-            equipe: { tamanho: 2, modo: "revezamento" },
-            prescricao: {
-              duracaoSec: 360,
-              movimentos: [
-                { nome: "Run", distanciaM: 100 },
-                { nome: "Rope Climb", reps: 2, porPessoa: true },
-              ],
-            },
+            movimentos: [
+              { nome: "Run", volume: { valor: 100, unidade: "metros" }, escopo: "dividido" },
+              { nome: "Rope Climb", volume: { valor: 2, unidade: "reps" }, escopo: "cada" },
+            ],
             resultado: { tipo: "rounds_reps", rounds: 7, repsExtras: 1 },
           },
         ],

@@ -62,24 +62,55 @@ describe("activityCreateSchema — formatos da Fase 2b", () => {
     ).toThrow();
   });
 
-  it("aceita wod com bloco de força opcional", () => {
+  it("aceita wod em blocos, com o modo como está escrito", () => {
     const parsed = activityCreateSchema.parse({
       sportId: "crossfit",
       kind: "wod",
       payload: {
-        name: "Fran",
-        scoreType: "for_time",
-        level: "rx",
-        resultTimeSec: 252,
-        strengthBlock: { exercises: [{ name: "Back Squat", sets: [{ weightKg: 100, reps: 3 }] }] },
+        v: 3,
+        blocos: [
+          {
+            modo: "21-15-9",
+            nome: "Fran",
+            movimentos: [
+              {
+                nome: "Thruster",
+                volume: { valor: [21, 15, 9], unidade: "reps" },
+                carga: { rx: 43, rxF: 30, unidade: "kg" },
+              },
+            ],
+            resultado: { tipo: "tempo", tempoSec: 252 },
+          },
+        ],
       },
     });
+
     expect(parsed.kind).toBe("wod");
-    // O payload de wod virou união: o formato antigo continua aceito, e quem
-    // lê precisa dizer qual dos dois tem em mãos.
-    if (parsed.kind === "wod" && !("v" in parsed.payload)) {
-      expect(parsed.payload.level).toBe("rx");
+    if (parsed.kind === "wod") {
+      expect(parsed.payload.blocos[0].modo).toBe("21-15-9");
+      // O escopo tem padrão: quem registra sozinho nunca pensa nele.
+      expect(parsed.payload.blocos[0].movimentos[0].escopo).toBe("individual");
     }
+  });
+
+  it("wod sem bloco nenhum é aceito se o quadro foi colado", () => {
+    // A regra do briefing: o campo nunca bloqueia. Um quadro que a leitura não
+    // conseguiu interpretar continua sendo um treino.
+    const parsed = activityCreateSchema.parse({
+      sportId: "crossfit",
+      kind: "wod",
+      payload: { v: 3, quadro: "AMRAP 20'\n5 Pull Up\n10 Push Up\n15 Air Squat", blocos: [] },
+    });
+    expect(parsed.kind).toBe("wod");
+
+    // Vazio dos dois lados, porém, não é treino nenhum.
+    expect(() =>
+      activityCreateSchema.parse({
+        sportId: "crossfit",
+        kind: "wod",
+        payload: { v: 3, blocos: [] },
+      })
+    ).toThrow();
   });
 
   it("aceita generic e exige activityName; limita a 3 métricas custom", () => {
