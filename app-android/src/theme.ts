@@ -22,10 +22,10 @@ export const colors = {
   textDisabled: "#4A5049",
 
   // Marca
-  lime: "#C8FA4B",
-  limeDim: "#9FCC33",
+  lime: "#3BCC06",
+  limeDim: "#2E9E05",
   onLime: "#0E1310",
-  primary: "#C8FA4B", // alias legado
+  primary: "#3BCC06", // alias legado
   primaryText: "#0E1310", // alias legado
 
   // Semântica (o positivo já é o lima)

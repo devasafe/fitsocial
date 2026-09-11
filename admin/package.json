@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Painel administrativo do FitSocial",
+  "description": "Painel administrativo do RUMO",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

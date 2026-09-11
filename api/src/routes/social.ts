@@ -418,7 +418,7 @@ socialRouter.post(
           atividade?.kind,
           atividade?.payload as Record<string, unknown> | undefined
         ),
-        cor: (resumo && getSport(resumo.sportId)?.color) || "#C8FA4B",
+        cor: (resumo && getSport(resumo.sportId)?.color) || "#3BCC06",
         percurso,
         autor: autor.name,
       },
