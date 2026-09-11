@@ -33,6 +33,9 @@ afterAll(async () => {
 
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
+/** So o caminho: o host vem da requisicao, e o supertest muda de porta. */
+const caminhoDe = (url: string) => url.replace(/^https?:\/\/[^/]+/, "");
+
 async function postComCorrida(token: string, userId: string) {
   const atividade = await Activity.create({
     user: new mongoose.Types.ObjectId(userId),
@@ -108,6 +111,124 @@ describe("Cartao para compartilhar fora do app", () => {
       .post("/social/posts")
       .set(auth(dono.token))
       .send({ text: "so um texto, sem treino nenhum" })
+      .expect(201);
+
+    await request(app)
+      .post(`/social/posts/${criado.body.post.id}/cartao`)
+      .set(auth(dono.token))
+      .expect(200);
+  });
+
+  it("sem foto, qualquer desenho escolhido vira o tipografico", async () => {
+    const id = await postComCorrida(dono.token, dono.id);
+
+    // O app manda a preferencia guardada da pessoa; nao ha foto para sobrepor.
+    // Responder "foto" faria a previa mostrar um desenho e entregar outro.
+    const r = await request(app)
+      .post(`/social/posts/${id}/cartao?formato=story&layout=cartao`)
+      .set(auth(dono.token))
+      .expect(200);
+
+    expect(r.body.layout).toBe("numeros");
+  });
+
+  it("layout desconhecido nao derruba o compartilhamento", async () => {
+    const id = await postComCorrida(dono.token, dono.id);
+
+    await request(app)
+      .post(`/social/posts/${id}/cartao?layout=poster-3d`)
+      .set(auth(dono.token))
+      .expect(200);
+  });
+
+  it("o mesmo pedido devolve o mesmo arquivo", async () => {
+    const id = await postComCorrida(dono.token, dono.id);
+
+    // Olhar os tres desenhos antes de escolher e o uso normal. Sem cache, cada
+    // olhada deixaria um PNG orfao no storage para sempre.
+    const um = await request(app)
+      .post(`/social/posts/${id}/cartao?formato=story&layout=ficha`)
+      .set(auth(dono.token))
+      .expect(200);
+    const dois = await request(app)
+      .post(`/social/posts/${id}/cartao?formato=story&layout=ficha`)
+      .set(auth(dono.token))
+      .expect(200);
+
+    // Pelo caminho, e nao pela URL inteira: o supertest sobe numa porta nova a
+    // cada chamada, e o host e montado na hora justamente por isso.
+    expect(caminhoDe(dois.body.url)).toBe(caminhoDe(um.body.url));
+
+    // Formato diferente e outro desenho: o cache e por par, nao por post.
+    const feed = await request(app)
+      .post(`/social/posts/${id}/cartao?formato=feed&layout=ficha`)
+      .set(auth(dono.token))
+      .expect(200);
+    expect(caminhoDe(feed.body.url)).not.toBe(caminhoDe(um.body.url));
+  });
+
+  it("editar o texto joga fora o cartao ja montado", async () => {
+    const criado = await request(app)
+      .post("/social/posts")
+      .set(auth(dono.token))
+      .send({ text: "titulo velho" })
+      .expect(201);
+    const id = criado.body.post.id as string;
+
+    const antes = await request(app)
+      .post(`/social/posts/${id}/cartao`)
+      .set(auth(dono.token))
+      .expect(200);
+
+    // Em post sem treino o titulo do cartao E o texto: servir o cache aqui
+    // mostraria a versao antiga para sempre.
+    await request(app)
+      .patch(`/social/posts/${id}`)
+      .set(auth(dono.token))
+      .send({ text: "titulo novo" })
+      .expect(200);
+
+    const depois = await request(app)
+      .post(`/social/posts/${id}/cartao`)
+      .set(auth(dono.token))
+      .expect(200);
+
+    expect(caminhoDe(depois.body.url)).not.toBe(caminhoDe(antes.body.url));
+  });
+
+  it("treino de crossfit com descanso e dupla nao quebra o cartao", async () => {
+    const atividade = await Activity.create({
+      user: new mongoose.Types.ObjectId(dono.id),
+      sportId: "crossfit",
+      kind: "wod",
+      date: "2026-09-10",
+      durationSec: 900,
+      payload: {
+        blocos: [
+          { tipo: "aquecimento", movimentos: [{ nome: "Beat Swing", reps: 4 }] },
+          { tipo: "descanso", duracaoSec: 60 },
+          {
+            tipo: "metcon",
+            formato: "amrap",
+            escala: { nivel: "rx" },
+            equipe: { tamanho: 2, modo: "revezamento" },
+            prescricao: {
+              duracaoSec: 360,
+              movimentos: [
+                { nome: "Run", distanciaM: 100 },
+                { nome: "Rope Climb", reps: 2, porPessoa: true },
+              ],
+            },
+            resultado: { tipo: "rounds_reps", rounds: 7, repsExtras: 1 },
+          },
+        ],
+      },
+    });
+
+    const criado = await request(app)
+      .post("/social/posts")
+      .set(auth(dono.token))
+      .send({ text: "relay de hoje", activityId: atividade._id.toString() })
       .expect(201);
 
     await request(app)

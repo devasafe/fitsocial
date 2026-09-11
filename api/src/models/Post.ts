@@ -21,6 +21,15 @@ const postSchema = new Schema(
     hidden: { type: Boolean, default: false, index: true },
     /** Primeira edição do texto. O app mostra "(editado)" a partir daqui. */
     editedAt: { type: Date, default: null },
+    /** Cartões de compartilhar já montados, por "formato:layout".
+     *
+     *  Montar custa um redimensionamento e uma escrita permanente no storage.
+     *  Sem isto, cada prévia que a pessoa olha deixa um PNG órfão lá para
+     *  sempre — e olhar três layouts antes de escolher é o uso esperado.
+     *
+     *  Invalidado ao editar o texto: em post sem treino, o título do cartão é
+     *  o próprio texto. */
+    cartoes: { type: Map, of: String, default: undefined },
     /** Exclusão lógica.
      *
      *  Para quem usa, é exclusão: o post some de tudo no mesmo instante. A

@@ -99,9 +99,21 @@ export type FormatoDoCartao = "story" | "feed";
  * O desenho e montado la: assim o mesmo cartao vale para Android e navegador,
  * e mudar o layout depois nao obriga ninguem a atualizar o app.
  */
-export function gerarCartao(token: string, postId: string, formato: FormatoDoCartao) {
-  return apiFetch<{ url: string; formato: FormatoDoCartao }>(
-    `/social/posts/${postId}/cartao?formato=${formato}`,
+/** Os desenhos que o servidor sabe montar. `numeros` nao e escolhivel: e o
+ *  que sai sozinho quando o post nao tem foto. */
+export const LAYOUTS_DO_CARTAO = ["foto", "ficha", "cartao", "numeros"] as const;
+export type LayoutDoCartao = (typeof LAYOUTS_DO_CARTAO)[number];
+
+export function gerarCartao(
+  token: string,
+  postId: string,
+  formato: FormatoDoCartao,
+  layout: LayoutDoCartao = "foto"
+) {
+  // `layout` chega de volta na resposta porque o servidor pode trocar: sem foto
+  // nao ha o que sobrepor, e qualquer escolha vira o tipografico.
+  return apiFetch<{ url: string; formato: FormatoDoCartao; layout: LayoutDoCartao }>(
+    `/social/posts/${postId}/cartao?formato=${formato}&layout=${layout}`,
     { method: "POST", token }
   );
 }
