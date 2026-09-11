@@ -8,7 +8,7 @@ import { getLeaderboard, type LeaderRow } from "../api/gamification";
 import { Txt, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 
-const LIME_SOFT = "rgba(200,250,75,0.12)";
+const LIME_SOFT = colors.limeSoft;
 
 /** Uma linha do ranking. Ordena por consistência; ninguém é humilhado por ficar por último. */
 function LeaderboardRow({ row, position }: { row: LeaderRow; position: number }) {

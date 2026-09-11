@@ -2,6 +2,10 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "allowJs": true
+    "allowJs": true,
+    // `src/theme.check.ts` roda com o Node puro (`npm run checar-cores`), e o
+    // Node exige a extensão no import. O bundler do Expo não se importa, e como
+    // aqui só se checa tipo (o Metro é quem empacota), nada é emitido.
+    "allowImportingTsExtensions": true
   }
 }

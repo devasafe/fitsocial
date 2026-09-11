@@ -367,7 +367,7 @@ function Chip({
         borderRadius: radius.media,
         borderWidth: 1,
         borderColor: ativo ? colors.lime : colors.line,
-        backgroundColor: ativo ? "rgba(200,250,75,0.14)" : colors.surface,
+        backgroundColor: ativo ? colors.limeSoft : colors.surface,
       }}
     >
       <Txt variant="label" color={ativo ? colors.lime : colors.text2}>

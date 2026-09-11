@@ -47,7 +47,7 @@ const TOOLTIP = {
     fontSize: 13,
   },
   labelStyle: { color: "var(--texto-2)", marginBottom: 4 },
-  cursor: { fill: "rgba(200, 250, 75, 0.06)" },
+  cursor: { fill: "rgba(59, 204, 6, 0.06)" },
 };
 
 export interface Faixa {
