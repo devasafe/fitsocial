@@ -217,7 +217,7 @@ export function Opcoes<T extends string>({
               borderRadius: radius.full,
               borderWidth: 1,
               borderColor: ativo ? colors.lime : colors.line,
-              backgroundColor: ativo ? "rgba(200,250,75,0.12)" : "transparent",
+              backgroundColor: ativo ? colors.limeSoft : "transparent",
             }}
           >
             <Txt variant={ativo ? "bodyStrong" : "body"} color={ativo ? colors.lime : colors.text2}>

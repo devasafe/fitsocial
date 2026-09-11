@@ -218,7 +218,7 @@ export function DesafioDetailScreen({ route }: Props) {
                 borderRadius: radius.card,
                 borderWidth: 1,
                 borderColor: r.isMe ? colors.lime : colors.line,
-                backgroundColor: r.isMe ? "rgba(200,250,75,0.10)" : colors.surface,
+                backgroundColor: r.isMe ? colors.limeSoft : colors.surface,
               }}
             >
               <Txt variant="titleCard" tabular color={colors.text2} style={{ width: 28 }}>

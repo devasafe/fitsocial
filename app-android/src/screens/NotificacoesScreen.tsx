@@ -152,7 +152,7 @@ export function NotificacoesScreen() {
                   borderRadius: 14,
                   borderWidth: 1,
                   borderColor: colors.line,
-                  backgroundColor: n.read ? colors.surface : "rgba(200,250,75,0.06)",
+                  backgroundColor: n.read ? colors.surface : colors.limeFaint,
                 }}
               >
                 {!n.read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.lime }} /> : <View style={{ width: 8 }} />}

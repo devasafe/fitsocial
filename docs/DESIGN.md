@@ -67,7 +67,10 @@ Esta lista existe porque "escuro com verde neon" é o caminho mais rápido para 
 
 ## 2.3 Paleta base
 
-**Superfícies — verde-tinta, com passo de matiz além do passo de luminosidade:**
+**Superfícies — verde-tinta, com passo de matiz além do passo de luminosidade.**
+Elas não mudaram quando a marca virou verde, e a razão é medida: estão em
+H 131–144°, o verde novo está em 104° e o lima antigo estava em 77°. O verde
+novo harmoniza **melhor** com estes neutros do que o lima harmonizava.
 
 | Token | Hex | Uso |
 |---|---|---|
@@ -89,14 +92,31 @@ Esta lista existe porque "escuro com verde neon" é o caminho mais rápido para 
 
 **Marca:**
 
-| Token | Hex | Uso |
-|---|---|---|
-| `lime` | `#3BCC06` | Ação primária, marca, estado ativo, indicador de aba |
-| `lime-dim` | `#9FCC33` | Pressionado, hover |
-| `lime-soft` | `#3BCC06` a 12% | Fundo de chip ativo, realce de linha |
-| `on-lime` | `#0E1310` | Texto e ícone sobre lima |
+Os tokens ainda se chamam `lime` porque o nome está em 140 lugares; a cor não
+é mais lima. Renomear é outra mudança.
 
-**Semântica:** o positivo do app já é o lima — não crie um verde de sucesso separado.
+| Token | Hex | Contraste s/ `bg` | Uso |
+|---|---|---|---|
+| `lime` | `#3BCC06` | 8,78:1 | Ação primária, marca, estado ativo, indicador de aba |
+| `lime-dim` | `#2E9E05` | 5,37:1 | Pressionado, hover |
+| `lime-soft` | `#3BCC06` a 12% | — | Fundo de chip ativo, linha selecionada, realce de linha |
+| `lime-faint` | `#3BCC06` a 6% | — | Notificação não lida, cursor de gráfico |
+| `lime-deep` | `#1F5C08` | 2,32:1 | Fundo sólido de seleção e de badge, onde alfa não serve |
+| `lime-bright` | `#7CE84F` | 12,07:1 | Anel de foco e ícone **sobre o fundo escuro** |
+| `on-lime` | `#0E1310` | 8,78:1 sobre `lime` | Texto e ícone sobre o verde |
+
+**`lime-bright` não é texto sobre o verde.** Ali ele dá 1,38:1 e some. Sobre o
+verde, o texto é `on-lime`.
+
+**As transparências vêm do hex, não escritas à mão.** `rgba(200,250,75,…)`
+estava cravado em sete arquivos e nenhum acompanhou a troca de cor — o app
+ficou com a marca verde e os realces em lima. Agora `theme.ts` deriva as duas
+de uma constante.
+
+**Semântica.** O positivo do app já é o verde da marca — não crie um verde de
+sucesso separado. Os três não mudaram com a troca, e também por medida: eles já
+caem nos pontos de harmonia do verde novo — `warning` a 59° dele (análogo),
+`danger` a 95° e `info` a 106° (quase triádico).
 
 | Token | Hex | Uso |
 |---|---|---|
@@ -108,14 +128,32 @@ Esta lista existe porque "escuro com verde neon" é o caminho mais rápido para 
 
 Usada em gráfico de volume, calendário de consistência, medidor de esforço e zona de intensidade. Codifica quantidade, não decora.
 
-| Nível | Hex |
-|---|---|
-| Nada | `#2A332C` |
-| Leve | `#5C7A3E` |
-| Moderado | `#8FBF42` |
-| Forte | `#C8FA4B` |
-| Máximo | `#F5C63C` |
-| Excesso (alerta de ACWR alto) | `#F2734B` |
+Reancorada no verde novo. A anterior terminava no lima — que **era** a marca — e
+ficou órfã quando a marca mudou. Agora o meio da rampa é a marca, e ela esquenta
+dali até o vermelho.
+
+| Nível | Hex | Matiz | Luminosidade | Contraste s/ `bg` |
+|---|---|---|---|---|
+| Nada | `#2A332C` | 133° | 18% | 1,44:1 |
+| Leve | `#2E7A0C` | 104° | 26% | 3,49:1 |
+| Moderado | `#3BCC06` | 104° | 41% | 8,78:1 |
+| Forte | `#9AD41C` | 79° | 47% | 11,04:1 |
+| Máximo | `#F5C63C` | 45° | 60% | 11,64:1 |
+| Excesso (alerta de ACWR alto) | `#F2734B` | 9° | 62% | 6,55:1 |
+
+Duas regras, e a segunda quase me escapou:
+
+- **A luminância sobe a cada passo de quantidade** — 0,03 → 0,15 → 0,44 → 0,54
+  → 0,60. Sem isso a ordem some para quem não distingue matiz. É luminância, e
+  não a luminosidade do HSL: pelo HSL um `#A8E01E` parecia caber no "forte" e
+  era o passo mais claro da rampa inteira.
+- **O "excesso" quebra a subida de propósito** (0,32). Ele não é mais
+  quantidade: é alerta, e fala por matiz. Um vermelho mais claro que o
+  "máximo" leria como "mais ainda", não como "passou do ponto".
+
+As duas estão em teste (`app-android/src/theme.test.ts`), junto com o contraste
+de cada token — porque cor é a única parte do design system que dá para
+verificar por número.
 
 ## 2.5 Cores de esporte
 

@@ -1,7 +1,23 @@
 // Design system do app — ver docs/DESIGN.md.
-// Base: verde-tinta terroso + texto osso quente. O lima é só o sistema; o
-// conteúdo é colorido pelo esporte. Chaves antigas (bg/surface/primary…) foram
-// remapeadas para os valores do brief, então todas as telas herdam a paleta nova.
+// Base: verde-tinta terroso + texto osso quente. O verde da marca é só o
+// sistema; o conteúdo é colorido pelo esporte. Chaves antigas
+// (bg/surface/primary…) foram remapeadas, então todas as telas herdam a paleta.
+
+/**
+ * O verde da marca, num lugar só.
+ *
+ * Existe como constante porque o anterior NÃO existia: `rgba(200,250,75,…)`
+ * estava cravado em sete arquivos — chip ativo, linha selecionada, notificação
+ * não lida, cursor do gráfico — e nenhum deles acompanhou a troca de cor. O
+ * app ficou com a marca verde e os realces ainda em lima.
+ */
+const VERDE = "#3BCC06";
+
+/** O verde com transparência, derivado do hex acima. */
+function comAlfa(hex: string, alfa: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`;
+}
 
 export const colors = {
   // Superfícies (verde-tinta, passo de matiz além de luminosidade)
@@ -22,13 +38,31 @@ export const colors = {
   textDisabled: "#4A5049",
 
   // Marca
-  lime: "#3BCC06",
+  //
+  // Os nomes ainda dizem "lime" porque estão em 140 lugares e renomear é outra
+  // mudança. A cor não é mais lima.
+  lime: VERDE,
+  /** Pressionado. Tem que ser MAIS ESCURO que a marca — o valor anterior
+   *  (#9FCC33, 9,97:1) brilhava mais que ela (8,78:1). */
   limeDim: "#2E9E05",
   onLime: "#0E1310",
-  primary: "#3BCC06", // alias legado
+  primary: VERDE, // alias legado
   primaryText: "#0E1310", // alias legado
 
-  // Semântica (o positivo já é o lima)
+  /** Fundo de chip ativo, linha selecionada, realce de linha. */
+  limeSoft: comAlfa(VERDE, 0.12),
+  /** Mais tênue ainda: notificação não lida, cursor de gráfico. */
+  limeFaint: comAlfa(VERDE, 0.06),
+  /** Fundo sólido de seleção e de badge, quando alfa não serve. */
+  limeDeep: "#1F5C08",
+  /**
+   * Verde claro, para cima do FUNDO ESCURO — anel de foco, ícone sobre
+   * superfície. Não serve como texto sobre o verde da marca: ali dá 1,38:1.
+   * Sobre o verde, o texto é `onLime`, que dá 8,78:1.
+   */
+  limeBright: "#7CE84F",
+
+  // Semântica (o positivo já é o verde da marca)
   warning: "#F5C63C",
   danger: "#F2634B",
   info: "#7FB2E5",
@@ -65,7 +99,24 @@ export function sportColor(id?: string): string {
 }
 
 // Rampa térmica: codifica quantidade (volume, consistência, esforço), não decora.
-export const thermal = ["#2A332C", "#5C7A3E", "#8FBF42", "#C8FA4B", "#F5C63C", "#F2734B"] as const;
+/**
+ * Rampa térmica: codifica quantidade, não decora.
+ *
+ * Reancorada no verde novo. A anterior terminava no lima — que era a marca — e
+ * ficou órfã quando a marca mudou. Agora o meio da rampa É a marca.
+ *
+ * Duas regras, e a segunda é o que quase me fez errar:
+ *
+ *  - Do "nada" ao "máximo" a LUMINÂNCIA sobe a cada passo (0,03 → 0,15 → 0,44
+ *    → 0,54 → 0,60). Sem isso a ordem some para quem não distingue matiz, e um
+ *    gráfico de volume deixa de informar. Luminância de verdade, não a
+ *    luminosidade do HSL — pelo HSL o passo "forte" parecia caber e era o mais
+ *    claro da rampa inteira.
+ *  - O "excesso" QUEBRA a subida de propósito (0,32). Ele não é mais
+ *    quantidade: é alerta, e fala por matiz. Era assim antes desta mudança e
+ *    continua sendo.
+ */
+export const thermal = ["#2A332C", "#2E7A0C", VERDE, "#9AD41C", "#F5C63C", "#F2734B"] as const;
 
 // Grade de 4. Gutter lateral 20, entre cartões 12, entre seções 32.
 export const spacing = {

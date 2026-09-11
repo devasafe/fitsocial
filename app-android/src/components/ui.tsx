@@ -313,7 +313,7 @@ export function Chip({
         borderRadius: radius.chip,
         borderWidth: 1,
         borderColor: active ? colors.lime : colors.line,
-        backgroundColor: active ? "rgba(200,250,75,0.12)" : colors.surface,
+        backgroundColor: active ? colors.limeSoft : colors.surface,
       }}
     >
       {sport ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}

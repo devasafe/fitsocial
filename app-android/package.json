@@ -40,7 +40,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "checar-cores": "node --experimental-strip-types --no-warnings src/theme.check.ts"
   },
   "private": true
 }
