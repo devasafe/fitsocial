@@ -322,6 +322,7 @@ export function PostCard({
       {podeCompartilhar ? (
         <CompartilharTreino
           postId={post.id}
+          temFoto={!!post.imageUrl}
           visivel={compartilhando}
           aoFechar={() => setCompartilhando(false)}
         />

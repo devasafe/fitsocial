@@ -36,6 +36,9 @@ export async function editarPost(
 
   post.text = limpo;
   post.editedAt = new Date();
+  // Em post sem treino, o título do cartão é o próprio texto: o que já foi
+  // montado passa a mostrar a versão antiga.
+  post.cartoes = undefined;
   await post.save();
   return post;
 }

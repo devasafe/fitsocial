@@ -21,7 +21,14 @@ import { Report, MOTIVOS_DE_DENUNCIA } from "../models/Report.js";
 import { recordAudit } from "../services/adminAudit.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 import { getSport } from "../services/sports.js";
-import { montarCartao, type Formato } from "../services/media/cartaoDeCompartilhar.js";
+import {
+  montarCartao,
+  layoutEfetivo,
+  LAYOUTS,
+  type Formato,
+  type Layout,
+} from "../services/media/cartaoDeCompartilhar.js";
+import { movimentosDoCartao } from "../services/media/movimentosDoCartao.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { normalizarWod } from "../services/crossfit.js";
@@ -113,6 +120,13 @@ function mmss(totalSec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** Decimal com vírgula. Estes números aparecem no card do feed e vão para o
+ *  Instagram dentro do cartão: "5.2 km" é um número escrito em outra língua. */
+function numero(v: number, casas = 2): string {
+  const arredondado = Math.round(v * 10 ** casas) / 10 ** casas;
+  return String(arredondado).replace(".", ",");
+}
+
 interface WodMovement {
   name: string;
   loadKg?: number | null;
@@ -162,7 +176,7 @@ function activitySummary(post: InstanceType<typeof Post>) {
     if (m.volumeTotalKg) stats.push(`${Math.round(m.volumeTotalKg)} kg`);
     if (dur) stats.push(mmss(dur));
   } else if (a.kind === "endurance") {
-    if (m.distanceKm) stats.push(`${Math.round(m.distanceKm * 100) / 100} km`);
+    if (m.distanceKm) stats.push(`${numero(m.distanceKm)} km`);
     if (dur) stats.push(mmss(dur));
     if (m.avgPaceSecPerKm) stats.push(`${mmss(m.avgPaceSecPerKm)} /km`);
   } else if (a.kind === "class") {
@@ -180,7 +194,7 @@ function activitySummary(post: InstanceType<typeof Post>) {
           : pl.resultReps != null
             ? `${pl.resultReps} reps`
             : pl.resultLoadKg != null
-              ? `${pl.resultLoadKg} kg`
+              ? `${numero(pl.resultLoadKg)} kg`
               : null;
     if (result) stats.push(result);
     movements = Array.isArray(pl.movements)
@@ -351,6 +365,11 @@ socialRouter.post(
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
     const formato: Formato = req.query.formato === "feed" ? "feed" : "story";
+    // Desenho vem do app; qualquer valor estranho cai no padrão em vez de
+    // derrubar o compartilhamento.
+    const pedido = LAYOUTS.includes(req.query.layout as Layout)
+      ? (req.query.layout as Layout)
+      : "foto";
 
     const post = await Post.findById(req.params.id)
       .populate("author", "name username avatarUrl")
@@ -376,6 +395,17 @@ socialRouter.post(
       }
     }
 
+    const layout = layoutEfetivo(pedido, !!foto);
+    const chave = `${formato}:${layout}`;
+
+    // Já montado antes: devolve o mesmo arquivo. Olhar os três layouts para
+    // escolher é o uso normal, e sem isto cada olhada deixa um PNG órfão.
+    const emCache = post.cartoes?.get(chave);
+    if (emCache) {
+      res.json({ url: toAbsoluto(req, emCache), formato, layout });
+      return;
+    }
+
     const autor = post.author as unknown as PopulatedAuthor;
     const atividade = post.activity as unknown as PopulatedActivity | undefined;
     const percurso = Array.isArray(atividade?.payload?.points)
@@ -387,11 +417,16 @@ socialRouter.post(
         foto,
         titulo: resumo?.title ?? post.text.slice(0, 60) ?? "",
         stats: resumo?.stats ?? [],
+        movimentos: movimentosDoCartao(
+          atividade?.kind,
+          atividade?.payload as Record<string, unknown> | undefined
+        ),
         cor: (resumo && getSport(resumo.sportId)?.color) || "#C8FA4B",
         percurso,
         autor: autor.name,
       },
-      formato
+      formato,
+      layout
     );
 
     const salvo = await getStorageProvider().save({
@@ -400,7 +435,11 @@ socialRouter.post(
       ext: ".png",
     });
 
-    res.json({ url: toAbsoluto(req, salvo.url), formato });
+    // Guarda a URL COMO VEIO do storage: `toAbsoluto` depende do host da
+    // requisição, e gravar isso fixaria o domínio de hoje dentro do banco.
+    await Post.updateOne({ _id: post._id }, { $set: { [`cartoes.${chave}`]: salvo.url } });
+
+    res.json({ url: toAbsoluto(req, salvo.url), formato, layout });
   })
 );
 
