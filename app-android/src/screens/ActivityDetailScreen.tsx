@@ -10,8 +10,7 @@ import { getActivity, type Activity } from "../api/activities";
 import { colors, spacing, sportColor } from "../theme";
 import { DetalheDoTreino } from "../components/crossfit/DetalheDoTreino";
 import {
-  metconDe,
-  prescricaoEmTexto,
+  blocoPrincipal,
   resultadoEmTexto,
   rotuloDaEscala,
 } from "../lib/crossfitResumo";
@@ -97,7 +96,7 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
   }
 
   const p = (a.payload ?? {}) as Payload;
-  const metcon = metconDe(a.crossfit);
+  const metcon = blocoPrincipal(a.crossfit);
   const m = a.metrics ?? {};
   const stroke = sportColor(a.sportId);
   const when = new Date(a.startedAt).toLocaleString("pt-BR", {
@@ -163,12 +162,12 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
                 código serve para o formato antigo e para o novo. */}
             {metcon ? (
               <>
-                <StatRow label="WOD" value={metcon.nome?.trim() || prescricaoEmTexto(metcon)} />
+                <StatRow label="WOD" value={metcon.nome?.trim() || metcon.modo} />
                 <StatRow label="Escala" value={rotuloDaEscala(metcon.escala?.nivel)} />
-                {resultadoEmTexto(metcon) ? (
+                {resultadoEmTexto(metcon.resultado) ? (
                   <StatRow
                     label={metcon.resultado?.capado ? "Resultado (no cap)" : "Resultado"}
-                    value={resultadoEmTexto(metcon)}
+                    value={resultadoEmTexto(metcon.resultado)}
                   />
                 ) : null}
               </>

@@ -1,4 +1,4 @@
-import type { PayloadDeCrossfit } from "./crossfit";
+import type { PayloadDeCrossfit, Leitura } from "./crossfit";
 import { apiFetch } from "./client";
 
 export interface StrengthSetInput {
@@ -156,4 +156,20 @@ export async function listActivities(
 ): Promise<{ data: Activity[]; meta: { nextCursor: string | null } }> {
   const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return apiFetch(`/activities${q}`, { token });
+}
+
+/**
+ * O que o servidor entende de um modo escrito ("AMRAP 6'").
+ *
+ * Roda no blur do campo, para a tela ecoar o entendimento antes de salvar. É
+ * rota, e nao copia do interpretador aqui, porque duas implementacoes da mesma
+ * regra divergem — e ai a tela promete uma coisa e o banco guarda outra.
+ */
+export async function interpretarModo(token: string, modo: string): Promise<Leitura> {
+  const r = await apiFetch<{ data: Leitura }>("/activities/interpretar-modo", {
+    method: "POST",
+    token,
+    body: { modo },
+  });
+  return r.data;
 }

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "../../config/env.js";
 import { getAIProvider, parseJson } from "./index.js";
 import { blocoSchema, type Bloco } from "../../models/crossfit.js";
+import { interpretarModo } from "../crossfit/interpretarModo.js";
 
 /* Ler o quadro do box e montar os blocos.
  *
@@ -16,52 +17,72 @@ import { blocoSchema, type Bloco } from "../../models/crossfit.js";
  * nunca prescreve peso.
  *
  * O texto original fica guardado de qualquer jeito (`quadro` no payload). Os
- * blocos são a interpretação; o texto é a fonte. */
+ * blocos são a interpretação; o texto é a fonte.
+ *
+ * ---------------------------------------------------------------------------
+ * O que o v3 tirou das costas do modelo
+ * ---------------------------------------------------------------------------
+ *
+ * Antes ele tinha que CLASSIFICAR: escolher entre seis tipos de bloco e um enum
+ * de nove formatos, e acertar os dois. Agora ele só TRANSCREVE — copia o modo
+ * como está escrito ("EMOM (1'15\") x 4") e separa os movimentos. Quem deduz
+ * estrutura é `interpretarModo`, que é código, roda igual toda vez e não tem
+ * temperatura.
+ *
+ * Menos decisão para o modelo é menos invenção, e é determinístico de graça.
+ */
 
 export const leituraDoQuadroSchema = z.object({
   /** Nome do box, quando aparece no quadro. */
   box: z.string().max(80).nullish(),
+  /** "Relay", "in pairs", "em dupla" no quadro → 2. Ausente → 1. */
+  tamanhoDoTime: z.number().int().min(1).max(20).default(1),
   blocos: z.array(blocoSchema).max(24),
   /** O que não deu para interpretar. Vazio quando leu tudo. */
   observacao: z.string().max(300).default(""),
 });
 export type LeituraDoQuadro = z.infer<typeof leituraDoQuadroSchema>;
 
-const SYSTEM = `Você converte o quadro de uma aula de CrossFit em JSON estruturado, em português do Brasil.
+const SYSTEM = `Você transcreve o quadro de uma aula de CrossFit para JSON, em português do Brasil.
+
+Você TRANSCREVE, não interpreta. Não classifique o treino, não escolha categorias: copie o que está escrito e separe em blocos.
 
 O QUE VOCÊ NÃO FAZ, NUNCA:
-- Não invente RESULTADO. Os campos "resultado" ficam ausentes, sempre. O quadro diz o que era para fazer; quanto a pessoa fez é ela quem informa depois.
-- Não invente CARGA. Só preencha "carga" quando o peso está escrito no quadro. Quadro de box quase nunca prescreve peso.
+- Não invente RESULTADO. O campo "resultado" fica ausente, sempre. O quadro diz o que era para fazer; quanto a pessoa fez é ela quem informa depois.
+- Não invente CARGA. Só preencha "carga" quando o peso está escrito. Quadro de box quase nunca prescreve peso.
 - Não invente movimento, round ou tempo que não esteja no texto.
 
-BLOCOS (campo "tipo"):
-- "aquecimento" | "mobilidade" | "cooldown": lista de movimentos. Aceita "formato" ("emom" | "circuito" | "livre"), "intervaloSec", "rounds", "duracaoSec".
-- "skill": praticar UM movimento. Campo "movimento" (string). "formato" pode ser "emom" | "pratica_livre" | "series".
-- "forca": levantamento com séries. Campo "exercicios": [{ "name": string, "sets": [{ "weightKg": number, "reps": number }] }]. Só use se o quadro trouxer as séries.
-- "metcon": o WOD. Campos "formato" ("for_time" | "amrap" | "emom" | "rft" | "tabata" | "intervalo" | "max_reps" | "max_load" | "outro"), "nome", "prescricao" e "escala".
-- "descanso": o REST entre partes. Só "duracaoSec".
+BLOCO = { "modo", "nome", "movimentos" }
+- "modo": a linha que diz COMO o bloco funciona, copiada COMO ESTÁ ESCRITA: "AMRAP 6'", "EMOM (1'15\\") x 4", "FOR TIME 7'", "5 ROUNDS FOR TIME", "SKILL / STRENGTH", "REST 1'", "TABATA", "21-15-9", "WARM-UP".
+  Não traduza, não normalize, não padronize. Se o quadro escreveu "AMRAP 8'", o modo é "AMRAP 8'".
+- "nome": o rótulo da parte, quando existe: "BLOCO A", "Fran", "Relay". Ausente quando não há.
+- Um REST entre partes é um BLOCO, com modo "REST 1'" e sem movimentos. Não é observação.
 
-DENTRO DE "metcon":
-- "prescricao": { "rounds", "duracaoSec", "timeCapSec", "intervaloSec", "movimentos": [...] }.
-  - AMRAP 8' → formato "amrap", duracaoSec 480.
-  - FOR TIME 7' → formato "for_time", timeCapSec 420.
-  - EMOM (1'15") x 4 → formato "emom", intervaloSec 75, rounds 4.
-- "escala": { "nivel": "rx" } — use "rx" quando o quadro não disser outra coisa.
-- "equipe": SÓ quando o quadro indicar dupla/equipe ("Relay", "in pairs", "em dupla", "Together"). Formato { "tamanho": 2, "modo": "revezamento" | "junto" | "dividido" }. "Relay" = revezamento; "Together" = junto.
-- "grupo": quando o quadro agrupa várias partes sob um WOD só ("Bloco A", "Bloco B", "Parte 1"), use o MESMO rótulo curto nas partes, ex. "WOD".
+MOVIMENTO = { "nome", "volume", "carga", "series", "altura", "escopo" }
+- "nome": SÓ o nome, sem número junto. "10 Bíceps Curl" → nome "Bíceps Curl".
+  Mantenha a abreviação como está escrita: BJO continua "BJO", C2B continua "C2B". É como a pessoa chama.
+- "volume": { "valor": número ou lista, "unidade": "reps" | "seg" | "metros" | "cal" }
+  - "10 Pull Up" → { "valor": 10, "unidade": "reps" }
+  - "21-15-9 Thruster" → { "valor": [21,15,9], "unidade": "reps" }
+  - "100 Mts Run" → { "valor": 100, "unidade": "metros" }
+  - "20 cal Row" → { "valor": 20, "unidade": "cal" }
+  - "Rope Climb" sem número → sem "volume".
+- "carga": { "rx": número, "rxF": número, "unidade": "kg" | "lb" }. "43/30 kg" → rx 43, rxF 30. Um peso só → só "rx".
+- "series": o "3" de "3x10". Ausente quando não há.
+- "altura": { "valor": 60, "unidade": "cm" } — box jump, wall ball, quando escrito.
+- "escopo": "individual" (padrão) | "dividido" | "cada" | "junto"
+  - "2 Rope Climb (cada)" → "cada"
+  - "400m Run together" → "junto"
+  - volume repartido entre o time ("Relay") → "dividido"
 
-MOVIMENTOS: { "nome", "reps", "repScheme" ([21,15,9]), "distanciaM", "calorias", "duracaoSec", "carga", "porPessoa" }
-- "100 Mts Run" → { "nome": "Run", "distanciaM": 100 }
-- "20 cal Row" → { "nome": "Row", "calorias": 20 }
-- "2 Rope Climb (cada)" → { "nome": "Rope Climb", "reps": 2, "porPessoa": true }
-- Mantenha a abreviação como está escrita: BJO continua "BJO", C2B continua "C2B". É como a pessoa chama.
+TAMANHO DO TIME: "Relay", "in pairs", "em dupla", "Together" no quadro → "tamanhoDoTime": 2. Sem indicação → 1.
 
 QUANDO O QUADRO OFERECE ALTERNATIVA ("OU", "OR", "escolha"): traga as DUAS como blocos, e diga na observacao que eram alternativas. A pessoa apaga a que não fez.
 
 O que não couber em bloco nenhum: deixe de fora e explique na observacao. É melhor um bloco a menos do que um bloco inventado.
 
 Responda SOMENTE com JSON:
-{"box":null,"blocos":[...],"observacao":""}`;
+{"box":null,"tamanhoDoTime":1,"blocos":[...],"observacao":""}`;
 
 /** Converte o texto do quadro em blocos. Não grava nada. */
 export async function lerQuadro(
@@ -88,7 +109,12 @@ export async function lerQuadro(
   });
 
   const lido = parseJson(leitura, leituraDoQuadroSchema);
-  return { ...lido, blocos: lido.blocos.map(semResultado) };
+
+  // A estrutura sai daqui, não do modelo: mesma entrada, mesma leitura, sempre.
+  return {
+    ...lido,
+    blocos: lido.blocos.map((b) => ({ ...semResultado(b), lido: interpretarModo(b.modo) })),
+  };
 }
 
 /**
@@ -98,12 +124,14 @@ export async function lerQuadro(
  * resultado inventado não é só um número errado: ele entra no motor de
  * recordes e cria uma marca que a pessoa nunca fez, no histórico que ela usa
  * para saber se está evoluindo.
+ *
+ * No v2 isto só olhava bloco de metcon, porque só metcon tinha resultado. Agora
+ * qualquer bloco pode ter — então a rede cobre todos.
  */
 function semResultado(bloco: Bloco): Bloco {
-  if (bloco.tipo !== "metcon") return bloco;
   if (!bloco.resultado) return bloco;
 
-  console.warn(`[quadro] a leitura inventou resultado em "${bloco.nome ?? "metcon"}" — descartado`);
+  console.warn(`[quadro] a leitura inventou resultado em "${bloco.nome ?? bloco.modo}" — descartado`);
   return { ...bloco, resultado: null };
 }
 

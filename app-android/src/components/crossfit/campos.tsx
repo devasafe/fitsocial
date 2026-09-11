@@ -14,6 +14,7 @@ import React from "react";
 import { View, TextInput, TouchableOpacity, type KeyboardTypeOptions } from "react-native";
 import { Txt } from "../ui";
 import { colors, radius, spacing } from "../../theme";
+import { sugerir, type TipoDeSugestao } from "../../lib/sugestoes";
 
 export const entradaBase = {
   backgroundColor: colors.surface2,
@@ -73,6 +74,114 @@ export function Campo({
         autoFocus={autoFocus}
         style={entradaBase}
       />
+    </View>
+  );
+}
+
+/**
+ * Campo que oferece de volta o que você já digitou.
+ *
+ * As sugestões só aparecem com o campo FOCADO e com algo digitado — uma lista
+ * que abre sozinha ao tocar empurra o formulário inteiro para baixo e some com
+ * o botão de salvar, que é onde a pessoa estava indo.
+ *
+ * Tocar numa sugestão preenche e fecha. Continuar digitando filtra.
+ */
+export function CampoComSugestoes({
+  rotulo,
+  valor,
+  aoMudar,
+  placeholder,
+  tipo,
+  flex = 1,
+  autoFocus,
+  aoSairDoCampo,
+}: {
+  rotulo?: string;
+  valor: string;
+  aoMudar: (t: string) => void;
+  placeholder?: string;
+  tipo: TipoDeSugestao;
+  flex?: number;
+  autoFocus?: boolean;
+  /** Chamado quando o campo perde o foco. É o momento de agir sobre o valor
+   *  inteiro — a cada tecla seria uma vez por letra digitada. */
+  aoSairDoCampo?: () => void;
+}) {
+  const [focado, setFocado] = React.useState(false);
+  const [lista, setLista] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (!focado) return;
+    let vivo = true;
+    void sugerir(tipo, valor).then((s) => {
+      if (vivo) setLista(s);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [focado, valor, tipo]);
+
+  const mostrar = focado && lista.length > 0;
+
+  return (
+    <View
+      style={{
+        flexGrow: flex,
+        flexShrink: 1,
+        flexBasis: LARGURA_MINIMA,
+        minWidth: LARGURA_MINIMA,
+      }}
+    >
+      {rotulo ? (
+        <Txt variant="label" color={colors.text2} style={{ marginBottom: 4 }}>
+          {rotulo}
+        </Txt>
+      ) : null}
+      <TextInput
+        value={valor}
+        onChangeText={aoMudar}
+        onFocus={() => setFocado(true)}
+        // O atraso deixa o toque na sugestão acontecer antes de a lista sumir.
+        onBlur={() => {
+          setTimeout(() => setFocado(false), 150);
+          aoSairDoCampo?.();
+        }}
+        placeholder={placeholder}
+        placeholderTextColor={colors.text3}
+        autoFocus={autoFocus}
+        style={entradaBase}
+      />
+
+      {mostrar ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: 6 }}>
+          {lista.map((s) => (
+            <TouchableOpacity
+              key={s}
+              onPress={() => {
+                aoMudar(s);
+                setFocado(false);
+                // A sugestão escolhida é um valor final: vale o mesmo que sair
+                // do campo.
+                aoSairDoCampo?.();
+              }}
+              activeOpacity={0.8}
+              style={{
+                paddingHorizontal: spacing.sm,
+                paddingVertical: 6,
+                borderRadius: radius.full,
+                borderWidth: 1,
+                borderColor: colors.line,
+                backgroundColor: colors.surface,
+              }}
+            >
+              <Txt variant="label" color={colors.text2}>
+                {s}
+              </Txt>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }

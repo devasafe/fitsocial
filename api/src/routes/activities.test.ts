@@ -186,7 +186,19 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
       .send({
         sportId: "crossfit",
         kind: "wod",
-        payload: { name: "Fran", scoreType: "for_time", level: "rx", resultTimeSec: 252 },
+        payload: {
+          v: 3,
+          blocos: [
+            {
+              modo: "21-15-9",
+              nome: "Fran",
+              movimentos: [
+                { nome: "Thruster", volume: { valor: [21, 15, 9], unidade: "reps" } },
+              ],
+              resultado: { tipo: "tempo", tempoSec: 252 },
+            },
+          ],
+        },
       });
     expect(res.status).toBe(201);
     expect(res.body.data.kind).toBe("wod");
@@ -200,22 +212,36 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
         sportId: "crossfit",
         kind: "wod",
         payload: {
-          name: "WOD do dia",
-          scoreType: "amrap",
-          level: "rx",
-          resultRounds: 8,
-          movements: [
-            { name: "Back Squat", loadKg: 100, reps: 5 },
-            { name: "Thrusters", loadKg: 42.5, reps: 21 },
-            { name: "Run", timeSec: 200 },
+          v: 3,
+          blocos: [
+            {
+              modo: "AMRAP 12'",
+              nome: "WOD do dia",
+              movimentos: [
+                {
+                  nome: "Back Squat",
+                  volume: { valor: 5, unidade: "reps" },
+                  carga: { rx: 100, unidade: "kg" },
+                },
+                {
+                  nome: "Thrusters",
+                  volume: { valor: 21, unidade: "reps" },
+                  carga: { rx: 42.5, unidade: "kg" },
+                },
+                { nome: "Run", volume: { valor: 200, unidade: "seg" } },
+              ],
+              resultado: { tipo: "rounds_reps", rounds: 8 },
+            },
           ],
         },
       });
     expect(res.status).toBe(201);
-    expect(res.body.data.payload.movements).toHaveLength(3);
-    expect(res.body.data.payload.movements[0].name).toBe("Back Squat");
-    expect(res.body.data.payload.movements[0].loadKg).toBe(100);
-    expect(res.body.data.payload.movements[2].timeSec).toBe(200);
+    expect(res.body.data.payload.blocos[0].movimentos).toHaveLength(3);
+    const movs = res.body.data.payload.blocos[0].movimentos;
+    expect(movs[0].nome).toBe("Back Squat");
+    expect(movs[0].carga.rx).toBe(100);
+    // Volume com unidade, e não um campo anulável por medida.
+    expect(movs[2].volume).toEqual({ valor: 200, unidade: "seg" });
   });
 
   it("GET /activities/last devolve a última atividade do esporte (ou null)", async () => {

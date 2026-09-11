@@ -29,9 +29,9 @@ import {
   type Layout,
 } from "../services/media/cartaoDeCompartilhar.js";
 import { movimentosDoCartao } from "../services/media/movimentosDoCartao.js";
+import { normalizarWod, blocoPrincipal } from "../services/crossfit.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { rateLimit } from "../middleware/rateLimit.js";
-import { normalizarWod } from "../services/crossfit.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -127,19 +127,12 @@ function numero(v: number, casas = 2): string {
   return String(arredondado).replace(".", ",");
 }
 
-interface WodMovement {
-  name: string;
-  loadKg?: number | null;
-  reps?: number | null;
-  timeSec?: number | null;
-}
 interface ActivityPayload {
   name?: string;
   level?: string;
   activityName?: string;
   sessionType?: string;
   exercises?: unknown[];
-  movements?: WodMovement[];
   resultTimeSec?: number | null;
   resultRounds?: number | null;
   resultReps?: number | null;
@@ -168,7 +161,7 @@ function activitySummary(post: InstanceType<typeof Post>) {
 
   let title = label;
   const stats: string[] = [];
-  let movements: WodMovement[] | null = null;
+  let movements: string[] | null = null;
 
   if (a.kind === "strength") {
     const n = Array.isArray(pl.exercises) ? pl.exercises.length : 0;
@@ -184,27 +177,31 @@ function activitySummary(post: InstanceType<typeof Post>) {
     else if (dur) stats.push(mmss(dur));
     if (pl.sessionType) stats.push(String(pl.sessionType));
   } else if (a.kind === "wod") {
-    title = pl.name || label;
-    if (pl.level) stats.push(String(pl.level).toUpperCase());
-    const result =
-      pl.resultTimeSec != null
-        ? mmss(pl.resultTimeSec)
-        : pl.resultRounds != null
-          ? `${pl.resultRounds} rounds`
-          : pl.resultReps != null
-            ? `${pl.resultReps} reps`
-            : pl.resultLoadKg != null
-              ? `${numero(pl.resultLoadKg)} kg`
-              : null;
-    if (result) stats.push(result);
-    movements = Array.isArray(pl.movements)
-      ? pl.movements.map((mv) => ({
-          name: mv.name,
-          loadKg: mv.loadKg ?? null,
-          reps: mv.reps ?? null,
-          timeSec: mv.timeSec ?? null,
-        }))
-      : null;
+    const wod = normalizarWod(a.payload);
+    const principal = blocoPrincipal(wod);
+
+    title = wod.nome || principal?.nome || label;
+    if (principal?.escala?.nivel) stats.push(principal.escala.nivel.toUpperCase());
+
+    const r = principal?.resultado;
+    const resultado =
+      r?.tipo === "tempo" && r.tempoSec != null
+        ? mmss(r.tempoSec)
+        : r?.tipo === "rounds_reps" && r.rounds != null
+          ? `${r.rounds}${r.repsExtras ? ` + ${r.repsExtras}` : ""}`
+          : r?.tipo === "reps" && r.reps != null
+            ? `${r.reps} reps`
+            : r?.tipo === "carga" && r.cargaKg != null
+              ? `${numero(r.cargaKg)} kg`
+              : r?.tipo === "distancia" && r.distanciaM != null
+                ? `${r.distanciaM} m`
+                : null;
+    if (resultado) stats.push(resultado);
+    if (wod.tamanhoDoTime > 1) stats.push(`em ${wod.tamanhoDoTime}`);
+
+    // O MESMO formatador do cartão de compartilhar. Eram dois caminhos, e os
+    // dois tinham que concordar sobre como se escreve "21-15-9 Thruster 43 kg".
+    movements = movimentosDoCartao("wod", a.payload as Record<string, unknown>);
   } else {
     // generic
     if (pl.activityName) title = String(pl.activityName);

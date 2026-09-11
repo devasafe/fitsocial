@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { normalizarWod, paraFormatoAntigo } from "../services/crossfit.js";
+import { normalizarWod } from "../services/crossfit.js";
+import { interpretarModo } from "../services/crossfit/interpretarModo.js";
 import { lerQuadro } from "../services/ai/lerQuadro.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { getBenchmark } from "../services/benchmarks.js";
@@ -37,12 +38,12 @@ export function serializeActivity(a: InstanceType<typeof Activity>) {
     perceivedEffort: a.perceivedEffort ?? null,
     feeling: a.feeling ?? null,
     planLink: a.planLink ?? null,
-    // O payload cru, mais os campos planos do formato antigo quando o treino
-    // foi gravado em blocos: é o que o app instalado sabe ler.
-    payload:
-      a.kind === "wod"
-        ? { ...paraFormatoAntigo(normalizarWod(a.payload)), ...(a.payload as object) }
-        : a.payload,
+    // O payload cru, sem tradução.
+    //
+    // Aqui viviam também os campos planos do formato antigo, para o APK 1.2.0
+    // conseguir ler um treino gravado em blocos. Foram embora junto com a
+    // decisão de não carregar compatibilidade com ele (11/09/2026).
+    payload: a.payload,
     // Forma normalizada em blocos, AO LADO do payload cru — não no lugar dele.
     ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
     metrics: a.metrics,
@@ -191,6 +192,26 @@ activitiesRouter.post(
     const { texto } = lerQuadroSchema.parse(req.body);
     const leitura = await lerQuadro(texto, { userId: req.user!._id.toString() });
     res.json({ data: leitura });
+  })
+);
+
+/**
+ * O que o servidor entende de um modo escrito. Não grava nada, não chama IA.
+ *
+ * Existe para o app poder ECOAR o entendimento embaixo do campo enquanto a
+ * pessoa monta o bloco — "AMRAP 6' → 6 minutos, resultado em rounds + reps".
+ * Sem isso, o campo de texto livre pediria fé: a pessoa digitaria e só
+ * descobriria depois de salvar se foi entendido.
+ *
+ * É rota, e não cópia do interpretador no app, porque duas implementações da
+ * mesma regra divergem — e aí a tela promete uma coisa e o banco guarda outra.
+ */
+const interpretarSchema = z.object({ modo: z.string().min(1).max(120) });
+activitiesRouter.post(
+  "/interpretar-modo",
+  asyncHandler(async (req, res) => {
+    const { modo } = interpretarSchema.parse(req.body);
+    res.json({ data: interpretarModo(modo) });
   })
 );
 

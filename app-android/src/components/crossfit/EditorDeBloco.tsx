@@ -1,262 +1,339 @@
-// Um sheet que edita qualquer bloco. A tela principal nunca vira formulário
-// longo: ela lista resumos, e a edição acontece aqui dentro.
+// O editor de um bloco. UM só, para qualquer bloco.
+//
+// Antes eram três telas diferentes (metcon, força, livre) mais um despachante,
+// e a pessoa tinha que escolher o tipo ANTES de escrever qualquer coisa —
+// decidindo, no começo, uma categoria que só faz sentido no fim.
+//
+// Agora ela escreve o modo como está no quadro e o servidor deduz o resto. O
+// campo nunca bloqueia: se ninguém entender "aquela parada do coach", o treino
+// salva igual, só sem timer automático.
 
-import React, { useState } from "react";
-import { View, ScrollView, TouchableOpacity } from "react-native";
-import { Txt, Button } from "../ui";
-import { Sheet } from "../Sheet";
+import React, { useEffect, useState } from "react";
+import { View, TouchableOpacity } from "react-native";
+import { Txt } from "../ui";
 import { MovimentosEditor } from "./MovimentosEditor";
-import { EditorDeForca } from "./EditorDeForca";
-import { EditorDeMetcon } from "./EditorDeMetcon";
-import { Campo, Linha, Secao, Opcoes, paraInteiro, paraSegundos, mmss } from "./campos";
-import type {
-  Bloco,
-  BlocoLivre,
-  BlocoDescanso,
-  BlocoSkill,
-  BlocoForca,
-  BlocoMetcon,
-} from "../../api/crossfit";
-import { colors, spacing } from "../../theme";
+import {
+  Campo,
+  CampoComSugestoes,
+  Linha,
+  Opcoes,
+  Secao,
+  paraInteiro,
+  paraNumero,
+  paraSegundos,
+  mmss,
+} from "./campos";
+import { interpretarModo } from "../../api/activities";
+import type { Bloco, Leitura, NivelDeEscala, TipoDeScore } from "../../api/crossfit";
+import { useAuth } from "../../context/AuthContext";
+import { colors, radius, spacing } from "../../theme";
 
-export const ROTULO_DO_BLOCO: Record<Bloco["tipo"], string> = {
-  aquecimento: "Aquecimento",
-  mobilidade: "Mobilidade",
-  skill: "Técnica / Skill",
-  forca: "Força",
-  metcon: "WOD / Metcon",
-  descanso: "Descanso",
-  cooldown: "Cooldown",
-};
+const ESCALAS: { id: NivelDeEscala; label: string }[] = [
+  { id: "rx", label: "RX" },
+  { id: "rx_plus", label: "RX+" },
+  { id: "scaled", label: "Scaled" },
+  { id: "iniciante", label: "Iniciante" },
+  { id: "custom", label: "Adaptado" },
+];
 
-/** Um bloco vazio de cada tipo, para quando a pessoa acabou de adicionar. */
-export function blocoNovo(tipo: Bloco["tipo"]): Bloco {
-  switch (tipo) {
-    case "skill":
-      return { tipo: "skill", movimento: "" };
-    case "forca":
-      return { tipo: "forca", exercicios: [{ name: "", sets: [{ weightKg: 0, reps: null }] }] };
-    case "metcon":
-      return {
-        tipo: "metcon",
-        formato: "for_time",
-        prescricao: { movimentos: [{ nome: "" }] },
-        escala: { nivel: "rx" },
-      };
-    case "descanso":
-      // Um minuto é o REST mais comum entre partes de um WOD.
-      return { tipo: "descanso", duracaoSec: 60 };
-    default:
-      return { tipo, movimentos: [{ nome: "" }] };
-  }
+const TIPOS: { id: TipoDeScore; label: string }[] = [
+  { id: "tempo", label: "Tempo" },
+  { id: "rounds_reps", label: "Rounds + reps" },
+  { id: "reps", label: "Reps" },
+  { id: "carga", label: "Carga" },
+  { id: "distancia", label: "Distância" },
+  { id: "customizado", label: "Outro" },
+];
+
+const EXEMPLOS = ["AMRAP 8'", "FOR TIME", "5 ROUNDS FOR TIME", "EMOM (1'15\") x 4", "REST 1'"];
+
+/** "AMRAP · 6 min · resultado em rounds + reps" — o eco do que foi entendido. */
+function comoFoiLido(l: Leitura | null): string | null {
+  if (!l || l.familia === "livre") return null;
+
+  const partes = [
+    l.familia?.replace("_", " ").toUpperCase(),
+    l.duracaoSec ? `${Math.round(l.duracaoSec / 60)} min` : null,
+    l.timeCapSec ? `cap de ${Math.round(l.timeCapSec / 60)} min` : null,
+    l.intervaloSec ? `janela de ${mmss(l.intervaloSec)}` : null,
+    l.rounds ? `${l.rounds} rounds` : null,
+  ].filter(Boolean);
+
+  const score = TIPOS.find((t) => t.id === l.scoreSugerido)?.label;
+  if (score) partes.push(`resultado em ${score.toLowerCase()}`);
+
+  return partes.join(" · ");
 }
 
 export function EditorDeBloco({
   bloco,
-  visivel,
-  aoFechar,
-  aoSalvar,
+  aoMudar,
   aoRemover,
+  emEquipe = false,
 }: {
-  bloco: Bloco | null;
-  visivel: boolean;
-  aoFechar: () => void;
-  aoSalvar: (b: Bloco) => void;
-  aoRemover?: () => void;
+  bloco: Bloco;
+  aoMudar: (b: Bloco) => void;
+  aoRemover: () => void;
+  emEquipe?: boolean;
 }) {
-  const [rascunho, setRascunho] = useState<Bloco | null>(bloco);
+  const { token } = useAuth();
+  const [lido, setLido] = useState<Leitura | null>(bloco.lido ?? null);
 
-  // Reabrir o sheet com outro bloco precisa recarregar o rascunho.
-  React.useEffect(() => setRascunho(bloco), [bloco]);
+  // Interpretar ao SAIR DO CAMPO, não a cada tecla: o eco mudando no meio da
+  // frase distrai, e seria uma chamada por letra digitada.
+  async function ecoar() {
+    const modo = bloco.modo.trim();
+    if (!modo) return setLido(null);
+    try {
+      setLido(await interpretarModo(token!, modo));
+    } catch {
+      // Sem eco a pessoa segue escrevendo: o entendimento sai no salvamento
+      // de qualquer jeito.
+      setLido(null);
+    }
+  }
 
-  if (!rascunho) return null;
+  useEffect(() => {
+    void ecoar();
+    // Só na montagem: dali em diante quem dispara é o blur do campo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const eco = comoFoiLido(lido);
+  const ehDescanso = lido?.familia === "descanso";
+  const semResultado = ehDescanso || lido?.scoreSugerido === "nenhum";
+  const r = bloco.resultado;
+
+  // UM valor para os chips E para os campos.
+  //
+  // Eram duas expressões iguais escritas separadas, e elas divergiram: com o
+  // resultado ainda vazio, o chip mostrava a sugestão do servidor
+  // ("Rounds + reps") enquanto o campo abaixo continuava pedindo tempo.
+  const tipoAtual: TipoDeScore =
+    r?.tipo ?? ((lido?.scoreSugerido as TipoDeScore) || "tempo");
+
+  function mudarResultado(patch: Partial<NonNullable<Bloco["resultado"]>>) {
+    aoMudar({
+      ...bloco,
+      resultado: { tipo: tipoAtual, ...r, ...patch },
+    });
+  }
 
   return (
-    <Sheet visivel={visivel} aoFechar={aoFechar}>
-      <View style={{ maxHeight: 560 }}>
-        <View style={{ paddingHorizontal: spacing.gutter, marginBottom: spacing.sm }}>
-          <Txt variant="titleCard">{ROTULO_DO_BLOCO[rascunho.tipo]}</Txt>
+    <View
+      style={{
+        backgroundColor: colors.surface2,
+        borderWidth: 1,
+        borderColor: colors.line,
+        borderRadius: radius.card,
+        padding: spacing.md,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+        <View style={{ flex: 1 }}>
+          <CampoComSugestoes
+            tipo="modo"
+            rotulo="Como era"
+            valor={bloco.modo}
+            aoMudar={(t) => aoMudar({ ...bloco, modo: t })}
+            aoSairDoCampo={() => void ecoar()}
+            placeholder="AMRAP 8'"
+          />
         </View>
+        <TouchableOpacity onPress={aoRemover} hitSlop={8} style={{ marginTop: 18 }}>
+          <Txt variant="titleCard" color={colors.danger}>
+            ×
+          </Txt>
+        </TouchableOpacity>
+      </View>
 
-        <ScrollView
-          style={{ paddingHorizontal: spacing.gutter }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {rascunho.tipo === "forca" ? (
-            <EditorDeForca
-              bloco={rascunho as BlocoForca}
-              aoMudar={(b) => setRascunho(b)}
-            />
-          ) : rascunho.tipo === "metcon" ? (
-            <EditorDeMetcon
-              bloco={rascunho as BlocoMetcon}
-              aoMudar={(b) => setRascunho(b)}
-            />
-          ) : rascunho.tipo === "skill" ? (
-            <EditorSkill bloco={rascunho as BlocoSkill} aoMudar={setRascunho} />
-          ) : rascunho.tipo === "descanso" ? (
-            <Campo
-              rotulo="Quanto descansou"
-              valor={mmss((rascunho as BlocoDescanso).duracaoSec)}
-              aoMudar={(t) =>
-                setRascunho({ ...(rascunho as BlocoDescanso), duracaoSec: paraSegundos(t) })
-              }
-              placeholder="1:00"
-              autoFocus
-            />
-          ) : (
-            <EditorLivre bloco={rascunho as BlocoLivre} aoMudar={setRascunho} />
-          )}
+      {/* Escreva do jeito do seu box. Os exemplos existem porque um campo de
+          texto vazio sem nenhuma pista trava quem nunca viu o formulário. */}
+      {!bloco.modo.trim() ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: 8 }}>
+          {EXEMPLOS.map((e) => (
+            <TouchableOpacity
+              key={e}
+              onPress={() => {
+                aoMudar({ ...bloco, modo: e });
+                void ecoar();
+              }}
+              activeOpacity={0.8}
+              style={{
+                paddingHorizontal: spacing.sm,
+                paddingVertical: 6,
+                borderRadius: radius.full,
+                borderWidth: 1,
+                borderColor: colors.line,
+              }}
+            >
+              <Txt variant="label" color={colors.text3}>
+                {e}
+              </Txt>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
 
-          <Secao titulo="Observações">
+      {eco ? (
+        <Txt variant="caption" color={colors.lime} style={{ marginTop: 6 }}>
+          entendi: {eco}
+        </Txt>
+      ) : bloco.modo.trim() ? (
+        <Txt variant="caption" color={colors.text3} style={{ marginTop: 6 }}>
+          não reconheci o formato — o treino salva igual, só sem timer
+        </Txt>
+      ) : null}
+
+      {!ehDescanso ? (
+        <>
+          <Secao titulo="Nome (opcional)">
             <Campo
-              valor={rascunho.notas ?? ""}
-              aoMudar={(t) => setRascunho({ ...rascunho, notas: t } as Bloco)}
-              placeholder="Como foi? O que travou?"
+              valor={bloco.nome ?? ""}
+              aoMudar={(t) => aoMudar({ ...bloco, nome: t || null })}
+              placeholder="Fran, BLOCO A, Relay…"
             />
           </Secao>
 
-          <View style={{ gap: spacing.sm, marginTop: spacing.lg, marginBottom: spacing.md }}>
-            <Button title="Salvar bloco" size="lg" onPress={() => aoSalvar(rascunho)} />
-            {aoRemover ? (
-              <TouchableOpacity
-                onPress={aoRemover}
-                activeOpacity={0.7}
-                style={{ alignItems: "center", paddingVertical: spacing.sm }}
-              >
-                <Txt variant="label" color={colors.danger}>
-                  Remover bloco
-                </Txt>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </ScrollView>
-      </View>
-    </Sheet>
+          <Secao titulo="Movimentos">
+            <MovimentosEditor
+              movimentos={bloco.movimentos}
+              aoMudar={(movimentos) => aoMudar({ ...bloco, movimentos })}
+              emEquipe={emEquipe}
+            />
+          </Secao>
+
+          {!semResultado ? (
+            <Secao titulo="Quanto você fez">
+              <Opcoes
+                valor={tipoAtual}
+                opcoes={TIPOS}
+                aoEscolher={(tipo) => aoMudar({ ...bloco, resultado: { tipo } })}
+              />
+              <ResultadoCampos tipo={tipoAtual} score={r} aoMudar={mudarResultado} />
+
+              {/* Estourar o cap não é um tempo: é o quanto deu para fazer.
+                  Sem isto, "4 rounds no cap" derrubava um tempo de verdade no
+                  quadro de recordes. */}
+              <Opcoes
+                valor={r?.capado ? "sim" : "nao"}
+                opcoes={[
+                  { id: "nao", label: "Terminei" },
+                  { id: "sim", label: "Estourou o cap" },
+                ]}
+                aoEscolher={(id) => mudarResultado({ capado: id === "sim" })}
+              />
+            </Secao>
+          ) : null}
+
+          <Secao titulo="Escala">
+            <Opcoes
+              valor={bloco.escala.nivel}
+              opcoes={ESCALAS}
+              aoEscolher={(nivel) => aoMudar({ ...bloco, escala: { ...bloco.escala, nivel } })}
+            />
+          </Secao>
+        </>
+      ) : null}
+    </View>
   );
 }
 
-/**
- * Aquecimento, mobilidade e cooldown.
- *
- * Ganhou formato porque "EMOM 1'15\" × 4" é o warm-up mais comum de box, e
- * sem intervalo a pessoa acabava registrando o aquecimento como se fosse WOD
- * só para ter onde escrever o tempo de cada rodada.
- */
-function EditorLivre({
-  bloco,
+/** Os campos do resultado mudam com o tipo — mostrar todos daria seis caixas. */
+function ResultadoCampos({
+  tipo,
+  score,
   aoMudar,
 }: {
-  bloco: BlocoLivre;
-  aoMudar: (b: BlocoLivre) => void;
+  tipo: TipoDeScore;
+  score: Bloco["resultado"];
+  aoMudar: (patch: Partial<NonNullable<Bloco["resultado"]>>) => void;
 }) {
-  return (
-    <View>
-      <Secao titulo="Como foi">
-        <Opcoes
-          valor={bloco.formato ?? "livre"}
-          opcoes={[
-            { id: "livre", label: "Solto" },
-            { id: "circuito", label: "Circuito" },
-            { id: "emom", label: "EMOM" },
-          ]}
-          aoEscolher={(id) => aoMudar({ ...bloco, formato: id === "livre" ? null : id })}
-        />
-      </Secao>
-
+  if (tipo === "rounds_reps") {
+    return (
       <Linha>
-        {bloco.formato === "emom" ? (
-          <Campo
-            rotulo="A cada"
-            valor={mmss(bloco.intervaloSec)}
-            aoMudar={(t) => aoMudar({ ...bloco, intervaloSec: paraSegundos(t) })}
-            placeholder="1:15"
-          />
-        ) : (
-          <Campo
-            rotulo="Duração"
-            valor={mmss(bloco.duracaoSec)}
-            aoMudar={(t) => aoMudar({ ...bloco, duracaoSec: paraSegundos(t) })}
-            placeholder="mm:ss"
-          />
-        )}
         <Campo
           rotulo="Rounds"
-          valor={bloco.rounds != null ? String(bloco.rounds) : ""}
-          aoMudar={(t) => aoMudar({ ...bloco, rounds: paraInteiro(t) })}
-          placeholder="4"
+          valor={score?.rounds != null ? String(score.rounds) : ""}
+          aoMudar={(t) => aoMudar({ rounds: paraNumero(t) })}
+          placeholder="7"
+          teclado="numeric"
+        />
+        <Campo
+          rotulo="+ reps"
+          valor={score?.repsExtras != null ? String(score.repsExtras) : ""}
+          aoMudar={(t) => aoMudar({ repsExtras: paraInteiro(t) })}
+          placeholder="12"
           teclado="numeric"
         />
       </Linha>
+    );
+  }
 
-      <Secao titulo="Movimentos">
-        <MovimentosEditor
-          movimentos={bloco.movimentos}
-          aoMudar={(movs) => aoMudar({ ...bloco, movimentos: movs })}
-          comCarga={false}
-        />
-      </Secao>
-    </View>
-  );
-}
-
-/** Skill: praticar um movimento. `melhorSequencia` é o que vira recorde. */
-function EditorSkill({ bloco, aoMudar }: { bloco: BlocoSkill; aoMudar: (b: BlocoSkill) => void }) {
-  return (
-    <View>
+  if (tipo === "tempo") {
+    return (
       <Campo
-        rotulo="Movimento"
-        valor={bloco.movimento}
-        aoMudar={(t) => aoMudar({ ...bloco, movimento: t })}
-        placeholder="Double Under, Handstand Walk…"
-        autoFocus
+        rotulo="Tempo"
+        valor={score?.tempoSec != null ? mmss(score.tempoSec) : ""}
+        aoMudar={(t) => aoMudar({ tempoSec: paraSegundos(t) })}
+        placeholder="5:32"
       />
+    );
+  }
 
-      <Secao titulo="Como praticou">
-        <Linha>
-          <Campo
-            rotulo="Duração"
-            valor={mmss(bloco.duracaoSec)}
-            aoMudar={(t) => aoMudar({ ...bloco, duracaoSec: paraSegundos(t) })}
-            placeholder="mm:ss"
-          />
-          <Campo
-            rotulo="Intervalo"
-            valor={mmss(bloco.intervaloSec)}
-            aoMudar={(t) => aoMudar({ ...bloco, intervaloSec: paraSegundos(t) })}
-            placeholder="EMOM = 1:00"
-          />
-        </Linha>
-      </Secao>
+  if (tipo === "carga") {
+    return (
+      <Campo
+        rotulo="Carga (kg)"
+        valor={score?.cargaKg != null ? String(score.cargaKg) : ""}
+        aoMudar={(t) => aoMudar({ cargaKg: paraNumero(t) })}
+        placeholder="100"
+        teclado="numeric"
+      />
+    );
+  }
 
-      <Secao titulo="Resultado">
-        <Linha>
-          <Campo
-            rotulo="Acertos"
-            valor={bloco.acertos != null ? String(bloco.acertos) : ""}
-            aoMudar={(t) => aoMudar({ ...bloco, acertos: paraInteiro(t) })}
-            placeholder="8"
-            teclado="numeric"
-          />
-          <Campo
-            rotulo="De quantos"
-            valor={bloco.tentativas != null ? String(bloco.tentativas) : ""}
-            aoMudar={(t) => aoMudar({ ...bloco, tentativas: paraInteiro(t) })}
-            placeholder="10"
-            teclado="numeric"
-          />
-        </Linha>
+  if (tipo === "distancia") {
+    return (
+      <Campo
+        rotulo="Distância (m)"
+        valor={score?.distanciaM != null ? String(score.distanciaM) : ""}
+        aoMudar={(t) => aoMudar({ distanciaM: paraNumero(t) })}
+        placeholder="1200"
+        teclado="numeric"
+      />
+    );
+  }
+
+  if (tipo === "customizado") {
+    return (
+      <Linha>
         <Campo
-          rotulo="Melhor sequência sem quebrar"
-          valor={bloco.melhorSequencia != null ? String(bloco.melhorSequencia) : ""}
-          aoMudar={(t) => aoMudar({ ...bloco, melhorSequencia: paraInteiro(t) })}
-          placeholder="35"
+          rotulo="Número"
+          valor={score?.reps != null ? String(score.reps) : ""}
+          aoMudar={(t) => aoMudar({ reps: paraInteiro(t) })}
+          placeholder="40"
           teclado="numeric"
         />
-        <Txt variant="caption" color={colors.text3}>
-          Esse número vira recorde — é ele que mostra a evolução do movimento.
-        </Txt>
-      </Secao>
-    </View>
+        {/* Sem a descrição, o número não significa nada daqui a um mês — e por
+            isso ele também não entra em recorde nenhum. */}
+        <Campo
+          rotulo="O que é"
+          valor={score?.descricao ?? ""}
+          aoMudar={(t) => aoMudar({ descricao: t || null })}
+          placeholder="soma do pior round"
+        />
+      </Linha>
+    );
+  }
+
+  return (
+    <Campo
+      rotulo="Reps"
+      valor={score?.reps != null ? String(score.reps) : ""}
+      aoMudar={(t) => aoMudar({ reps: paraInteiro(t) })}
+      placeholder="90"
+      teclado="numeric"
+    />
   );
 }

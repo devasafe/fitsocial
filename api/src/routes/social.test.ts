@@ -252,14 +252,18 @@ describe("Rede social", () => {
         sportId: "crossfit",
         kind: "wod",
         payload: {
-          name: "Cindy",
-          scoreType: "amrap",
-          level: "rx",
-          resultRounds: 20,
-          movements: [
-            { name: "Pull-ups", reps: 5 },
-            { name: "Push-ups", reps: 10 },
-            { name: "Air Squats", reps: 15 },
+          v: 3,
+          blocos: [
+            {
+              modo: "AMRAP 20'",
+              nome: "Cindy",
+              movimentos: [
+                { nome: "Pull-ups", volume: { valor: 5, unidade: "reps" } },
+                { nome: "Push-ups", volume: { valor: 10, unidade: "reps" } },
+                { nome: "Air Squats", volume: { valor: 15, unidade: "reps" } },
+              ],
+              resultado: { tipo: "rounds_reps", rounds: 20 },
+            },
           ],
         },
         shareToFeed: true,
@@ -272,7 +276,10 @@ describe("Rede social", () => {
     expect(wodPost).toBeTruthy();
     expect(wodPost.activity.title).toBe("Cindy");
     expect(wodPost.activity.movements).toHaveLength(3);
-    expect(wodPost.activity.movements[0].name).toBe("Pull-ups");
+    // O feed serve a MESMA linha que o cartão de compartilhar desenha: eram
+    // dois formatadores, e os dois tinham que concordar sobre como se escreve
+    // um movimento.
+    expect(wodPost.activity.movements[0]).toBe("5  Pull-ups");
   });
 
   it("GET /social/search acha por username e por nome, excluindo você", async () => {

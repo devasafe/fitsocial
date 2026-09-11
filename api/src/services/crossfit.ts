@@ -1,54 +1,63 @@
-import type {
-  Bloco,
-  Carga,
-  Movimento,
-  Score,
-  WodPayloadV2,
+import {
+  wodPayloadSchema,
+  type Bloco,
+  type Carga,
+  type FamiliaDeModo,
+  type Movimento,
+  type Score,
+  type WodPayload,
 } from "../models/crossfit.js";
-import type { WodPayloadV1 } from "../models/Activity.js";
-import { resolverBenchmark } from "./benchmarks.js";
+import { interpretarModo } from "./crossfit/interpretarModo.js";
 
 /**
- * O ponto onde os dois formatos de WOD viram um só.
+ * As leituras que o resto do sistema faz de um treino de CrossFit.
  *
- * O resto do sistema — métricas, PR, cards, detalhe — conhece apenas blocos.
- * A conversão acontece na LEITURA, não numa migração: converter o banco seria
- * irreversível, e o formato antigo continua chegando dos APKs instalados.
+ * O v2 mantinha aqui um tradutor do formato v1, porque os dois formatos
+ * coexistiam no banco. Não coexistem mais: os treinos antigos foram apagados em
+ * 11/09/2026, junto com a decisão de não carregar compatibilidade com o APK
+ * 1.2.0. O tradutor foi embora com eles — e com ele a maior fonte de "de qual
+ * formato veio isto?" do projeto.
  */
 
-type PayloadDeWod = WodPayloadV2 | WodPayloadV1 | Record<string, unknown>;
-
-function ehV2(p: PayloadDeWod): p is WodPayloadV2 {
-  return (p as { v?: number }).v === 2;
-}
-
 /** Converte kg/lb para quilos. O resto não tem conversão honesta. */
-export function cargaEmKg(carga?: Carga | null): number | null {
-  if (!carga || carga.valor == null) return null;
-  if (carga.unidade === "kg") return carga.valor;
-  if (carga.unidade === "lb") return Math.round(carga.valor * 0.453_592 * 10) / 10;
+function paraKg(valor: number | null | undefined, unidade: Carga["unidade"]): number | null {
+  if (valor == null) return null;
+  if (unidade === "kg") return valor;
+  if (unidade === "lb") return Math.round(valor * 0.453_592 * 10) / 10;
   // percent_1rm depende do 1RM de quem treinou; corporal, do peso. Nenhum dos
-  // dois vira quilo sem inventar número.
+  // dois é conversível sem um dado que o quadro não tem.
   return null;
 }
 
-/** Preenche `valorKg` onde dá, para PR e gráfico compararem sem reinterpretar. */
-export function normalizarCarga(carga?: Carga | null): Carga | null {
-  if (!carga) return null;
-  return { ...carga, valorKg: cargaEmKg(carga) };
+export function cargaEmKg(carga?: Carga | null): number | null {
+  return carga ? paraKg(carga.rx, carga.unidade) : null;
 }
 
-/** Quantas repetições um round completo tem, quando dá para saber. */
+/** Preenche os `*Kg` derivados. É o que o PR e os gráficos comparam. */
+export function normalizarCarga(carga?: Carga | null): Carga | null {
+  if (!carga) return null;
+  return {
+    ...carga,
+    rxKg: paraKg(carga.rx, carga.unidade),
+    rxFKg: paraKg(carga.rxF, carga.unidade),
+  };
+}
+
+/**
+ * Quantas repetições tem um round.
+ *
+ * `null` quando a conta não fecha — movimento medido em metro, caloria ou
+ * tempo não entrega repetição, e escada (21-15-9) não tem round fixo. Nos dois
+ * casos somar daria um número menor que a verdade, e o score sairia torto.
+ */
 export function repsPorRound(movimentos: Movimento[]): number | null {
   let total = 0;
   for (const m of movimentos) {
-    // Movimento medido em metro ou caloria não entrega repetição; sem ele o
-    // total do round seria menor que a verdade, e o score sairia torto.
-    if (m.reps == null) {
-      if (m.distanciaM != null || m.calorias != null || m.duracaoSec != null) return null;
-      continue;
-    }
-    total += m.reps;
+    const v = m.volume;
+    if (!v) continue;
+    if (Array.isArray(v.valor)) return null;
+    if (v.unidade !== "reps") return null;
+    total += v.valor;
   }
   return total > 0 ? total : null;
 }
@@ -62,10 +71,10 @@ export function repsPorRound(movimentos: Movimento[]): number | null {
  * distância ou caloria), `valor` fica nulo e a comparação cai para a ordem
  * lexicográfica de (rounds, repsExtras).
  */
-export function fecharScore(score: Score, movimentos: Movimento[] = []): Score & {
-  valor: number | null;
-  maiorMelhor: boolean;
-} {
+export function fecharScore(
+  score: Score,
+  movimentos: Movimento[] = []
+): Score & { valor: number | null; maiorMelhor: boolean } {
   const maiorMelhor = score.tipo !== "tempo";
 
   let valor: number | null = null;
@@ -90,100 +99,57 @@ export function fecharScore(score: Score, movimentos: Movimento[] = []): Score &
     case "distancia":
       valor = score.distanciaM ?? null;
       break;
+    case "customizado":
+      // Por definição não é comparável com nada: a descrição diz o que o
+      // número quer dizer, e só quem escreveu sabe.
+      valor = null;
+      break;
   }
 
   return { ...score, valor, maiorMelhor };
 }
 
-/**
- * Converte o formato antigo em blocos.
- *
- * O `strengthBlock` do formato antigo é a prova de que o desenho pedia uma
- * lista: quando precisaram de um segundo bloco, criaram um campo especial. Aqui
- * ele volta a ser o que sempre foi — um bloco de força antes do metcon.
- */
-function deV1(p: WodPayloadV1): WodPayloadV2 {
-  const blocos: Bloco[] = [];
-
-  if (p.strengthBlock) {
-    blocos.push({ tipo: "forca", exercicios: p.strengthBlock.exercises, notas: null });
-  }
-
-  const movimentos: Movimento[] = (p.movements ?? []).map((m) => ({
-    nome: m.name,
-    reps: m.reps ?? null,
-    repScheme: null,
-    distanciaM: null,
-    calorias: null,
-    duracaoSec: m.timeSec ?? null,
-    carga: m.loadKg != null ? { valor: m.loadKg, unidade: "kg", valorKg: m.loadKg } : null,
-    notas: null,
-  }));
-
-  // O formato antigo guardava o resultado em quatro campos soltos; aqui eles
-  // viram o score estruturado, com o tipo que corresponde ao formato.
-  const resultado: Score | null =
-    p.resultTimeSec != null
-      ? { tipo: "tempo", tempoSec: p.resultTimeSec }
-      : p.resultRounds != null
-        ? { tipo: "rounds_reps", rounds: p.resultRounds, repsExtras: p.resultReps ?? 0 }
-        : p.resultReps != null
-          ? { tipo: "reps", reps: p.resultReps }
-          : p.resultLoadKg != null
-            ? { tipo: "carga", cargaKg: p.resultLoadKg }
-            : null;
-
-  // O formato antigo só tinha o nome digitado. Resolver contra o catálogo é o
-  // que devolve identidade estável ao que É benchmark, sem transformar nome
-  // livre ("WOD do dia") em recorde.
-  const conhecido = resolverBenchmark(p.name);
-
-  blocos.push({
-    tipo: "metcon",
-    nome: p.name,
-    benchmark: conhecido ? { slug: conhecido.slug, familia: conhecido.familia } : null,
-    // Dois renomes na conversão. "for_reps" virou "max_reps", e "chipper"
-    // deixou de ser formato: chipper É um for time — o que o define é a
-    // sequência de movimentos, que agora tem ordem própria na prescrição.
-    formato:
-      p.scoreType === "for_reps"
-        ? "max_reps"
-        : p.scoreType === "chipper"
-          ? "for_time"
-          : p.scoreType,
-    formatoLivre: null,
-    prescricao: { movimentos },
-    resultado,
-    // "adaptado" é preservado como está: é a chave dos recordes que já foram
-    // gravados por quem usa o app instalado. Trocar para "custom" faria o
-    // recorde antigo ficar parado ao lado de um novo começando do zero.
-    escala: { nivel: p.level },
-    rounds: null,
-    notas: p.description ?? null,
-  });
-
-  return { v: 2, box: null, blocos };
+/** A forma canônica de um treino. Payload inválido vira treino vazio, nunca erro. */
+export function normalizarWod(payload: unknown): WodPayload {
+  const lido = wodPayloadSchema.safeParse(payload);
+  if (lido.success) return lido.data;
+  return { v: 3, nome: null, box: null, quadro: null, tamanhoDoTime: 1, parceiros: null, blocos: [] };
 }
 
-/** A forma canônica de um treino de CrossFit, venha ele de onde vier. */
-export function normalizarWod(payload: unknown): WodPayloadV2 {
-  const p = (payload ?? {}) as PayloadDeWod;
-  if (ehV2(p)) return p;
-  return deV1(p as WodPayloadV1);
+/**
+ * Roda o interpretador em todo bloco e devolve o treino com `lido` preenchido.
+ *
+ * Chamado NO SALVAMENTO. Como `lido` é derivado do `modo`, rodar de novo em
+ * cima de um treino já salvo é seguro e é justamente o que se quer quando o
+ * interpretador melhorar.
+ */
+export function interpretarBlocos(wod: WodPayload): WodPayload {
+  return {
+    ...wod,
+    blocos: wod.blocos.map((b) => ({ ...b, lido: interpretarModo(b.modo) })),
+  };
 }
 
 // ---- Leituras que o resto do sistema faz ----------------------------------
 
-export function blocosDoTipo<T extends Bloco["tipo"]>(
-  wod: WodPayloadV2,
-  tipo: T
-): Extract<Bloco, { tipo: T }>[] {
-  return wod.blocos.filter((b): b is Extract<Bloco, { tipo: T }> => b.tipo === tipo);
+export function blocosDaFamilia(wod: WodPayload, ...familias: FamiliaDeModo[]): Bloco[] {
+  return wod.blocos.filter((b) => b.lido?.familia && familias.includes(b.lido.familia));
 }
 
-/** O metcon principal: o primeiro do treino. */
-export function metconPrincipal(wod: WodPayloadV2) {
-  return blocosDoTipo(wod, "metcon")[0] ?? null;
+/**
+ * O bloco que representa o treino.
+ *
+ * Antes era "o primeiro metcon", e isso dependia de um rótulo escolhido no
+ * cadastro. Agora é o primeiro bloco QUE TEM RESULTADO — porque foi o que a
+ * pessoa se deu ao trabalho de anotar, e é isso que faz dele o assunto.
+ * Nenhum tem resultado: cai para o primeiro que não é descanso.
+ */
+export function blocoPrincipal(wod: WodPayload): Bloco | null {
+  return (
+    wod.blocos.find((b) => b.resultado) ??
+    wod.blocos.find((b) => b.lido?.familia !== "descanso") ??
+    null
+  );
 }
 
 /** Nome normalizado de um movimento, para contar "mais executados". */
@@ -198,68 +164,35 @@ export function chaveDoMovimento(nome: string): string {
 }
 
 /** Todos os movimentos do treino, de todos os blocos, sem repetir. */
-export function movimentosDoTreino(wod: WodPayloadV2): string[] {
+export function movimentosDoTreino(wod: WodPayload): string[] {
   const vistos = new Set<string>();
   for (const bloco of wod.blocos) {
-    if (bloco.tipo === "forca") {
-      for (const e of bloco.exercicios) vistos.add(chaveDoMovimento(e.name));
-    } else if (bloco.tipo === "skill") {
-      vistos.add(chaveDoMovimento(bloco.movimento));
-    } else if (bloco.tipo === "metcon") {
-      for (const m of bloco.prescricao.movimentos) vistos.add(chaveDoMovimento(m.nome));
-    } else if (bloco.tipo !== "descanso") {
-      // Descanso nao tem movimento — e a lista de blocos deixou de ser
-      // "todos tem movimentos" no dia em que ele entrou.
-      for (const m of bloco.movimentos) vistos.add(chaveDoMovimento(m.nome));
-    }
+    for (const m of bloco.movimentos) vistos.add(chaveDoMovimento(m.nome));
   }
   vistos.delete("");
   return [...vistos];
 }
 
 /**
- * A volta: blocos → os campos planos do formato antigo.
+ * O volume total de um movimento, considerando o time.
  *
- * O app instalado lê `payload.name`, `payload.level`, `payload.resultTimeSec` e
- * `payload.movements`. Um treino gravado no formato novo não tem nenhum deles,
- * e a tela de detalhe dele mostraria "WOD: —" para tudo.
- *
- * Servir os campos planos AO LADO dos blocos resolve sem tirar nada de
- * ninguém — mesma escolha do `crossfit` ao lado do `payload`.
+ * É a conta que o `escopo` existe para resolver: 40 burpees "dividido" entre
+ * dois são 40 no total e 20 por cabeça; "cada" são 80. Sem isto o app conta
+ * errado qualquer treino de dupla.
  */
-export function paraFormatoAntigo(wod: WodPayloadV2): Record<string, unknown> {
-  const metcon = metconPrincipal(wod);
-  if (!metcon) return {};
+export function volumeTotal(m: Movimento, tamanhoDoTime = 1): number | null {
+  const v = m.volume;
+  if (!v) return null;
+  const base = Array.isArray(v.valor) ? v.valor.reduce((s, n) => s + n, 0) : v.valor;
 
-  const r = metcon.resultado;
-  const forca = blocosDoTipo(wod, "forca")[0];
-
-  return {
-    name: metcon.nome ?? metcon.benchmark?.slug ?? "Treino",
-    // "intervalo" e "outro" não existiam no formato antigo; o mais próximo que
-    // ele entende é for_time.
-    scoreType:
-      metcon.formato === "max_reps"
-        ? "for_reps"
-        : metcon.formato === "intervalo" || metcon.formato === "outro"
-          ? "for_time"
-          : metcon.formato,
-    level: metcon.escala.nivel === "rx" || metcon.escala.nivel === "scaled" ? metcon.escala.nivel : "adaptado",
-    ...(r?.tipo === "tempo" && r.tempoSec != null ? { resultTimeSec: r.tempoSec } : {}),
-    ...(r?.tipo === "rounds_reps" ? { resultRounds: r.rounds ?? 0, resultReps: r.repsExtras ?? 0 } : {}),
-    ...(r?.tipo === "reps" && r.reps != null ? { resultReps: r.reps } : {}),
-    ...(r?.tipo === "carga" && r.cargaKg != null ? { resultLoadKg: r.cargaKg } : {}),
-    ...(metcon.notas ? { description: metcon.notas } : {}),
-    ...(forca ? { strengthBlock: { variant: "musculacao", exercises: forca.exercicios } } : {}),
-    movements: metcon.prescricao.movimentos.slice(0, 30).map((m) => ({
-      name: m.nome,
-      // Calcula em vez de ler `valorKg`: esse campo é derivado e o cliente não
-      // é obrigado a mandá-lo preenchido.
-      ...(cargaEmKg(m.carga) != null ? { loadKg: cargaEmKg(m.carga) } : {}),
-      // O formato antigo só sabia reps; distância e caloria viram o número que
-      // houver, para o card não ficar mudo.
-      ...(m.reps != null ? { reps: m.reps } : {}),
-      ...(m.duracaoSec != null ? { timeSec: m.duracaoSec } : {}),
-    })),
-  };
+  switch (m.escopo) {
+    case "cada":
+      return base * tamanhoDoTime;
+    case "dividido":
+    case "junto":
+      // O time inteiro fez `base` uma vez só.
+      return base;
+    default:
+      return base * tamanhoDoTime;
+  }
 }

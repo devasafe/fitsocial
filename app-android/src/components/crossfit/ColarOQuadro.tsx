@@ -29,6 +29,7 @@ export function ColarOQuadro({
   aoLer: (dados: {
     blocos: Bloco[];
     box: string | null;
+    tamanhoDoTime: number;
     quadro: string;
   }) => void;
 }) {
@@ -64,6 +65,7 @@ export function ColarOQuadro({
         blocos: leitura.blocos,
         box: leitura.box ?? null,
         quadro: limpo,
+        tamanhoDoTime: leitura.tamanhoDoTime ?? 1,
       });
       setTexto("");
       aoFechar();

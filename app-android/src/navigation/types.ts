@@ -55,7 +55,6 @@ export type AppStackParams = {
   RegisterEndurance: { sportId: string };
   RegisterClass: { sportId: string };
   RegisterGeneric: { sportId: string };
-  RegisterWod: { sportId: string };
   RegisterCrossfit: { sportId: string };
   LiveTrack: { sportId: string };
 };

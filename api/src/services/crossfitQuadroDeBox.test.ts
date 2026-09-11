@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
-import { wodPayloadV2Schema } from "../models/crossfit.js";
-import { normalizarWod, movimentosDoTreino, paraFormatoAntigo } from "./crossfit.js";
+import { wodPayloadSchema } from "../models/crossfit.js";
+import { normalizarWod, movimentosDoTreino, interpretarBlocos, volumeTotal } from "./crossfit.js";
 import { detectPRs } from "./prEngine.js";
 import { Activity } from "../models/Activity.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
@@ -19,123 +19,129 @@ import { PersonalRecord } from "../models/PersonalRecord.js";
  *             FOR TIME 7' — 400m Run together, 2 Rope Climb (cada), 40 BJO, 20 C2B
  *
  * Ele é o teste porque nenhum treino inventado tem descanso entre partes,
- * revezamento, "cada" e aquecimento com intervalo ao mesmo tempo. */
+ * revezamento, "cada" e aquecimento com intervalo ao mesmo tempo.
+ *
+ * E é o caso nº 10 do briefing — a última linha é a que o v2 NÃO conseguia
+ * representar: "400m Run together" e "2 Rope Climb cada" no MESMO bloco, com
+ * escopos diferentes. Lá o escopo era do bloco inteiro. */
+
+const m = (
+  nome: string,
+  volume?: { valor: number | number[]; unidade: "reps" | "seg" | "metros" | "cal" },
+  escopo: "individual" | "dividido" | "cada" | "junto" = "individual"
+) => ({ nome, volume, escopo });
 
 const QUADRO = {
-  v: 2 as const,
+  v: 3 as const,
   box: "CrossFit do bairro",
+  tamanhoDoTime: 2,
+  parceiros: ["Bruno"],
   blocos: [
     {
-      tipo: "aquecimento" as const,
-      formato: "emom" as const,
-      intervaloSec: 75,
-      rounds: 4,
+      modo: 'EMOM (1\'15") x 4',
+      nome: "WARM-UP",
       movimentos: [
-        { nome: "Beat Swing", reps: 4 },
-        { nome: "Pull Up", reps: 2 },
-        { nome: "Skipping", reps: 20 },
-        { nome: "Broad Jump", reps: 4 },
+        m("Beat Swing", { valor: 4, unidade: "reps" }),
+        m("Pull Up", { valor: 2, unidade: "reps" }),
+        m("Skipping", { valor: 20, unidade: "reps" }),
+        m("Broad Jump", { valor: 4, unidade: "reps" }),
       ],
     },
-    { tipo: "skill" as const, movimento: "Rope Climb", formato: "pratica_livre" as const },
+    { modo: "SKILL", movimentos: [m("Rope Climb")] },
     {
-      tipo: "metcon" as const,
-      nome: "Relay",
-      grupo: "WOD",
-      formato: "amrap" as const,
-      equipe: { tamanho: 2, modo: "revezamento" as const, parceiros: ["Bruno"] },
-      prescricao: {
-        duracaoSec: 360,
-        movimentos: [
-          { nome: "Run", distanciaM: 100 },
-          { nome: "Rope Climb", reps: 2 },
-        ],
-      },
+      modo: "AMRAP 6'",
+      nome: "BLOCO A",
+      movimentos: [
+        m("Run", { valor: 100, unidade: "metros" }, "dividido"),
+        m("Rope Climb", { valor: 2, unidade: "reps" }, "dividido"),
+      ],
       resultado: { tipo: "rounds_reps" as const, rounds: 7, repsExtras: 1 },
-      escala: { nivel: "rx" as const },
     },
-    { tipo: "descanso" as const, duracaoSec: 60 },
+    { modo: "REST 1'", movimentos: [] },
     {
-      tipo: "metcon" as const,
-      nome: "Relay",
-      grupo: "WOD",
-      formato: "amrap" as const,
-      equipe: { tamanho: 2, modo: "revezamento" as const },
-      prescricao: {
-        duracaoSec: 360,
-        movimentos: [
-          { nome: "BJO", reps: 20 },
-          { nome: "C2B", reps: 10 },
-        ],
-      },
+      modo: "AMRAP 6'",
+      nome: "BLOCO B",
+      movimentos: [
+        m("BJO", { valor: 20, unidade: "reps" }, "dividido"),
+        m("C2B", { valor: 10, unidade: "reps" }, "dividido"),
+      ],
       resultado: { tipo: "rounds_reps" as const, rounds: 4, repsExtras: 12 },
-      escala: { nivel: "rx" as const },
     },
-    { tipo: "descanso" as const, duracaoSec: 60 },
+    { modo: "REST 1'", movimentos: [] },
     {
-      tipo: "metcon" as const,
+      modo: "FOR TIME 7'",
       nome: "Final",
-      grupo: "WOD",
-      formato: "for_time" as const,
-      equipe: { tamanho: 2, modo: "junto" as const },
-      prescricao: {
-        timeCapSec: 420,
-        movimentos: [
-          { nome: "Run", distanciaM: 400 },
-          { nome: "Rope Climb", reps: 2, porPessoa: true },
-          { nome: "BJO", reps: 40 },
-          { nome: "C2B", reps: 20 },
-        ],
-      },
+      movimentos: [
+        // Escopos DIFERENTES no mesmo bloco — é isto que o v2 não conseguia.
+        m("Run", { valor: 400, unidade: "metros" }, "junto"),
+        m("Rope Climb", { valor: 2, unidade: "reps" }, "cada"),
+        m("BJO", { valor: 40, unidade: "reps" }, "dividido"),
+        m("C2B", { valor: 20, unidade: "reps" }, "dividido"),
+      ],
       resultado: { tipo: "tempo" as const, tempoSec: 384 },
-      escala: { nivel: "rx" as const },
     },
   ],
 };
 
 describe("O quadro do box inteiro cabe no modelo", () => {
   it("é aceito como está", () => {
-    const r = wodPayloadV2Schema.safeParse(QUADRO);
-    expect(r.success, JSON.stringify(r.success ? {} : r.error.issues.slice(0, 3))).toBe(true);
+    expect(wodPayloadSchema.safeParse(QUADRO).success).toBe(true);
   });
 
-  it("o aquecimento guarda que era EMOM de 1'15\" por 4 rounds", () => {
+  it("o modo guarda o que estava escrito, letra por letra", () => {
+    // É a fonte da verdade: sem ele, reinterpretar depois é impossível.
     const wod = normalizarWod(QUADRO);
-    const aq = wod.blocos[0];
-    expect(aq.tipo).toBe("aquecimento");
-    // Antes disto, "EMOM 1:15" só cabia como texto solto na nota — e aí a
-    // pessoa registrava o aquecimento como se fosse WOD, para ter o intervalo.
-    expect(aq).toMatchObject({ formato: "emom", intervaloSec: 75, rounds: 4 });
+    expect(wod.blocos[0].modo).toBe('EMOM (1\'15") x 4');
+    expect(wod.blocos[6].modo).toBe("FOR TIME 7'");
+  });
+
+  it("o interpretador tira a estrutura do aquecimento sem ninguém digitar", () => {
+    const wod = interpretarBlocos(normalizarWod(QUADRO));
+    const warmup = wod.blocos[0].lido!;
+
+    expect(warmup.familia).toBe("emom");
+    expect(warmup.intervaloSec).toBe(75);
+    expect(warmup.rounds).toBe(4);
   });
 
   it("o descanso entre as partes é um bloco, não uma nota", () => {
-    const wod = normalizarWod(QUADRO);
-    const descansos = wod.blocos.filter((b) => b.tipo === "descanso");
+    const wod = interpretarBlocos(normalizarWod(QUADRO));
+    const descansos = wod.blocos.filter((b) => b.lido?.familia === "descanso");
+
     expect(descansos).toHaveLength(2);
-    expect(descansos[0]).toMatchObject({ duracaoSec: 60 });
+    expect(descansos[0].lido?.duracaoSec).toBe(60);
   });
 
-  it("as três partes do WOD ficam agrupadas, e cada uma guarda o próprio resultado", () => {
+  it("as três partes do WOD guardam cada uma o próprio resultado", () => {
     const wod = normalizarWod(QUADRO);
-    const partes = wod.blocos.filter((b) => b.tipo === "metcon" && b.grupo === "WOD");
-    expect(partes).toHaveLength(3);
-    // Três resultados: foram três esforços, não um.
-    expect(partes.every((p) => p.tipo === "metcon" && p.resultado)).toBe(true);
+    const comResultado = wod.blocos.filter((b) => b.resultado);
+
+    expect(comResultado).toHaveLength(3);
+    expect(comResultado[0].resultado?.rounds).toBe(7);
+    expect(comResultado[2].resultado?.tempoSec).toBe(384);
   });
 
-  it('"2 Rope Climb (cada)" fica distinguível de dividir a conta', () => {
+  it("o caso 10 do briefing: escopos diferentes no MESMO bloco", () => {
     const wod = normalizarWod(QUADRO);
-    const final = wod.blocos.find((b) => b.tipo === "metcon" && b.nome === "Final");
-    const rope = final?.tipo === "metcon" ? final.prescricao.movimentos[1] : null;
-    expect(rope).toMatchObject({ nome: "Rope Climb", porPessoa: true });
+    const final = wod.blocos[6];
+
+    // 400m juntos: a dupla correu 400, não 800.
+    expect(volumeTotal(final.movimentos[0], 2)).toBe(400);
+    // 2 Rope Climb cada: a dupla fez 4.
+    expect(volumeTotal(final.movimentos[1], 2)).toBe(4);
+    // 40 BJO repartidos: 40 no total.
+    expect(volumeTotal(final.movimentos[2], 2)).toBe(40);
   });
 
   it("junta os movimentos de todos os blocos, sem quebrar no descanso", () => {
-    // O descanso não tem `movimentos`, e a função assumia que todo bloco tinha.
-    const nomes = movimentosDoTreino(normalizarWod(QUADRO));
-    expect(nomes).toContain("beat_swing");
-    expect(nomes).toContain("rope_climb");
-    expect(nomes).toContain("c2b");
+    // O descanso não tem movimento, e por muito tempo isso foi o que quebrou
+    // quem varria a lista assumindo que todo bloco tinha.
+    const movs = movimentosDoTreino(normalizarWod(QUADRO));
+
+    expect(movs).toContain("rope_climb");
+    expect(movs).toContain("bjo");
+    // "Rope Climb" aparece em três blocos — é um movimento só.
+    expect(movs.filter((x) => x === "rope_climb")).toHaveLength(1);
   });
 });
 
@@ -170,33 +176,26 @@ describe("Recorde em treino de equipe", () => {
   }
 
   /** Só a parte final do quadro, que é a que tem resultado de tempo. */
-  const soOFinal = (comEquipe: boolean) => ({
-    v: 2 as const,
+  const soOFinal = (tamanhoDoTime: number, tempoSec = 384) => ({
+    v: 3 as const,
+    tamanhoDoTime,
     blocos: [
       {
         ...QUADRO.blocos[6],
-        ...(comEquipe ? {} : { equipe: undefined }),
+        nome: "Final",
+        resultado: { tipo: "tempo" as const, tempoSec },
       },
     ],
   });
 
   it("dupla NAO entra no recorde individual", async () => {
     // Linha de base individual, para haver contra o que comparar.
-    await registrar(soOFinal(false));
+    await registrar(soOFinal(1));
 
     // Um tempo MUITO melhor, mas em dupla. Vinte Chest-to-Bar revezados entre
     // dois nao e vinte sozinho: deixar competir derrubaria o recorde de quem
     // fez o treino inteiro sozinho.
-    const emDupla = {
-      v: 2 as const,
-      blocos: [
-        {
-          ...QUADRO.blocos[6],
-          resultado: { tipo: "tempo" as const, tempoSec: 200 },
-        },
-      ],
-    };
-    const novos = await registrar(emDupla);
+    const novos = await registrar(soOFinal(2, 200));
 
     expect(novos.filter((p) => p.type === "wod_time")).toEqual([]);
 
@@ -204,22 +203,22 @@ describe("Recorde em treino de equipe", () => {
     expect(gravado?.value).toBe(384); // o individual, nao o 200 da dupla
   });
 
-  it("o mesmo treino sem equipe gera recorde normalmente", async () => {
-    const novos = await registrar(soOFinal(false));
-    expect(novos.length).toBeGreaterThanOrEqual(0);
+  it("o mesmo treino sozinho gera recorde normalmente", async () => {
+    await registrar(soOFinal(1));
 
     const gravado = await PersonalRecord.findOne({ user: userId, type: "wod_time" }).lean();
     expect(gravado?.value).toBe(384);
   });
-});
 
-describe("O APK antigo continua lendo este treino", () => {
-  it("os campos planos saem preenchidos, apesar dos blocos novos", () => {
-    const antigo = paraFormatoAntigo(normalizarWod(QUADRO));
+  it("bloco sem resultado não vira recorde — nem o aquecimento", async () => {
+    // A regra nova não pergunta "isso é metcon?", pergunta "isso tem
+    // resultado?". Aquecimento não tem, então não concorre sozinho.
+    const novos = await registrar({
+      v: 3 as const,
+      tamanhoDoTime: 1,
+      blocos: [QUADRO.blocos[0], QUADRO.blocos[1]],
+    });
 
-    // Sem isto, quem não atualizou vê "WOD: —" para tudo.
-    expect(antigo.name).toBeTruthy();
-    expect(antigo.level).toBe("rx");
-    expect(Array.isArray(antigo.movements)).toBe(true);
+    expect(novos).toEqual([]);
   });
 });
