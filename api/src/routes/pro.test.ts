@@ -7,6 +7,7 @@ import { User } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
 import { ProfessionalLink } from "../models/ProfessionalLink.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
+import { Plan } from "../models/Plan.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -44,6 +45,7 @@ beforeEach(async () => {
     Activity.deleteMany({}),
     ProfessionalLink.deleteMany({}),
     ProfessionalInvite.deleteMany({}),
+    Plan.deleteMany({}),
   ]);
 });
 
@@ -287,5 +289,140 @@ describe("o perfil do aluno", () => {
     const coach = await registrarProfissional();
     const r = await request(app).get("/pro/alunos/nao-e-um-id").set(auth(coach.token));
     expect(r.status).toBe(404);
+  });
+});
+
+describe("prescrição de treino", () => {
+  const treinoAB = {
+    summary: "Semana de adaptação, foco em técnica.",
+    workout: {
+      split: "AB",
+      daysPerWeek: 3,
+      sessions: [
+        {
+          day: "A — Peito",
+          focus: "Superior",
+          exercises: [{ name: "Supino reto", sets: 4, reps: "8-12", restSeconds: 90, notes: "" }],
+        },
+      ],
+    },
+  };
+
+  it("o coach escreve o treino e o aluno passa a ver na Home dele", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send(treinoAB);
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.version).toBe(1);
+
+    const doAluno = await request(app).get("/plans/current").set(auth(aluno.token));
+    expect(doAluno.status).toBe(200);
+    expect(doAluno.body.plan.workout.split).toBe("AB");
+    // O aluno sabe que não foi a IA que mudou o treino dele.
+    expect(doAluno.body.plan.createdBy).toBe(coach.id);
+  });
+
+  // `Activity.planLink` aponta para o NÚMERO da versão: reescrever a versão
+  // corrente faria o treino já executado passar a dizer que era outro.
+  it("cada prescrição é uma versão nova, não uma edição da anterior", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treinoAB);
+    const segunda = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send({ ...treinoAB, summary: "Subindo a carga." });
+
+    expect(segunda.body.data.version).toBe(2);
+    expect(await Plan.countDocuments({ user: new mongoose.Types.ObjectId(aluno.id) })).toBe(2);
+  });
+
+  // As duas metades do plano são independentes. Prescrever treino não é motivo
+  // para apagar a comida de ninguém.
+  it("não encosta na dieta que já existe", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    const dieta = {
+      dailyCalories: 2200,
+      macros: { proteinG: 160, carbsG: 220, fatG: 70 },
+      meals: [{ name: "Café", timeHint: "07:00", items: [{ food: "Ovos", quantity: "3" }] }],
+      notes: "",
+    };
+    await Plan.create({
+      user: new mongoose.Types.ObjectId(aluno.id),
+      version: 1,
+      summary: "só dieta",
+      diet: dieta,
+      disclaimer: "aviso",
+    });
+
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treinoAB);
+
+    const doAluno = await request(app).get("/plans/current").set(auth(aluno.token));
+    expect(doAluno.body.plan.diet.dailyCalories).toBe(2200);
+    expect(doAluno.body.plan.workout.split).toBe("AB");
+  });
+
+  it("não dá para prescrever para quem não é seu aluno", async () => {
+    const coach = await registrarProfissional();
+    const estranho = await registrar();
+
+    const r = await request(app)
+      .put(`/pro/alunos/${estranho.id}/treino`)
+      .set(auth(coach.token))
+      .send(treinoAB);
+    expect(r.status).toBe(404);
+  });
+
+  it("aluno que fechou os treinos não recebe prescrição", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+    await request(app)
+      .patch(`/pro/acompanhamentos/${linkId}`)
+      .set(auth(aluno.token))
+      .send({ treinos: false });
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send(treinoAB);
+    expect(r.status).toBe(403);
+  });
+
+  // Quem acompanha a dieta não prescreve treino: o papel diz o que a pessoa faz.
+  it("nutri não prescreve treino", async () => {
+    const nutri = await registrarProfissional("nutri");
+    const aluno = await registrar();
+    const code = await convite(nutri.token, "nutri");
+    await request(app).post(`/pro/convites/${code}/aceitar`).set(auth(aluno.token)).send({});
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(nutri.token))
+      .send(treinoAB);
+    expect(r.status).toBe(403);
+  });
+
+  it("treino malformado é recusado na borda", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send({ summary: "x", workout: { split: "AB", daysPerWeek: 3, sessions: [] } });
+    expect(r.status).toBe(400);
   });
 });

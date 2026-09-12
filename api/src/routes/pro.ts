@@ -22,6 +22,17 @@ import {
 } from "../services/vinculos.js";
 import { calendarioDoUsuario, exerciciosDoUsuario } from "../services/evolucao.js";
 import { computeStats } from "../services/adherence.js";
+import { Plan, workoutSchema } from "../models/Plan.js";
+
+/**
+ * O aviso que acompanha um treino escrito por gente, e não pela IA.
+ *
+ * O `disclaimer` é obrigatório no modelo e nasceu para a IA; um plano de coach
+ * precisa do seu, que diz outra coisa — quem responde pelo treino é um
+ * profissional com nome, e a pessoa deve parar se sentir dor.
+ */
+const DISCLAIMER_DO_COACH =
+  "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e fale com ele.";
 
 export const proRouter = Router();
 proRouter.use(requireAuth);
@@ -319,5 +330,63 @@ proRouter.delete(
   asyncHandler(async (req, res) => {
     const link = await encerrarVinculo(req.user!, String(req.params.id));
     res.json({ data: { id: link._id.toString(), status: link.status }, meta: {} });
+  })
+);
+
+// ------------------------------------------------------------- prescrição
+
+const prescricaoSchema = z.object({
+  summary: z.string().min(1).max(500),
+  workout: workoutSchema,
+});
+
+/**
+ * O coach prescreve o treino do aluno.
+ *
+ * Reusa o `Plan`, que já é versionado e já aparece na Home do aluno — o que
+ * faltava era o autor poder ser outra pessoa. Até aqui todo plano era
+ * auto-atribuído, e o jeito de receber treino de um profissional era colar o
+ * texto dele em `POST /plans/import`: o remendo que esta rota substitui.
+ *
+ * Grava uma VERSÃO NOVA em vez de editar a atual. O histórico de treino
+ * prescrito é o registro do trabalho do coach, e `Activity.planLink` aponta
+ * para o número da versão — reescrever a versão corrente faria o treino que a
+ * pessoa já executou passar a dizer que era outro.
+ *
+ * Não toca na dieta: ela é metade independente do plano e, quando existe, é do
+ * nutricionista ou da IA. Prescrever treino não é motivo para apagar comida.
+ */
+proRouter.put(
+  "/alunos/:id/treino",
+  requirePro("coach"),
+  asyncHandler(async (req, res) => {
+    const alunoId = String(req.params.id);
+    if (!mongoose.isValidObjectId(alunoId)) throw new HttpError(404, "Aluno não encontrado.");
+
+    const clientId = new mongoose.Types.ObjectId(alunoId);
+    const link = await vinculoAtivo(clientId, req.user!._id);
+    if (!link || link.papel !== "coach") throw new HttpError(404, "Este não é seu aluno.");
+    if (link.escopo?.treinos !== true) {
+      throw new HttpError(403, "Este aluno não abriu os treinos para você.");
+    }
+
+    const { summary, workout } = prescricaoSchema.parse(req.body);
+
+    const atual = await Plan.findOne({ user: clientId }).sort({ version: -1 });
+    const plan = await Plan.create({
+      user: clientId,
+      version: (atual?.version ?? 0) + 1,
+      summary,
+      workout,
+      // A dieta corrente é preservada: o plano tem duas metades independentes.
+      diet: atual?.diet ?? null,
+      disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
+      createdBy: req.user!._id,
+    });
+
+    res.status(201).json({
+      data: { id: plan._id.toString(), version: plan.version, createdBy: req.user!._id.toString() },
+      meta: {},
+    });
   })
 );
