@@ -123,6 +123,8 @@ export interface Mensagem {
   imageUrl: string | null;
   imageWidth: number | null;
   imageHeight: number | null;
+  /** O treino que esta mensagem anuncia, quando ela veio de uma prescrição. */
+  plan: string | null;
   lidaEm: string | null;
   createdAt: string;
 }
@@ -177,16 +179,49 @@ export async function buscarNaoLidas(token: string): Promise<Record<string, numb
  * está aberta — e três requisições por ciclo seria pagar caro para quase
  * sempre ouvir "nada novo".
  */
+export interface Pessoa {
+  id: string;
+  nome: string;
+  username: string | null;
+  avatarUrl: string;
+}
+
+/**
+ * Quem acompanha esta pessoa, e a última coisa que foi dita.
+ *
+ * É o que a Home usa para trocar o cartão da IA pelo do profissional de
+ * verdade: quem tem treinador não recebe treino de robô, e a tela precisa
+ * dizer isso com nome e rosto.
+ */
+export interface ProfissionalAtivo {
+  /** O id do VÍNCULO — é por ele que a conversa abre. */
+  id: string;
+  papel: PapelPro;
+  profissional: Pessoa;
+  naoLidas: number;
+  ultima: {
+    texto: string;
+    /** true quando quem falou por último foi o profissional. */
+    dele: boolean;
+    plan: string | null;
+    quando: string;
+  } | null;
+}
+
 export interface Avisos {
   convites: ConviteRecebido[];
   conversas: {
     id: string;
     naoLidas: number;
-    profissional: { id: string; nome: string; username: string | null; avatarUrl: string };
+    profissional: Pessoa;
   }[];
+  profissionais: ProfissionalAtivo[];
 }
 
 export async function buscarAvisos(token: string): Promise<Avisos> {
-  const r = await apiFetch<{ data: Avisos }>("/pro/avisos", { token });
-  return r.data;
+  const r = await apiFetch<{ data: Partial<Avisos> }>("/pro/avisos", { token });
+  // Com defaults: aqui o deploy é manual, e o aplicativo novo pode chegar antes
+  // do servidor. Sem isto, `profissionais` vinha `undefined` e o `.find` do
+  // render estourava — derrubando a Home inteira, e não só um cartão.
+  return { convites: [], conversas: [], profissionais: [], ...r.data };
 }

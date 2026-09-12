@@ -13,6 +13,7 @@ import { notify, confirmDialog } from "../lib/notify";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import { useAcompanhamento, treinadorDe } from "../hooks/useAcompanhamento";
 import { getCoachMessages, sendCoachMessage } from "../api/coach";
 import { adjustPlan, generateDiet } from "../api/plans";
 import type { ChatMessage } from "../api/onboarding";
@@ -25,6 +26,9 @@ import type { AppStackParams } from "../navigation/types";
 export function CoachScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
+  // Esta tela abre sozinha (não é a folha da Home), então pergunta por conta
+  // própria quem cuida do treino desta pessoa.
+  const temTreinador = treinadorDe(useAcompanhamento()) != null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -61,13 +65,27 @@ export function CoachScreen() {
       const res = await sendCoachMessage(token!, text);
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
 
+      // Com treinador, a assistente NÃO mexe no treino: o servidor recusa, e
+      // anunciar "estou refazendo seu plano" para depois se desdizer três
+      // segundos adiante é o pior tipo de erro — o que afirma que algo
+      // aconteceu e depois nega. A dieta continua sendo com ela.
+      const podeMexerNoTreino = !temTreinador;
       const ajuste = res.dietAdjustPending
         ? { rotulo: "sua dieta", executar: () => generateDiet(token!) }
-        : res.adjustPending || res.planAdjusted
+        : (res.adjustPending || res.planAdjusted) && podeMexerNoTreino
           ? { rotulo: "seu plano", executar: () => adjustPlan(token!) }
           : null;
 
-      if (ajuste) {
+      if (!ajuste && (res.adjustPending || res.planAdjusted) && temTreinador) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "Quem mexe no seu treino é o seu treinador. Manda essa para ele pelo acompanhamento — ele vê e ajusta.",
+          },
+        ]);
+      } else if (ajuste) {
         // O reajuste é uma segunda conversa com a IA e leva o seu tempo; avisa
         // que está acontecendo em vez de deixar a tela quieta.
         setMessages((prev) => [

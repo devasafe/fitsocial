@@ -16,7 +16,9 @@ export type AppStackParams = {
   Onboarding: undefined;
   Tabs: undefined;
   TodayWorkout: undefined;
-  Workout: { workout: Workout };
+  /** `prescritoPor` só existe quando o treino é de um profissional — e é ele
+   *  que tira o botão de editar: quem mudaria o treino é quem o escreveu. */
+  Workout: { workout: Workout; prescritoPor?: string };
   Diet: { diet: Diet };
   EditWorkout: undefined;
   EditDiet: undefined;

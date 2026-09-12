@@ -38,6 +38,14 @@ export interface Plan {
   /** Nula para quem tem treino mas ainda não pediu dieta. */
   diet: Diet | null;
   disclaimer: string;
+  /**
+   * Quem escreveu, quando não foi a IA. Nulo no plano gerado.
+   *
+   * O id sozinho não dá para escrever "prescrito por" numa tela, e é essa
+   * frase que separa um treino que um profissional assinou de um que um
+   * modelo gerou.
+   */
+  autor: { id: string; nome: string; username: string | null; avatarUrl: string } | null;
   createdAt: string;
 }
 

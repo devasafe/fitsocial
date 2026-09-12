@@ -1066,3 +1066,209 @@ describe("o coach vê o mesmo que o aluno", () => {
     }
   });
 });
+
+describe("quem tem treinador não recebe treino da IA", () => {
+  const treino = {
+    summary: "Semana de adaptação, foco em técnica.",
+    workout: {
+      split: "ABC",
+      daysPerWeek: 4,
+      sessions: [
+        {
+          day: "A — Peito",
+          focus: "Superior",
+          exercises: [{ name: "Supino reto", sets: 4, reps: "8-12", restSeconds: 90, notes: "" }],
+        },
+      ],
+    },
+  };
+
+  it("a prescrição vira uma mensagem do coach na conversa, com o plano junto", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send({ ...treino, recado: "Foco em perna nas próximas três semanas." });
+    expect(r.status).toBe(201);
+    expect(r.body.data.mensagem).toBeTruthy();
+
+    const conversa = await request(app)
+      .get(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token));
+
+    expect(conversa.status).toBe(200);
+    const msg = conversa.body.data[0];
+    // Quem "falou" é o coach, não o sistema: o aluno responde nesse mesmo balão.
+    expect(msg.autor).toBe(coach.id);
+    expect(msg.texto).toContain("ABC");
+    expect(msg.texto).toContain("4x por semana");
+    expect(msg.texto).toContain("Foco em perna");
+    // E o balão leva ao treino, senão o aluno lê "atualizei" e vai procurar onde.
+    expect(msg.plan).toBe(r.body.data.id);
+  });
+
+  it("sem recado, a mensagem sai mesmo assim", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    const conversa = await request(app)
+      .get(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token));
+    expect(conversa.body.data).toHaveLength(1);
+    expect(conversa.body.data[0].texto).toContain("Semana de adaptação");
+  });
+
+  it("a IA não gera nem reajusta o plano de quem tem treinador", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    for (const rota of ["/plans/generate", "/plans/adjust"]) {
+      const r = await request(app).post(rota).set(auth(aluno.token));
+      // 409, e não 402: não é falta de plano pago, é que o treino tem dono.
+      expect(r.status).toBe(409);
+      expect(r.body.error).toContain("treinador");
+    }
+  });
+
+  it("encerrado o acompanhamento, a IA volta a poder gerar", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    await request(app).delete(`/pro/alunos/${linkId}`).set(auth(coach.token));
+
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token));
+    // O que barra agora é outra coisa (falta de onboarding), e não o treinador
+    // — que também responde 409, por isso a conferência é pelo texto.
+    expect(r.body.error ?? "").not.toContain("treinador");
+  });
+
+  it("nenhuma porta reescreve o treino do treinador pelas costas dele", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    // Gerar e reajustar já estavam fechados; estas quatro chegavam ao mesmo
+    // lugar por caminhos diferentes — o treino assinado deixando de ser o que
+    // o profissional escreveu, sem que ele saiba.
+    const portas = [
+      request(app).post("/plans/import").set(auth(aluno.token)).send({ text: "Treino A: supino 4x10" }),
+      request(app)
+        .put("/plans/current")
+        .set(auth(aluno.token))
+        .send({ workout: treino.workout }),
+      request(app).delete("/plans/current").set(auth(aluno.token)),
+      request(app).delete("/plans/current/workout").set(auth(aluno.token)),
+    ];
+
+    for (const porta of portas) {
+      const r = await porta;
+      expect(r.status).toBe(409);
+      expect(r.body.error).toContain("treinador");
+    }
+
+    // E o treino continua de pé, com o autor certo.
+    const plano = await request(app).get("/plans/current").set(auth(aluno.token));
+    expect(plano.body.plan.autor.id).toBe(coach.id);
+  });
+
+  it("mexer só na dieta continua livre para quem tem treinador", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    const r = await request(app)
+      .put("/plans/current")
+      .set(auth(aluno.token))
+      .send({ summary: "Comendo melhor." });
+
+    // Quem responde pela dieta é o nutricionista, e o vínculo dele é outro.
+    expect(r.status).toBe(200);
+  });
+
+  it("o plano velho da IA ainda pode ser zerado depois de contratar treinador", async () => {
+    const aluno = await registrar();
+    // Um plano sem autor: foi a IA, ou a própria pessoa importou.
+    await Plan.create({
+      user: new mongoose.Types.ObjectId(aluno.id),
+      version: 1,
+      summary: "Plano antigo",
+      workout: { split: "AB", daysPerWeek: 2, sessions: [] },
+      disclaimer: "x",
+    });
+
+    const coach = await registrarProfissional();
+    await vincular(coach.token, aluno.token);
+
+    // Ninguém assinou este plano: quem o pediu pode jogá-lo fora. Sem isto, a
+    // pessoa ficava presa a ele até a primeira prescrição chegar.
+    const r = await request(app).delete("/plans/current").set(auth(aluno.token));
+    expect(r.status).toBe(200);
+  });
+
+  it("um split comprido não deixa o treino ir sem o aviso", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(coach.token))
+      .send({
+        ...treino,
+        workout: { ...treino.workout, split: "A".repeat(900) },
+        summary: "S".repeat(500),
+        recado: "R".repeat(1000),
+      });
+
+    // O texto estourava o teto de 2000 do modelo DEPOIS de o plano existir: o
+    // coach via erro, tentava de novo, e o aluno recebia o treino trocado na
+    // Home sem aviso nenhum — o oposto do que esta mensagem existe para fazer.
+    expect(r.status).toBe(201);
+    const conversa = await request(app)
+      .get(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token));
+    expect(conversa.body.data).toHaveLength(1);
+    expect(conversa.body.data[0].texto.length).toBeLessThanOrEqual(2000);
+  });
+
+  it("os avisos dizem quem acompanha e o que ele falou por último", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    const avisos = await request(app).get("/pro/avisos").set(auth(aluno.token));
+
+    expect(avisos.status).toBe(200);
+    expect(avisos.body.data.profissionais).toHaveLength(1);
+    const p = avisos.body.data.profissionais[0];
+    expect(p.papel).toBe("coach");
+    expect(p.ultima.dele).toBe(true);
+    expect(p.ultima.texto).toContain("ABC");
+    expect(p.naoLidas).toBe(1);
+  });
+
+  it("o plano diz quem o escreveu, com nome", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    const r = await request(app).get("/plans/current").set(auth(aluno.token));
+
+    expect(r.status).toBe(200);
+    expect(r.body.plan.createdBy).toBe(coach.id);
+    // O id sozinho não dá para escrever "prescrito por" numa tela.
+    expect(r.body.plan.autor.nome).toBeTruthy();
+  });
+});

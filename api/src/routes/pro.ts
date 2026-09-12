@@ -615,11 +615,29 @@ proRouter.get(
     // Quem já é acompanhado não precisa ver o convite de novo.
     const jaVinculados = new Set(links.map((l) => `${l.professional._id ?? l.professional}|${l.papel}`));
 
-    const naoLidas = await ProMessage.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
-      { $match: { link: { $in: links.map((l) => l._id) }, autor: { $ne: eu }, lidaEm: null } },
-      { $group: { _id: "$link", total: { $sum: 1 } } },
+    // A última fala de cada acompanhamento, para o cartão da Home dizer o que o
+    // profissional disse — e não só que existe um. Duas agregações porque as
+    // perguntas são diferentes: uma conta o que o aluno não leu, a outra pega a
+    // última mensagem de qualquer um dos dois.
+    const [naoLidas, ultimas] = await Promise.all([
+      ProMessage.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
+        { $match: { link: { $in: links.map((l) => l._id) }, autor: { $ne: eu }, lidaEm: null } },
+        { $group: { _id: "$link", total: { $sum: 1 } } },
+      ]),
+      // Uma consulta por vínculo, e não um `$group` com `$first`: a otimização
+      // que faria o `$group` ler uma chave só por vínculo é do MongoDB 8, e
+      // este projeto não fixa a versão do servidor. Em 7 a mesma pipeline
+      // buscaria a CONVERSA INTEIRA de cada aluno, a cada vinte segundos.
+      // Aqui são um ou dois vínculos por pessoa, e cada `findOne` é servido
+      // pelo índice {link, createdAt, _id} em qualquer versão.
+      Promise.all(
+        links.map((l) => ProMessage.findOne({ link: l._id }).sort({ createdAt: -1, _id: -1 }))
+      ),
     ]);
     const porLink = new Map(naoLidas.map((n) => [n._id.toString(), n.total]));
+    const ultimaPorLink = new Map(
+      ultimas.filter((u) => u != null).map((u) => [u!.link.toString(), u!])
+    );
 
     res.json({
       data: {
@@ -638,6 +656,33 @@ proRouter.get(
             naoLidas: porLink.get(l._id.toString()) ?? 0,
             profissional: comoPessoa(l.professional),
           })),
+        // Quem acompanha esta pessoa, agora. Vive nos avisos e não numa rota
+        // própria porque a Home já pergunta por eles a cada vinte segundos: o
+        // cartão do treinador aparece e some sozinho, como o de mensagem nova.
+        //
+        // É o que substitui a IA para quem tem profissional. Enquanto houver
+        // um treinador aqui, quem responde pelo treino é ele — e a Home tem de
+        // dizer isso com nome e rosto, não com uma estrela.
+        profissionais: links
+          .filter((l) => l.status === "ativo")
+          .map((l) => {
+            const u = ultimaPorLink.get(l._id.toString());
+            return {
+              id: l._id.toString(),
+              papel: l.papel as PapelPro,
+              profissional: comoPessoa(l.professional),
+              naoLidas: porLink.get(l._id.toString()) ?? 0,
+              ultima: u
+                ? {
+                    texto: u.texto,
+                    /** true quando quem falou por último foi o profissional. */
+                    dele: !u.autor.equals(eu),
+                    plan: u.plan ? u.plan.toString() : null,
+                    quando: u.get("createdAt") as Date,
+                  }
+                : null,
+            };
+          }),
       },
       meta: {},
     });
@@ -724,7 +769,36 @@ proRouter.delete(
 const prescricaoSchema = z.object({
   summary: z.string().min(1).max(500),
   workout: workoutSchema,
+  /** O que o coach quer dizer junto. Opcional: o aviso sai de qualquer jeito. */
+  recado: z.string().max(1000).optional(),
 });
+
+/**
+ * O aviso que o aluno recebe quando o treino muda.
+ *
+ * Um plano que troca sozinho na Home é a pessoa descobrir de manhã que está
+ * fazendo outra coisa, sem saber por quê. O treino prescrito por gente chega
+ * como mensagem de gente: quem escreveu, o que mudou, e o espaço para
+ * responder. É por isso que a conversa existe.
+ *
+ * O resumo do plano entra sempre; o recado do coach entra quando ele escreve.
+ */
+function mensagemDaPrescricao(
+  workout: { split?: string; daysPerWeek?: number },
+  summary: string,
+  recado?: string
+): string {
+  const forma = [
+    workout.split?.trim(),
+    workout.daysPerWeek ? `${workout.daysPerWeek}x por semana` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const linhas = [forma ? `Atualizei seu treino: ${forma}.` : "Atualizei seu treino.", summary.trim()];
+  if (recado?.trim()) linhas.push(recado.trim());
+  return linhas.filter(Boolean).join("\n\n");
+}
 
 /**
  * O coach prescreve o treino do aluno.
@@ -753,7 +827,14 @@ proRouter.put(
     // dizendo que ele não é o treinador de quem ele treina.
     if (link.papel !== "coach") throw new HttpError(403, "Só o treinador prescreve treino.");
 
-    const { summary, workout } = prescricaoSchema.parse(req.body);
+    const { summary, workout, recado } = prescricaoSchema.parse(req.body);
+
+    // Montado e cortado ANTES de gravar o plano: `texto` tem teto de 2000 no
+    // modelo, e um `split` comprido estourava a validação DEPOIS de o plano já
+    // existir. O coach via erro, tentava de novo, e o aluno recebia o treino
+    // trocado na Home sem aviso nenhum — exatamente o que isto existe para
+    // impedir.
+    const textoDoAviso = mensagemDaPrescricao(workout, summary, recado).slice(0, 2000);
 
     const atual = await Plan.findOne({ user: clientId }).sort({ version: -1 });
     const plan = await Plan.create({
@@ -767,8 +848,32 @@ proRouter.put(
       createdBy: req.user!._id,
     });
 
+    // O aviso vai na conversa que já existe entre os dois, e não numa caixa
+    // nova: é ali que o aluno responde, e é ali que a conversa sobre o treino
+    // continua. Gravado ANTES da resposta — uma prescrição que chega sem aviso
+    // é o plano trocando sozinho na Home de alguém.
+    const aviso = await ProMessage.create({
+      link: link._id,
+      autor: req.user!._id,
+      texto: textoDoAviso,
+      plan: plan._id,
+    });
+
+    // Push é best-effort e fica fora do caminho quente: uma falha da Expo não
+    // pode fazer um treino já gravado parecer que não foi.
+    void enviarPush(clientId, "mensagem_pro", {
+      title: req.user!.name,
+      body: "Atualizou o seu treino",
+      data: { tipo: "mensagem_pro", link: link._id.toString() },
+    });
+
     res.status(201).json({
-      data: { id: plan._id.toString(), version: plan.version, createdBy: req.user!._id.toString() },
+      data: {
+        id: plan._id.toString(),
+        version: plan.version,
+        createdBy: req.user!._id.toString(),
+        mensagem: aviso._id.toString(),
+      },
       meta: {},
     });
   })
@@ -848,6 +953,8 @@ proRouter.get(
         imageUrl: m.imageUrl || null,
         imageWidth: m.imageWidth ?? null,
         imageHeight: m.imageHeight ?? null,
+        // Quando a mensagem anuncia um treino, quem a lê vai direto para ele.
+        plan: m.plan ? m.plan.toString() : null,
         lidaEm: m.lidaEm,
         createdAt: m.get("createdAt") as Date,
       })),

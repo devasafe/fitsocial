@@ -2,7 +2,9 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 import { HttpError } from "../utils/httpError.js";
+import { temProfissional } from "../services/vinculos.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import { Plan, workoutSchema, dietSchema } from "../models/Plan.js";
 import { Activity } from "../models/Activity.js";
@@ -12,6 +14,45 @@ import { backfillWorkoutKinds } from "../services/exerciseKind.js";
 import { z } from "zod";
 
 export const plansRouter = Router();
+
+type AutorCru = {
+  _id?: mongoose.Types.ObjectId;
+  name?: string;
+  username?: string;
+  avatarUrl?: string;
+};
+
+/**
+ * O id de quem escreveu o plano — populado ou não.
+ *
+ * `createdBy` é ObjectId na maioria das rotas e documento em `/current`, que
+ * popula. `String(objectId)` e `String(doc)` dariam coisas diferentes, e este
+ * campo já é contrato: quem lê espera um id, sempre.
+ */
+function idDoAutor(plan: InstanceType<typeof Plan>): string | null {
+  const cru = plan.createdBy as unknown;
+  if (!cru) return null;
+  const doc = cru as AutorCru;
+  return String(doc._id ?? cru);
+}
+
+/** O autor com nome, só onde a rota populou. Nulo quando não populou. */
+function autorDoPlano(
+  plan: InstanceType<typeof Plan>
+): { id: string; nome: string; username: string | null; avatarUrl: string } | null {
+  const cru = plan.createdBy as unknown;
+  if (!cru) return null;
+
+  const doc = cru as AutorCru;
+  if (doc.name === undefined) return null;
+
+  return {
+    id: String(doc._id ?? cru),
+    nome: doc.name,
+    username: doc.username ?? null,
+    avatarUrl: doc.avatarUrl ?? "",
+  };
+}
 
 function serializePlan(plan: InstanceType<typeof Plan>) {
   const raw = plan.workout as {
@@ -51,9 +92,52 @@ function serializePlan(plan: InstanceType<typeof Plan>) {
     disclaimer: plan.disclaimer,
     // Quem escreveu, quando não foi o dono. O app mostra "prescrito pelo seu
     // coach" em vez de deixar a pessoa achar que a IA mudou o treino sozinha.
-    createdBy: plan.createdBy ? plan.createdBy.toString() : null,
+    //
+    // Vem nas duas formas porque nem toda rota popula: `createdBy` é sempre o
+    // id, e `autor` só existe onde o nome foi buscado.
+    createdBy: idDoAutor(plan),
+    autor: autorDoPlano(plan),
     createdAt: plan.get("createdAt") as Date,
   };
+}
+
+/**
+ * Quem tem treinador não recebe treino da IA.
+ *
+ * Não é gate de plano pago nem de permissão: é de AUTORIA. A IA escreveria uma
+ * versão nova por cima da prescrição, sem avisar ninguém, e a pessoa passaria a
+ * seguir um treino que o coach dela nunca viu — enquanto o coach continuaria
+ * olhando no painel o que ele mesmo escreveu. Os dois achariam que estão
+ * falando do mesmo treino.
+ *
+ * A dieta não entra aqui: quem responde por ela é o nutricionista, e o vínculo
+ * dele é outro. `POST /plans/diet` continua aberto para quem tem só treinador.
+ *
+ * Vale para TODA porta que mexe no treino, e não só para a IA: gerar, reajustar,
+ * importar de um texto, editar à mão e apagar chegam todas ao mesmo lugar — o
+ * treino que o profissional assinou deixa de ser o que ele escreveu, sem que
+ * ele saiba. Fechar só a IA seria trancar uma porta e deixar quatro abertas.
+ */
+async function recusarSeTemTreinador(userId: mongoose.Types.ObjectId): Promise<void> {
+  if (await temProfissional(userId, "coach")) {
+    throw new HttpError(
+      409,
+      "Quem escreve o seu treino é o seu treinador. Fale com ele pelo acompanhamento para mudar o plano."
+    );
+  }
+}
+
+/**
+ * Apagar é diferente de reescrever: o que não pode sumir é a PRESCRIÇÃO.
+ *
+ * Quem já tinha um plano da IA e depois contratou um treinador ficaria preso a
+ * ele até a primeira prescrição chegar — sem poder zerar, sem poder gerar
+ * outro. Um plano que ninguém assinou pode ser jogado fora por quem o pediu; o
+ * que o profissional escreveu, não.
+ */
+async function recusarSeForDoTreinador(userId: mongoose.Types.ObjectId): Promise<void> {
+  const atual = await Plan.findOne({ user: userId }).sort({ version: -1 }).select("createdBy");
+  if (atual?.createdBy) await recusarSeTemTreinador(userId);
 }
 
 // Gera um novo plano a partir da ficha do usuário e o salva como nova versão.
@@ -66,6 +150,7 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
+    await recusarSeTemTreinador(user._id);
 
     const profileDoc = await Profile.findOne({ user: user._id });
     if (!profileDoc) {
@@ -103,6 +188,7 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
+    await recusarSeTemTreinador(user._id);
 
     if (user.tier !== "premium") {
       throw new HttpError(
@@ -148,6 +234,8 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
+    await recusarSeTemTreinador(user._id);
+
     const { text } = importSchema.parse(req.body);
 
     const profileDoc = await Profile.findOne({ user: user._id });
@@ -180,6 +268,10 @@ plansRouter.put(
   requireAuth,
   asyncHandler(async (req, res) => {
     const body = updatePlanSchema.parse(req.body);
+    // Só quando a edição TOCA no treino: mexer na dieta continua livre para
+    // quem tem treinador e não tem nutricionista.
+    if (body.workout !== undefined) await recusarSeTemTreinador(req.user!._id);
+
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
 
@@ -266,6 +358,8 @@ plansRouter.delete(
   "/current",
   requireAuth,
   asyncHandler(async (req, res) => {
+    await recusarSeForDoTreinador(req.user!._id);
+
     const r = await Plan.deleteMany({ user: req.user!._id });
     // Sem isto a Home ficaria sem plano E sem pergunta: uma tela vazia.
     req.user!.set("settings.programacao", null);
@@ -283,6 +377,7 @@ plansRouter.delete(
     if (parte !== "workout" && parte !== "diet") {
       throw new HttpError(400, "Parte desconhecida. Use workout ou diet.");
     }
+    if (parte === "workout") await recusarSeForDoTreinador(req.user!._id);
 
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
@@ -314,7 +409,13 @@ plansRouter.get(
   "/current",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
+    // Com o autor junto: o `createdBy` sozinho é um id, e a tela precisa dizer
+    // um NOME. Sem isso o treino que o treinador escreveu chegava na Home com
+    // a mesma cara do que a IA gerou, e a pessoa não tinha como saber a
+    // diferença — que é exatamente a coisa que ela mais precisa saber.
+    const plan = await Plan.findOne({ user: req.user!._id })
+      .sort({ version: -1 })
+      .populate("createdBy", "name username avatarUrl");
     if (!plan) {
       throw new HttpError(404, "Nenhum plano gerado ainda");
     }

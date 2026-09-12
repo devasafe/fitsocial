@@ -501,10 +501,17 @@ export interface TreinoPrescrito {
   sessions: SessaoPrescrita[];
 }
 
-export const prescrever = (token: string, alunoId: string, summary: string, workout: TreinoPrescrito) =>
-  api<{ id: string; version: number }>(`/pro/alunos/${alunoId}/treino`, {
+export const prescrever = (
+  token: string,
+  alunoId: string,
+  summary: string,
+  workout: TreinoPrescrito,
+  /** O que dizer ao aluno junto do treino. O aviso sai com ou sem ele. */
+  recado?: string
+) =>
+  api<{ id: string; version: number; mensagem: string }>(`/pro/alunos/${alunoId}/treino`, {
     method: "PUT",
-    body: { summary, workout },
+    body: { summary, workout, ...(recado?.trim() ? { recado: recado.trim() } : {}) },
     token,
   });
 
