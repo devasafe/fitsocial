@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { User, type UserDoc } from "../models/User.js";
 import { Follow } from "../models/Follow.js";
+import { podeVer } from "./vinculos.js";
 
 // Quem pode ver o treino de quem. Uma regra só, num lugar só — espalhar isso
 // pelas rotas é como um treino acaba visível onde não devia.
@@ -26,6 +27,15 @@ export async function filtroDeAtividadesVisiveis(
   const base = { user: donoId };
 
   if (donoId.equals(espectadorId)) return base;
+
+  // Quarta camada: o profissional que ESTA PESSOA aceitou vê os treinos dela
+  // por inteiro, inclusive os privados.
+  //
+  // Não é exceção à privacidade — é o que ela autorizou, e é o produto: um
+  // coach que só visse o treino público teria de perguntar o resto pelo
+  // WhatsApp, que é exatamente o que o painel existe para acabar. Vem antes
+  // das outras regras porque ganha delas.
+  if (await podeVer(donoId, espectadorId, "treinos")) return base;
 
   const dono = await User.findById(donoId).select("settings");
   // Quem não decidiu, ou decidiu que não, não expõe treino nenhum.
@@ -59,6 +69,8 @@ export async function podeVerAtividade(
 ): Promise<boolean> {
   if (atividade.user.equals(espectadorId)) return true;
   if (atividade.visibility === "public") return true;
+  // O profissional autorizado abre qualquer treino do aluno, como acima.
+  if (await podeVer(atividade.user, espectadorId, "treinos")) return true;
   if (atividade.visibility === "followers") {
     return Boolean(await Follow.exists({ follower: espectadorId, following: atividade.user }));
   }
@@ -76,6 +88,11 @@ export async function podarRotaSePrivada<T extends Record<string, unknown>>(
 ): Promise<T> {
   if (donoId.equals(espectadorId)) return payload;
 
+  // A rota continua saindo para o profissional, mesmo com o vínculo aberto.
+  //
+  // Ver os treinos é uma coisa; saber de que porta a pessoa sai para correr
+  // todo dia é outra, e ela não foi perguntada sobre isso. Quem quiser mostrar
+  // o percurso liga `routesPublic`, que vale para todo mundo.
   const dono = await User.findById(donoId).select("settings");
   if (dono?.settings?.routesPublic === true) return payload;
 
