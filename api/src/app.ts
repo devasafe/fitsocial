@@ -11,6 +11,7 @@ import { activitiesRouter } from "./routes/activities.js";
 import { sportsRouter } from "./routes/sports.js";
 import { prsRouter } from "./routes/prs.js";
 import { evolucaoRouter } from "./routes/evolucao.js";
+import { proRouter } from "./routes/pro.js";
 import { libraryRouter } from "./routes/library.js";
 import { challengesRouter } from "./routes/challenges.js";
 import { nutritionRouter } from "./routes/nutrition.js";
@@ -53,6 +54,7 @@ export function createApp() {
   app.use("/sports", sportsRouter);
   app.use("/prs", prsRouter);
   app.use("/evolucao", evolucaoRouter);
+  app.use("/pro", proRouter);
   app.use("/library", libraryRouter);
   app.use("/challenges", challengesRouter);
   app.use("/nutrition", nutritionRouter);
