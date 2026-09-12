@@ -11,8 +11,10 @@ import {
   ajustarEscopo,
   encerrarAcompanhamento,
   listarAcompanhamentos,
+  listarConvitesRecebidos,
   rotuloDoPapel,
   type Acompanhamento,
+  type ConviteRecebido,
   type Escopo,
 } from "../api/pro";
 import { colors, radius, spacing } from "../theme";
@@ -29,6 +31,7 @@ export function AcompanhamentosScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const [lista, setLista] = useState<Acompanhamento[]>([]);
+  const [convites, setConvites] = useState<ConviteRecebido[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
 
@@ -40,6 +43,13 @@ export function AcompanhamentosScreen() {
       setErro(true);
     } finally {
       setCarregando(false);
+    }
+    // Convite pendente é um extra da tela: falhar aqui não pode esconder os
+    // acompanhamentos que já existem.
+    try {
+      setConvites(await listarConvitesRecebidos(token!));
+    } catch {
+      setConvites([]);
     }
   }, [token]);
 
@@ -102,9 +112,44 @@ export function AcompanhamentosScreen() {
 
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
-      {erro && lista.length === 0 ? (
+      {/* Convite esperando resposta vem antes de tudo: é a única coisa nesta
+          tela que pede uma ação, e não apenas informa. */}
+      {convites.map((c) => (
+        <Card key={c.code} level={2}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+            {c.profissional.avatarUrl ? (
+              <Image
+                source={{ uri: c.profissional.avatarUrl }}
+                style={{ width: 44, height: 44, borderRadius: radius.full }}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: radius.full,
+                  backgroundColor: colors.surface3,
+                }}
+              />
+            )}
+            <View style={{ flex: 1 }}>
+              <Txt variant="titleCard">{c.profissional.nome}</Txt>
+              <Txt variant="caption" color={colors.text2}>
+                quer te acompanhar como {rotuloDoPapel(c.papel)}
+              </Txt>
+            </View>
+          </View>
+          <Button
+            title="Ver convite"
+            onPress={() => nav.navigate("AceitarConvite", { code: c.code })}
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
+      ))}
+
+      {erro && lista.length === 0 && convites.length === 0 ? (
         <ErrorState message="Não foi possível carregar." onRetry={carregar} />
-      ) : lista.length === 0 ? (
+      ) : lista.length === 0 && convites.length === 0 ? (
         <EmptyState
           icon="🤝"
           title="Ninguém te acompanha ainda"

@@ -55,6 +55,24 @@ export const O_QUE_ABRE: { chave: keyof Escopo; titulo: string; explica: string 
   },
 ];
 
+export interface ConviteRecebido {
+  code: string;
+  papel: PapelPro;
+  expiraEm: string;
+  profissional: { id: string; nome: string; username: string | null; avatarUrl: string };
+}
+
+/**
+ * Os convites que mandaram para mim e que ainda valem.
+ *
+ * A notificação avisa na hora; esta lista é onde o convite continua existindo
+ * depois — inclusive dias depois, se a pessoa tiver deslizado o aviso sem ler.
+ */
+export async function listarConvitesRecebidos(token: string): Promise<ConviteRecebido[]> {
+  const r = await apiFetch<{ data: ConviteRecebido[] }>("/pro/convites-recebidos", { token });
+  return r.data;
+}
+
 export async function verConvite(token: string, code: string): Promise<ConvitePreview> {
   const r = await apiFetch<{ data: ConvitePreview }>(`/pro/convites/${encodeURIComponent(code)}`, {
     token,

@@ -9,6 +9,8 @@ export const NOTIFICATION_TYPES = [
   "post_removido",
   /** A denúncia que você fez foi analisada. */
   "denuncia_resolvida",
+  /** Um profissional te convidou para ser acompanhado. */
+  "convite_pro",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

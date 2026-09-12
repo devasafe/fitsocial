@@ -78,6 +78,12 @@ const novoConviteSchema = z.object({
   papel: papelSchema,
   // Um link para um aluno é o caso normal; mais de um serve para a turma toda.
   usos: z.number().int().min(1).max(50).default(1),
+  /**
+   * Quando vem, o convite é endereçado: chega como notificação para a pessoa e
+   * só ela aceita. Sem isto, o coach teria de pedir o link por fora — e o link
+   * que vaza no grupo da academia traz quem ele não convidou.
+   */
+  username: z.string().min(3).max(20).optional(),
 });
 
 proRouter.post(
@@ -85,9 +91,24 @@ proRouter.post(
   requirePro("coach", "nutri"),
   rateLimit({ windowMs: 60_000, max: 10, name: "pro-convite" }),
   asyncHandler(async (req, res) => {
-    const { papel, usos } = novoConviteSchema.parse(req.body);
-    const convite = await gerarConvite(req.user!, papel, usos);
-    res.status(201).json({ data: convite, meta: {} });
+    const { papel, usos, username } = novoConviteSchema.parse(req.body);
+
+    let para = null;
+    if (username) {
+      para = await User.findOne({ username: username.replace(/^@/, "").toLowerCase().trim() });
+      if (!para) throw new HttpError(404, "Não achei ninguém com esse nome de usuário.");
+    }
+
+    const convite = await gerarConvite(req.user!, papel, usos, para);
+    res.status(201).json({
+      data: {
+        ...convite,
+        // Devolve para quem foi, para o painel dizer "enviado para @fulano" em
+        // vez de mostrar um código que o coach não precisa copiar.
+        enviadoPara: para ? { id: para._id.toString(), nome: para.name, username: para.username } : null,
+      },
+      meta: {},
+    });
   })
 );
 
@@ -101,15 +122,25 @@ proRouter.get(
       revogadoEm: null,
       expiraEm: { $gt: new Date() },
       usosRestantes: { $gt: 0 },
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .populate("para", "name username avatarUrl");
 
     res.json({
-      data: convites.map((c) => ({
-        code: c.code,
-        papel: c.papel,
-        usosRestantes: c.usosRestantes,
-        expiraEm: c.expiraEm,
-      })),
+      data: convites.map((c) => {
+        const destino = c.para as unknown as
+          | { _id: mongoose.Types.ObjectId; name: string; username?: string }
+          | null;
+        return {
+          code: c.code,
+          papel: c.papel,
+          usosRestantes: c.usosRestantes,
+          expiraEm: c.expiraEm,
+          para: destino
+            ? { id: destino._id.toString(), nome: destino.name, username: destino.username ?? null }
+            : null,
+        };
+      }),
       meta: {},
     });
   })
@@ -293,6 +324,60 @@ proRouter.delete(
 );
 
 // ----------------------------------------------------------------------- aluno
+
+/**
+ * Os convites endereçados a mim que ainda valem.
+ *
+ * É o que faz o convite por @ chegar de verdade: a notificação avisa, e esta
+ * lista é onde a pessoa encontra o convite depois — inclusive dias depois, se
+ * ela tiver deslizado a notificação sem ler.
+ */
+proRouter.get(
+  "/convites-recebidos",
+  asyncHandler(async (req, res) => {
+    const convites = await ProfessionalInvite.find({
+      para: req.user!._id,
+      revogadoEm: null,
+      expiraEm: { $gt: new Date() },
+      usosRestantes: { $gt: 0 },
+    })
+      .sort({ createdAt: -1 })
+      .populate("professional", "name username avatarUrl");
+
+    // Quem já é acompanhado não precisa ver o convite de novo.
+    const jaVinculados = new Set(
+      (
+        await ProfessionalLink.find({ client: req.user!._id, status: { $ne: "encerrado" } }).select(
+          "professional papel"
+        )
+      ).map((l) => `${l.professional}|${l.papel}`)
+    );
+
+    const data = convites
+      .filter((c) => !jaVinculados.has(`${(c.professional as unknown as { _id: mongoose.Types.ObjectId })._id}|${c.papel}`))
+      .map((c) => {
+        const p = c.professional as unknown as {
+          _id: mongoose.Types.ObjectId;
+          name: string;
+          username?: string;
+          avatarUrl?: string;
+        };
+        return {
+          code: c.code,
+          papel: c.papel,
+          expiraEm: c.expiraEm,
+          profissional: {
+            id: p._id.toString(),
+            nome: p.name,
+            username: p.username ?? null,
+            avatarUrl: p.avatarUrl ?? "",
+          },
+        };
+      });
+
+    res.json({ data, meta: { total: data.length } });
+  })
+);
 
 /** O que o convite é, antes de aceitar. Só exige estar logado. */
 proRouter.get(

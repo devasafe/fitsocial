@@ -20,7 +20,7 @@ function lerHash(): { secao: string; alunoId?: string } {
 
 const SECOES = [
   { id: "alunos", rotulo: "Alunos" },
-  { id: "convites", rotulo: "Convites" },
+  { id: "convites", rotulo: "Convidar" },
 ] as const;
 
 export function App() {

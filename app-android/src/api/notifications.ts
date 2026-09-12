@@ -8,7 +8,9 @@ export type NotificationType =
   /** Seu post saiu do ar por moderação. */
   | "post_removido"
   /** A denúncia que você fez foi analisada. */
-  | "denuncia_resolvida";
+  | "denuncia_resolvida"
+  /** Um profissional te convidou para ser acompanhado. */
+  | "convite_pro";
 
 export interface NotificationItem {
   id: string;

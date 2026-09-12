@@ -174,14 +174,53 @@ export interface Convite {
   papel: "coach" | "nutri";
   usosRestantes: number;
   expiraEm: string;
+  /** Quando o convite foi endereçado a alguém pelo @. */
+  para: { id: string; nome: string; username: string | null } | null;
+}
+
+export interface PessoaEncontrada {
+  id: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string;
+}
+
+/**
+ * Busca alguém pelo nome ou @.
+ *
+ * Usa a busca do app, e não uma do painel: o coach entra com a conta dele, e a
+ * pessoa que ele procura é a mesma que qualquer um acharia. Inventar uma busca
+ * só para o painel abriria uma segunda regra de quem é visível.
+ */
+export async function buscarPessoas(token: string, q: string): Promise<PessoaEncontrada[]> {
+  // `/social/search` é rota antiga e responde `{users}`, sem o envelope
+  // `{data, meta}` do resto. Acomodar aqui é mais honesto que mudar a forma da
+  // resposta e quebrar o app instalado, que lê `users`.
+  const res = await fetch(`${API_BASE_URL}/social/search?q=${encodeURIComponent(q)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new ErroApi(res.status, "Não foi possível buscar.");
+  const dados = (await res.json()) as { users?: PessoaEncontrada[] };
+  return dados.users ?? [];
 }
 
 export const listarConvites = (token: string) => api<Convite[]>("/pro/convites", { token });
 
-export const criarConvite = (token: string, papel: "coach" | "nutri", usos = 1) =>
-  api<{ code: string; expiraEm: string; usosRestantes: number }>("/pro/convites", {
+export const criarConvite = (
+  token: string,
+  papel: "coach" | "nutri",
+  usos = 1,
+  /** Com `username`, o convite vai direto para a pessoa, como notificação. */
+  username?: string
+) =>
+  api<{
+    code: string;
+    expiraEm: string;
+    usosRestantes: number;
+    enviadoPara: { id: string; nome: string; username: string | null } | null;
+  }>("/pro/convites", {
     method: "POST",
-    body: { papel, usos },
+    body: { papel, usos, ...(username ? { username } : {}) },
     token,
   });
 
