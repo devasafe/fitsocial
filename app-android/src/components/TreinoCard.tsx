@@ -4,6 +4,7 @@ import { Txt } from "./ui";
 import { colors, radius, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import { linhasDoCard } from "../lib/crossfitResumo";
+import { tituloPorMusculos, musculosDe } from "../lib/musculos";
 import type { TreinoPublico } from "../api/social";
 
 // Como um treino se apresenta no perfil. O formato muda por esporte: corrida
@@ -38,9 +39,14 @@ function destaques(t: TreinoPublico): { valor: string; rotulo: string }[] {
   }
 
   if (t.kind === "strength") {
+    // `volumeKg` e `workingSets` nunca existiram: o servidor grava
+    // `volumeTotalKg` e `seriesValidas` (api/src/services/activityMetrics.ts) e
+    // manda `metrics` cru. Este card mostrava só o tempo desde sempre.
     const out: { valor: string; rotulo: string }[] = [];
-    if ((m.volumeKg ?? 0) > 0) out.push({ valor: `${numero(m.volumeKg!)} kg`, rotulo: "volume" });
-    if ((m.workingSets ?? 0) > 0) out.push({ valor: String(m.workingSets), rotulo: "séries" });
+    if ((m.volumeTotalKg ?? 0) > 0)
+      out.push({ valor: `${numero(m.volumeTotalKg!)} kg`, rotulo: "volume" });
+    if ((m.seriesValidas ?? 0) > 0)
+      out.push({ valor: String(m.seriesValidas), rotulo: "séries" });
     if (t.durationSec > 0) out.push({ valor: duracao(t.durationSec), rotulo: "tempo" });
     return out;
   }
@@ -64,6 +70,9 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
   const cor = sportColor(treino.sportId);
   const stats = destaques(treino);
   const linhasCrossfit = treino.crossfit ? linhasDoCard(treino.crossfit) : [];
+  // O nome que a pessoa deu ganha; sem ele, o assunto é o que foi treinado.
+  // O esporte já está dito na linha colorida acima e na borda do cartão.
+  const assunto = treino.title?.trim() || tituloPorMusculos(musculosDe(treino.metrics));
 
   return (
     <TouchableOpacity
@@ -92,9 +101,9 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
         )}
       </View>
 
-      {!!treino.title && (
+      {!!assunto && (
         <Txt variant="titleCard" style={{ marginTop: 2 }}>
-          {treino.title}
+          {assunto}
         </Txt>
       )}
 

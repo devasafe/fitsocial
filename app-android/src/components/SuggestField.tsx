@@ -18,6 +18,7 @@ export function SuggestField({
   placeholder,
   fetchSuggestions,
   onPick,
+  aoAbrirOuFechar,
 }: {
   label?: string;
   value: string;
@@ -25,12 +26,20 @@ export function SuggestField({
   placeholder?: string;
   fetchSuggestions: (q: string) => Promise<Suggestion[]>;
   onPick: (s: Suggestion) => void;
+  /** Avisa quem está em volta que a lista está aberta. Serve para não desenhar
+   *  nada logo abaixo enquanto a pessoa digita: a lista fica no fluxo, e o que
+   *  vier depois dela salta para dentro e para fora a cada tecla. */
+  aoAbrirOuFechar?: (aberto: boolean) => void;
 }) {
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   // Sem isto, esperar a busca é indistinguível de "não achou nada" — e a
   // pessoa desiste de digitar achando que o termo não existe.
   const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    aoAbrirOuFechar?.(open);
+  }, [open, aoAbrirOuFechar]);
 
   useEffect(() => {
     if (!open) return;

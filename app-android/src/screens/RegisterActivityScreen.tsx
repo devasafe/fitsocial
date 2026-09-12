@@ -4,9 +4,9 @@ import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button } from "../components/ui";
-import { SuggestField } from "../components/SuggestField";
+import { SuggestField, type Suggestion } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
-import { searchExercises } from "../api/library";
+import { searchExercises, MUSCLE_GROUPS, type MuscleGroup, type ExerciseDef } from "../api/library";
 import { lastEntries, type LastEntry } from "../api/checkins";
 import { usePRCelebration } from "../components/PRCelebration";
 import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
@@ -24,6 +24,10 @@ interface SetForm {
 interface ExerciseForm {
   name: string;
   sets: SetForm[];
+  /** Preenchidos quando o exercício veio do catálogo; a pessoa pode marcar o
+   *  músculo à mão quando digitou um nome que o app não conhece. */
+  exerciseId?: string | null;
+  muscle?: MuscleGroup | null;
 }
 
 // Campo numérico com o rótulo em cima — o mesmo padrão do cadastro da pessoa
@@ -68,6 +72,71 @@ function NumInput({
   );
 }
 
+/**
+ * Qual músculo, quando o app não sabe.
+ *
+ * Só aparece para quem digitou o nome em vez de escolher da lista: aí o
+ * servidor vai ter que adivinhar pelo nome, e às vezes não dá — "aquele
+ * aparelho do canto" não é ninguém. Um toque aqui resolve de vez, e o treino
+ * aparece no feed dizendo o que foi treinado.
+ *
+ * É opcional de propósito. Registrar treino tem que caber em segundos; isto é
+ * uma oferta, nunca uma pergunta que trava o salvamento.
+ */
+function MusculoDoExercicio({
+  visivel,
+  escolhido,
+  aoEscolher,
+}: {
+  visivel: boolean;
+  escolhido: MuscleGroup | null;
+  aoEscolher: (m: MuscleGroup | null) => void;
+}) {
+  if (!visivel) return null;
+
+  return (
+    <View style={{ marginTop: -2, marginBottom: spacing.md }}>
+      <Txt variant="caption" color={colors.text3} style={{ marginBottom: spacing.xs }}>
+        Qual músculo? (opcional)
+      </Txt>
+      {/* `rowGap` maior que `columnGap`: com 4px entre as fileiras, errar o
+          toque marca o grupo da linha de cima. */}
+      <View
+        style={{ flexDirection: "row", flexWrap: "wrap", rowGap: spacing.sm, columnGap: spacing.xs }}
+      >
+        {MUSCLE_GROUPS.map((m) => {
+          const ativo = m === escolhido;
+          return (
+            <TouchableOpacity
+              key={m}
+              // Tocar no que já está marcado desmarca: dá para voltar atrás sem
+              // ter que escolher outro grupo errado para se livrar do primeiro.
+              onPress={() => aoEscolher(ativo ? null : m)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ selected: ativo }}
+              style={{
+                // 44px: é tocado com o celular na mão, no meio do treino.
+                minHeight: 44,
+                justifyContent: "center",
+                paddingHorizontal: spacing.sm,
+                borderRadius: radius.chip,
+                borderWidth: 1,
+                borderColor: ativo ? colors.lime : colors.line,
+                backgroundColor: ativo ? colors.limeSoft : colors.surface2,
+              }}
+            >
+              <Txt variant="caption" color={ativo ? colors.lime : colors.text2}>
+                {m}
+              </Txt>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export function RegisterActivityScreen({ route, navigation }: Props) {
   const { sportId, prefill } = route.params;
   const { token } = useAuth();
@@ -77,11 +146,20 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
     prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
   );
   const [last, setLast] = useState<Record<string, LastEntry>>({}); // última vez por exercício
+  // Qual campo de exercício está com a lista de sugestões aberta. Enquanto
+  // estiver, nada é desenhado embaixo dele.
+  const [buscandoEm, setBuscandoEm] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Ao escolher um exercício, mostra a última vez e pré-preenche a 1ª série se vazia.
-  async function pickExercise(ei: number, name: string) {
-    setExercise(ei, { name });
+  //
+  // Guarda também o id e o músculo do catálogo. O autocomplete já mostrava
+  // "Quadríceps · Barra" na sugestão e jogava fora ao escolher — só o texto
+  // sobrevivia, e o treino salvo ficava indistinguível de um nome digitado.
+  async function pickExercise(ei: number, sug: Suggestion) {
+    const doCatalogo = sug.data as ExerciseDef | undefined;
+    const name = sug.label;
+    setExercise(ei, { name, exerciseId: sug.id, muscle: doCatalogo?.muscle ?? null });
     if (last[name]) return;
     try {
       const e = await lastEntries(token!, [name]);
@@ -91,6 +169,10 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
       setExercises((prev) =>
         prev.map((ex, idx) => {
           if (idx !== ei) return ex;
+          // A busca da "última vez" é assíncrona e este preenchimento é por
+          // ÍNDICE. Se a pessoa trocou o exercício durante a ida e volta, a
+          // carga do exercício antigo cairia no campo do novo.
+          if (ex.name !== name) return ex;
           const s0 = ex.sets[0];
           if (!s0 || s0.weightKg !== "" || s0.reps !== "") return ex;
           const sets = [...ex.sets];
@@ -119,7 +201,27 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
     );
   }
   function addExercise() {
-    setExercises((prev) => [...prev, { name: "", sets: [{ weightKg: "", reps: "" }] }]);
+    setExercises((prev) => [
+      ...prev,
+      { name: "", sets: [{ weightKg: "", reps: "" }], exerciseId: null, muscle: null },
+    ]);
+  }
+
+  /**
+   * Digitou por cima do que tinha escolhido: o vínculo com o catálogo morre.
+   * Manter o id de "Supino reto" num campo que agora diz "Agachamento" é pior
+   * que não ter id nenhum.
+   */
+  function digitouNome(ei: number, texto: string) {
+    setExercises((prev) =>
+      prev.map((e, idx) => {
+        if (idx !== ei) return e;
+        const eraDoCatalogo = e.exerciseId != null && texto.trim() !== e.name.trim();
+        return eraDoCatalogo
+          ? { ...e, name: texto, exerciseId: null, muscle: null }
+          : { ...e, name: texto };
+      })
+    );
   }
 
   async function save() {
@@ -127,6 +229,8 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
       .filter((e) => e.name.trim())
       .map((e) => ({
         name: e.name.trim(),
+        ...(e.exerciseId ? { exerciseId: e.exerciseId } : {}),
+        ...(e.muscle ? { muscle: e.muscle } : {}),
         sets: e.sets.map((s) => ({
           type: "valida" as const,
           weightKg: Number(s.weightKg.replace(",", ".")) || 0,
@@ -170,14 +274,29 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
           <SuggestField
             label={`Exercício ${ei + 1}`}
             value={ex.name}
-            onChangeText={(t) => setExercise(ei, { name: t })}
+            onChangeText={(t) => digitouNome(ei, t)}
             placeholder="Supino reto, agachamento livre…"
             fetchSuggestions={(q) =>
               searchExercises(token!, q).then((list) =>
-                list.map((e) => ({ id: e.id, label: e.name, sub: `${e.muscle} · ${e.equipment}` }))
+                list.map((e) => ({
+                  id: e.id,
+                  label: e.name,
+                  sub: `${e.muscle} · ${e.equipment}`,
+                  data: e,
+                }))
               )
             }
-            onPick={(s) => pickExercise(ei, s.label)}
+            onPick={(s) => pickExercise(ei, s)}
+            aoAbrirOuFechar={(aberto) =>
+              setBuscandoEm((atual) => (aberto ? ei : atual === ei ? null : atual))
+            }
+          />
+          <MusculoDoExercicio
+            // Só quando o nome está firmado: durante a digitação a lista de
+            // sugestões ocupa o espaço, e a pergunta ainda pode nem ser verdade.
+            visivel={!!ex.name.trim() && !ex.exerciseId && buscandoEm !== ei}
+            escolhido={ex.muscle ?? null}
+            aoEscolher={(m) => setExercise(ei, { muscle: m })}
           />
           {last[ex.name] && (last[ex.name].weightKg || last[ex.name].reps) ? (
             <Txt variant="caption" color={colors.lime} style={{ marginTop: -6, marginBottom: 6 }}>

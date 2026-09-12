@@ -11,6 +11,7 @@ import { sportLabel } from "../lib/sportLabel";
 import { colors, spacing, radius, sportColor } from "../theme";
 import { SkeletonGrade } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
+import type { MuscleGroup } from "../api/library";
 
 interface RecentSport {
   sportId: string;
@@ -20,8 +21,19 @@ interface RecentSport {
 }
 
 // Converte o payload de força salvo no formato do formulário (para pré-preencher).
-function strengthPrefill(payload: unknown): { name: string; sets: { weightKg: string; reps: string }[] }[] | undefined {
-  const p = payload as { exercises?: { name?: string; sets?: { weightKg?: number; reps?: number | null }[] }[] } | undefined;
+type Prefill = NonNullable<AppStackParams["RegisterActivity"]["prefill"]>;
+
+function strengthPrefill(payload: unknown): Prefill | undefined {
+  const p = payload as
+    | {
+        exercises?: {
+          name?: string;
+          sets?: { weightKg?: number; reps?: number | null }[];
+          exerciseId?: string | null;
+          muscle?: MuscleGroup | null;
+        }[];
+      }
+    | undefined;
   if (!p?.exercises?.length) return undefined;
   return p.exercises
     .filter((e) => e.name)
@@ -30,7 +42,14 @@ function strengthPrefill(payload: unknown): { name: string; sets: { weightKg: st
         weightKg: s.weightKg != null ? String(s.weightKg) : "",
         reps: s.reps != null ? String(s.reps) : "",
       }));
-      return { name: e.name as string, sets: sets.length ? sets : [{ weightKg: "", reps: "" }] };
+      return {
+        name: e.name as string,
+        sets: sets.length ? sets : [{ weightKg: "", reps: "" }],
+        // O treino salvo já guarda os dois. Deixá-los para trás desfazia, a
+        // cada "repetir", o vínculo que a pessoa criou ao escolher da lista.
+        exerciseId: e.exerciseId ?? null,
+        muscle: e.muscle ?? null,
+      };
     });
 }
 
