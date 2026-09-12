@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Activity } from "../models/Activity.js";
 import { agruparPorDia, inicioDaJanela, ultimosDias } from "../utils/dia.js";
 import { MUSCLE_GROUPS, type MuscleGroup } from "./muscleGroups.js";
+import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 
 // A evolução de quem treina, respondida pelo banco e não em JavaScript.
 //
@@ -136,7 +137,22 @@ export async function exerciciosDoUsuario(
 export interface PontoDoExercicio {
   data: Date;
   valor: number;
+  /** Neste treino a pessoa bateu o próprio recorde desta métrica. */
+  ehPR: boolean;
 }
+
+/**
+ * A métrica plotada e o tipo de recorde que corresponde a ela.
+ *
+ * Volume, séries e repetições ficam de fora porque não existe recorde desses:
+ * marcar um ponto de volume como PR seria inventar uma conquista que o app
+ * nunca celebrou — e a pessoa notaria a diferença entre o gráfico e a aba de
+ * recordes.
+ */
+const PR_DA_METRICA: Partial<Record<Metrica, string>> = {
+  carga_max: "carga_max",
+  rm_estimado: "rm_estimado",
+};
 
 /**
  * O estágio que reduz as séries de um treino a um valor só, conforme a métrica.
@@ -181,7 +197,7 @@ export async function serieDoExercicio(
   dias: number,
   metrica: Metrica
 ): Promise<PontoDoExercicio[]> {
-  const linhas = await Activity.aggregate<{ data: Date; valor: number | null }>([
+  const linhas = await Activity.aggregate<{ _id: mongoose.Types.ObjectId; data: Date; valor: number | null }>([
     { $match: naJanela(userId, dias, "strength") },
     { $unwind: "$payload.exercises" },
     { $match: { "payload.exercises.slug": slug } },
@@ -193,9 +209,27 @@ export async function serieDoExercicio(
 
   // `rm_estimado` devolve nulo no treino em que ninguém fez de 1 a 12 reps.
   // Aí o ponto não existe, em vez de virar zero e cavar um buraco no gráfico.
-  return linhas
-    .filter((l) => l.valor != null)
-    .map((l) => ({ data: l.data, valor: Math.round((l.valor as number) * 10) / 10 }));
+  const pontos = linhas.filter((l) => l.valor != null);
+
+  // Quais desses treinos foram recorde — uma consulta só, pelo índice
+  // {user, exerciseSlug, achievedAt}, e não uma por ponto.
+  const tipo = PR_DA_METRICA[metrica];
+  const comPR = new Set<string>();
+  if (tipo && pontos.length > 0) {
+    const eventos = await PersonalRecordEvent.find({
+      user: userId,
+      exerciseSlug: slug,
+      type: tipo,
+      activity: { $in: pontos.map((p) => p._id) },
+    }).select("activity");
+    for (const e of eventos) comPR.add(String(e.activity));
+  }
+
+  return pontos.map((l) => ({
+    data: l.data,
+    valor: Math.round((l.valor as number) * 10) / 10,
+    ehPR: comPR.has(String(l._id)),
+  }));
 }
 
 export interface GrupoTreinado {

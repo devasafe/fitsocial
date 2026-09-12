@@ -1,5 +1,6 @@
 import type mongoose from "mongoose";
 import { PersonalRecord } from "../models/PersonalRecord.js";
+import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { Activity } from "../models/Activity.js";
 import { normalizarWod, fecharScore, chaveDoMovimento } from "./crossfit.js";
 import { resolverBenchmark } from "./benchmarks.js";
@@ -352,6 +353,24 @@ async function applyCandidate(
   existing.activity = activity._id;
   await existing.save();
 
+  // A linha do tempo e gravada aqui, ANTES do corte de celebracao: o recompute
+  // roda com `celebrate: false` e mesmo assim precisa reconstruir o historico.
+  // So chega aqui quem SUPEROU um recorde — a linha de base sai antes, la em
+  // cima, e continua nao sendo conquista.
+  await PersonalRecordEvent.create({
+    user: userId,
+    sportId: activity.sportId,
+    exerciseSlug,
+    exerciseName: c.exerciseName,
+    type: c.type,
+    repRange: c.repRange,
+    value: c.value,
+    previousValue: prevVal,
+    unit: c.unit,
+    activity: activity._id,
+    achievedAt: activity.startedAt,
+  });
+
   if (!celebrateEnabled) return null;
 
   // Marcos (aulas/horas): só celebra ao cruzar um limiar.
@@ -417,6 +436,9 @@ export async function detectStrengthPRs(
 /** Reconstrói os PRs de um usuário a partir do histórico (linha de base, sem celebrar). */
 export async function recomputeUserPRs(userId: mongoose.Types.ObjectId): Promise<void> {
   await PersonalRecord.deleteMany({ user: userId });
+  // Tambem a linha do tempo: ela e derivada do historico, e reconstruir sem
+  // limpar antes duplicaria cada conquista a cada recompute.
+  await PersonalRecordEvent.deleteMany({ user: userId });
   const activities = await Activity.find({
     user: userId,
     kind: { $in: ["strength", "endurance", "class", "wod"] },

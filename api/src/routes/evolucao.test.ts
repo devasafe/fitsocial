@@ -4,6 +4,8 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { Activity } from "../models/Activity.js";
+import { PersonalRecord } from "../models/PersonalRecord.js";
+import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 
 const DIA = 24 * 60 * 60 * 1000;
 
@@ -31,6 +33,10 @@ describe("Evolução", () => {
 
   beforeEach(async () => {
     await Activity.deleteMany({});
+    // Os recordes também: sem isto, o supino de um teste anterior continua
+    // valendo e o treino do teste seguinte deixa de ser recorde sem motivo.
+    await PersonalRecord.deleteMany({});
+    await PersonalRecordEvent.deleteMany({});
   });
 
   /** Registra um treino de força pela API, como o app faz. */
@@ -193,6 +199,29 @@ describe("Evolução", () => {
         .set("Authorization", `Bearer ${token}`);
 
       expect(r.body.data).toHaveLength(0);
+    });
+
+    it("marca o ponto em que houve recorde", async () => {
+      await treino([supino(80)], 20);
+      await treino([supino(90)], 10);
+
+      const r = await request(app)
+        .get("/evolucao/exercicios/supino_reto?metrica=carga_max")
+        .set("Authorization", `Bearer ${token}`);
+
+      // O primeiro é linha de base, não conquista; o segundo superou.
+      expect(r.body.data.map((p: { ehPR: boolean }) => p.ehPR)).toEqual([false, true]);
+    });
+
+    it("não marca PR em métrica que não tem recorde", async () => {
+      await treino([supino(80)], 20);
+      await treino([supino(90)], 10);
+
+      const r = await request(app)
+        .get("/evolucao/exercicios/supino_reto?metrica=volume")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(r.body.data.every((p: { ehPR: boolean }) => p.ehPR === false)).toBe(true);
     });
 
     it("recusa métrica que não existe", async () => {
