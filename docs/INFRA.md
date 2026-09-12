@@ -29,9 +29,25 @@ fit.satriz.club  fitapi.satriz.club  fitcdn.satriz.club  fitminio.satriz.club
 | Storage | `minio-fitsocial` | Dockerfile inline sobre `minio/minio` |
 | Banco | `mongodb-fitsocial` | MongoDB 7 gerenciado pelo Coolify |
 | Painel | `FITSOCIAL ADMIN` | Dockerfile, base `/admin`, porta 3000 |
+| Painel pro | ainda não criado no Coolify | Dockerfile, base `/pro`, porta 3000 |
 
 Projeto `FitSocial`, environment `production`, servidor `Satriz Club`.
-Deploy é por push na branch `main` do repositório `devasafe/fitsocial`.
+
+**Deploy NÃO é automático.** Não há webhook no GitHub nem GitHub Actions, e no Coolify o
+`source_id` é `0` — push na `main` não dispara nada. Cada deploy é disparado à mão:
+
+```
+curl -X POST -H "Authorization: Bearer $TOKEN" "https://deploy.satriz.club/api/v1/deploy?uuid=<uuid>"
+```
+
+E confirmado pelo campo `commit` de `GET /api/v1/deployments/<deployment_uuid>` — um build
+que falha deixa o container antigo servindo 200, então `healthy` não prova que subiu.
+
+O **painel profissional** (`/pro`) ainda precisa ser criado no Coolify: aplicação nova,
+base directory `/pro`, porta 3000, com `VITE_API_URL` marcada como **Build Variable** (a
+mesma armadilha do admin e do app) e um domínio próprio — algo como `pro.fit.satriz.club`.
+Lembre de acrescentar esse domínio ao `CORS_ORIGIN` da API, que hoje lista só o app e o
+painel administrativo.
 
 ## Armadilhas (custaram tempo; não repita)
 

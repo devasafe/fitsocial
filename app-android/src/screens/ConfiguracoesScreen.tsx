@@ -153,10 +153,17 @@ export function ConfiguracoesScreen() {
         />
       </Secao>
 
+      {/* Fica na Privacidade, e não numa seção própria, porque a pergunta que
+          leva a pessoa até aqui é a mesma: "quem vê o que é meu?". */}
       <Secao
         titulo="Privacidade"
         nota="Vale para todo mundo que abrir seu perfil, inclusive quem não te segue."
       >
+        <Linha
+          titulo="Quem me acompanha"
+          detalhe="Treinador e nutricionista"
+          onPress={() => nav.navigate("Acompanhamentos")}
+        />
         {settings ? (
           <>
             <Chave
@@ -166,14 +173,11 @@ export function ConfiguracoesScreen() {
               aoMudar={(v) =>
                 void salvar({ activitiesPublic: v }, { ...settings, activitiesPublic: v })
               }
-            />
-            <Chave
-              titulo="Mostrar trajeto de GPS"
-              descricao="O mapa do percurso mostra por onde você passou — inclusive de onde saiu."
-              ligado={settings.routesPublic}
-              aoMudar={(v) => void salvar({ routesPublic: v }, { ...settings, routesPublic: v })}
               ultima
             />
+            {/* O trajeto de GPS não tem interruptor: ele é sempre só seu.
+                O mapa diz de que porta você sai e a que horas, e isso não vira
+                escolha de configuração — vira ausência de risco. */}
           </>
         ) : (
           <Carregando linhas={2} />

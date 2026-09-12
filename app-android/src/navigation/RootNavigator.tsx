@@ -53,6 +53,9 @@ import { RegisterGenericScreen } from "../screens/RegisterGenericScreen";
 import { LiveTrackScreen } from "../screens/LiveTrackScreen";
 import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import { MinhasAtividadesScreen } from "../screens/MinhasAtividadesScreen";
+import { AceitarConviteScreen } from "../screens/AceitarConviteScreen";
+import { AcompanhamentosScreen } from "../screens/AcompanhamentosScreen";
+import { ConviteDoLink } from "../components/ConviteDoLink";
 import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
 import { DesafiosScreen } from "../screens/DesafiosScreen";
 import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
@@ -216,7 +219,11 @@ function AuthFlow() {
 
 function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
   return (
-    <AppStack.Navigator screenOptions={{ headerShown: false, ...transicaoDeTela }}>
+    <>
+      {/* Fora do Navigator seria cedo demais: o componente navega, e navegar
+          exige que a árvore de rotas já exista. */}
+      <ConviteDoLink ativo={!needsOnboarding} />
+      <AppStack.Navigator screenOptions={{ headerShown: false, ...transicaoDeTela }}>
       {needsOnboarding ? (
         <AppStack.Screen name="Onboarding" component={OnboardingForm} />
       ) : (
@@ -364,6 +371,16 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             options={{ headerShown: true, title: "Meus benchmarks", ...headerStyle }}
           />
           <AppStack.Screen
+            name="AceitarConvite"
+            component={AceitarConviteScreen}
+            options={{ headerShown: true, title: "Convite", ...headerStyle, ...transicaoDeFolha }}
+          />
+          <AppStack.Screen
+            name="Acompanhamentos"
+            component={AcompanhamentosScreen}
+            options={{ headerShown: true, title: "Quem me acompanha", ...headerStyle }}
+          />
+          <AppStack.Screen
             name="MinhasAtividades"
             component={MinhasAtividadesScreen}
             options={{ headerShown: true, title: "Minhas atividades", ...headerStyle }}
@@ -415,7 +432,8 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           />
         </>
       )}
-    </AppStack.Navigator>
+      </AppStack.Navigator>
+    </>
   );
 }
 

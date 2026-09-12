@@ -296,3 +296,103 @@ describe("Lista e privacidade", () => {
     expect(JSON.stringify(tudo)).not.toContain("vitima@teste.com");
   });
 });
+
+describe("Acesso profissional pelo painel", () => {
+  it("libera coach, e o painel profissional abre na hora", async () => {
+    const adm = await admin();
+    const pessoa = await registrar("coach@teste.com");
+
+    // Antes, a conta entra no app mas não no painel.
+    expect((await request(app).get("/pro/me").set(auth(pessoa.token))).status).toBe(403);
+
+    const r = await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({ capacidade: "coach", grant: true, reason: "professor da academia parceira" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.data.pro.coach.ativo).toBe(true);
+    expect(r.body.data.pro.coach.limite).toBe(10);
+    expect(r.body.data.pro.nutri.ativo).toBe(false);
+
+    const painel = await request(app).get("/pro/me").set(auth(pessoa.token));
+    expect(painel.status).toBe(200);
+  });
+
+  it("tirar o acesso fecha o painel, também na hora", async () => {
+    const adm = await admin();
+    const pessoa = await registrar("excoach@teste.com");
+    await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({ capacidade: "coach", grant: true, reason: "liberado para teste" });
+
+    await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({ capacidade: "coach", grant: false, reason: "encerrou a parceria" })
+      .expect(200);
+
+    expect((await request(app).get("/pro/me").set(auth(pessoa.token))).status).toBe(403);
+  });
+
+  it("aceita teto próprio e prazo", async () => {
+    const adm = await admin();
+    const pessoa = await registrar("grande@teste.com");
+
+    const r = await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({
+        capacidade: "coach",
+        grant: true,
+        limite: 50,
+        durationDays: 30,
+        reason: "parceria de 30 dias",
+      });
+
+    expect(r.body.data.pro.coach.limite).toBe(50);
+    expect(r.body.data.pro.coach.validoAte).toBeTruthy();
+  });
+
+  // Liberar acesso a dados de terceiros não pode ser um clique sem rastro.
+  it("fica registrado na auditoria, com motivo", async () => {
+    const adm = await admin();
+    const pessoa = await registrar("auditado@teste.com");
+
+    await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({ capacidade: "nutri", grant: true, reason: "nutricionista da clinica" });
+
+    const registro = await AdminAudit.findOne({ action: "pro.nutri.grant" });
+    expect(registro).toBeTruthy();
+    expect(registro?.reason).toContain("nutricionista");
+    // E-mail mascarado, como em toda a auditoria.
+    expect(registro?.targetLabel).not.toContain("auditado@teste.com");
+  });
+
+  it("exige motivo, como as outras ações do painel", async () => {
+    const adm = await admin();
+    const pessoa = await registrar("semmotivo@teste.com");
+
+    const r = await request(app)
+      .post(`/admin/users/${pessoa.id}/pro`)
+      .set(auth(adm))
+      .send({ capacidade: "coach", grant: true, reason: "" });
+
+    expect(r.status).toBe(400);
+  });
+
+  it("não é rota de usuário comum", async () => {
+    const pessoa = await registrar("comum@teste.com");
+    const outro = await registrar("outro@teste.com");
+
+    const r = await request(app)
+      .post(`/admin/users/${outro.id}/pro`)
+      .set(auth(pessoa.token))
+      .send({ capacidade: "coach", grant: true, reason: "quero ser coach" });
+
+    expect(r.status).toBe(403);
+  });
+});

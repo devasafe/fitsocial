@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { User, type UserDoc } from "../models/User.js";
 import { Follow } from "../models/Follow.js";
+import { podeVer } from "./vinculos.js";
 
 // Quem pode ver o treino de quem. Uma regra só, num lugar só — espalhar isso
 // pelas rotas é como um treino acaba visível onde não devia.
@@ -26,6 +27,15 @@ export async function filtroDeAtividadesVisiveis(
   const base = { user: donoId };
 
   if (donoId.equals(espectadorId)) return base;
+
+  // Quarta camada: o profissional que ESTA PESSOA aceitou vê os treinos dela
+  // por inteiro, inclusive os privados.
+  //
+  // Não é exceção à privacidade — é o que ela autorizou, e é o produto: um
+  // coach que só visse o treino público teria de perguntar o resto pelo
+  // WhatsApp, que é exatamente o que o painel existe para acabar. Vem antes
+  // das outras regras porque ganha delas.
+  if (await podeVer(donoId, espectadorId, "treinos")) return base;
 
   const dono = await User.findById(donoId).select("settings");
   // Quem não decidiu, ou decidiu que não, não expõe treino nenhum.
@@ -59,25 +69,37 @@ export async function podeVerAtividade(
 ): Promise<boolean> {
   if (atividade.user.equals(espectadorId)) return true;
   if (atividade.visibility === "public") return true;
+  // O profissional autorizado abre qualquer treino do aluno, como acima.
+  if (await podeVer(atividade.user, espectadorId, "treinos")) return true;
   if (atividade.visibility === "followers") {
     return Boolean(await Follow.exists({ follower: espectadorId, following: atividade.user }));
   }
   return false;
 }
 
-/** O traçado de GPS sai do payload quando o dono não o tornou público.
+/**
+ * O traçado de GPS nunca sai para outra pessoa. Nem para seguidor, nem para o
+ * profissional que acompanha, nem se o treino for público.
  *
- *  Distância, tempo e ritmo continuam; só o caminho some. Devolve uma cópia —
- *  mexer no documento carregado arriscaria persistir a versão podada. */
+ * Antes havia um interruptor (`settings.routesPublic`) que permitia mostrar o
+ * percurso a todo mundo. Ele foi aposentado em 12/09/2026, por decisão de
+ * produto: o mapa diz por onde a pessoa passou e, principalmente, de que porta
+ * ela sai e a que horas. O GPS existe para ELA registrar onde correu — não
+ * para virar rastro que alguém acompanha.
+ *
+ * Distância, tempo e ritmo continuam saindo; só o caminho some. Devolve uma
+ * cópia: mexer no documento carregado arriscaria persistir a versão podada.
+ *
+ * Continua `async` porque é chamada com `await` em vários lugares e a
+ * assinatura é contrato — mudar isso aqui seria uma mudança grande por um
+ * ganho nenhum.
+ */
 export async function podarRotaSePrivada<T extends Record<string, unknown>>(
   payload: T,
   donoId: mongoose.Types.ObjectId,
   espectadorId: mongoose.Types.ObjectId
 ): Promise<T> {
   if (donoId.equals(espectadorId)) return payload;
-
-  const dono = await User.findById(donoId).select("settings");
-  if (dono?.settings?.routesPublic === true) return payload;
 
   const { points, polyline, ...resto } = payload as Record<string, unknown>;
   void points;

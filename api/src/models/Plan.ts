@@ -91,6 +91,15 @@ const planSchema = new Schema(
     workout: { type: Schema.Types.Mixed, default: null },
     diet: { type: Schema.Types.Mixed, default: null },
     disclaimer: { type: String, required: true },
+    /**
+     * Quem escreveu este plano, quando não foi o próprio dono.
+     *
+     * Até aqui todo plano era auto-atribuído: a IA gerava, ou a pessoa colava o
+     * texto do treino que o professor mandou (`POST /plans/import`) — que era
+     * justamente o remendo que o painel do coach vem substituir. `null` continua
+     * significando "meu plano", e é o caso de todo plano que já existe.
+     */
+    createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );

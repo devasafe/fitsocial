@@ -20,7 +20,8 @@
     "exercicios:backfill:rollback": "tsx src/scripts/backfillExerciseSlugs.ts --rollback",
     "musculos:backfill": "tsx src/scripts/backfillMuscleMetrics.ts",
     "musculos:backfill:rollback": "tsx src/scripts/backfillMuscleMetrics.ts --rollback",
-    "admin:grant": "tsx src/scripts/grantAdmin.ts"
+    "admin:grant": "tsx src/scripts/grantAdmin.ts",
+    "pro:grant": "tsx src/scripts/grantPro.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",

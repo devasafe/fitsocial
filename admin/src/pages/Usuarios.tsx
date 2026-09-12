@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   listarUsuarios, buscarUsuario, banirUsuario, desbanirUsuario,
-  suspenderUsuario, definirPremium,
+  suspenderUsuario, definirPremium, definirPro,
   type UsuarioAdmin, type DetalheUsuario,
 } from "../api";
 import { Dialogo } from "../components/Dialogo";
@@ -10,7 +10,16 @@ import { useEhCelular } from "../hooks/useEhCelular";
 import { empilharCamada, useCamada } from "../hooks/useCamada";
 import { MARCA } from "../marca";
 
-type Acao = "banir" | "desbanir" | "suspender" | "premium" | "tirarPremium";
+type Acao =
+  | "banir"
+  | "desbanir"
+  | "suspender"
+  | "premium"
+  | "tirarPremium"
+  | "darCoach"
+  | "tirarCoach"
+  | "darNutri"
+  | "tirarNutri";
 
 const dataCurta = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -110,6 +119,14 @@ export function Usuarios({ token }: { token: string }) {
     if (acao === "premium") await definirPremium(token, alvo.id, true, dias || null, motivo);
     if (acao === "tirarPremium") await definirPremium(token, alvo.id, false, null, motivo);
 
+    // Acesso profissional. `dias` zero vira sem prazo, como na cortesia; o teto
+    // fica de fora daqui de propósito — o padrão serve, e abrir exceção é caso
+    // raro que continua no script.
+    if (acao === "darCoach") await definirPro(token, alvo.id, "coach", true, dias || null, motivo);
+    if (acao === "tirarCoach") await definirPro(token, alvo.id, "coach", false, null, motivo);
+    if (acao === "darNutri") await definirPro(token, alvo.id, "nutri", true, dias || null, motivo);
+    if (acao === "tirarNutri") await definirPro(token, alvo.id, "nutri", false, null, motivo);
+
     await carregarDetalhe(alvo.id);
     await carregar(null);
   }
@@ -123,6 +140,19 @@ export function Usuarios({ token }: { token: string }) {
     <>
       <p style={{ color: "var(--texto-2)", margin: "6px 0 0" }}>{u.email}</p>
       {u.username && <p style={{ color: "var(--texto-3)", margin: "2px 0 0" }}>@{u.username}</p>}
+
+      {/* Dito por extenso, e não só implícito no rótulo do botão: quem abre a
+          ficha precisa saber o que a conta já é antes de decidir mudá-la. */}
+      {(u.pro?.coach.ativo || u.pro?.nutri.ativo) && (
+        <p style={{ color: "var(--lime)", margin: "6px 0 0", fontSize: 13 }}>
+          {[
+            u.pro?.coach.ativo ? `coach (até ${u.pro.coach.limite} alunos)` : null,
+            u.pro?.nutri.ativo ? `nutri (até ${u.pro.nutri.limite} pacientes)` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
 
       <div className="stats-3">
         <div>
@@ -170,6 +200,29 @@ export function Usuarios({ token }: { token: string }) {
         <button className="discreto" onClick={() => pedirAcao("tirarPremium")}>Tirar cortesia</button>
       ) : (
         <button className="discreto" onClick={() => pedirAcao("premium")}>Dar premium</button>
+      )}
+
+      {/* Acesso profissional. Não é escalada de privilégio como `role`: quem
+          recebe ganha a possibilidade de convidar alunos, e cada aluno ainda
+          precisa aceitar. Por isso fica aqui, ao lado da cortesia. */}
+      {u.pro?.coach.ativo ? (
+        <button className="discreto" onClick={() => pedirAcao("tirarCoach")}>
+          Tirar coach
+        </button>
+      ) : (
+        <button className="discreto" onClick={() => pedirAcao("darCoach")}>
+          Tornar coach
+        </button>
+      )}
+
+      {u.pro?.nutri.ativo ? (
+        <button className="discreto" onClick={() => pedirAcao("tirarNutri")}>
+          Tirar nutri
+        </button>
+      ) : (
+        <button className="discreto" onClick={() => pedirAcao("darNutri")}>
+          Tornar nutri
+        </button>
       )}
 
       {/* Destrutivo por último, sempre. */}
@@ -347,6 +400,10 @@ export function Usuarios({ token }: { token: string }) {
               ? "Bloqueio temporário. A conta se libera sozinha quando o prazo acabar."
               : acao === "premium"
               ? "Cortesia dada por você. A loja não derruba: se uma assinatura expirar, isto continua valendo."
+              : acao === "darCoach" || acao === "darNutri"
+              ? "Passa a poder convidar até 10 alunos pelo painel profissional. Cada aluno ainda precisa aceitar o convite e escolher o que abrir."
+              : acao === "tirarCoach" || acao === "tirarNutri"
+              ? "Perde o painel na hora. Os acompanhamentos não são apagados — viram histórico, e os alunos deixam de ser vistos."
               : "A pessoa volta ao plano grátis, a menos que tenha assinatura própria."
           }
           rotuloAcao={
@@ -358,10 +415,14 @@ export function Usuarios({ token }: { token: string }) {
           }
           perigoso={acao === "banir"}
           extra={
-            acao === "suspender" || acao === "premium" ? (
+            acao === "suspender" || acao === "premium" || acao === "darCoach" || acao === "darNutri" ? (
               <div style={{ marginTop: 14 }}>
                 <label htmlFor="dias">
-                  {acao === "suspender" ? "Dias de suspensão" : "Dias de cortesia (0 = sem prazo)"}
+                  {acao === "suspender"
+                    ? "Dias de suspensão"
+                    : acao === "premium"
+                    ? "Dias de cortesia (0 = sem prazo)"
+                    : "Dias de acesso (0 = sem prazo)"}
                 </label>
                 <input
                   id="dias"

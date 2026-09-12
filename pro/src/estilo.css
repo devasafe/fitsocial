@@ -1,0 +1,471 @@
+/* Identidade herdada de docs/DESIGN.md e de app-android/src/theme.ts.
+   O que NÃO se herda do app: alvos de toque e densidade sob demanda. Aqui é
+   desktop, mouse e teclado, e a densidade é o ponto — o coach precisa ver dez
+   alunos de uma vez, não rolar dez cartões.
+
+   ATENÇÃO ao copiar CSS de admin/src/estilo.css: aquele arquivo ficou no lima
+   antigo (#c8fa4b). A marca é verde desde 11/09/2026. */
+
+:root {
+  --bg: #0e1310;
+  --surface: #161c18;
+  --surface-2: #1e2620;
+  --surface-3: #273029;
+  --line: #2a332c;
+  --line-forte: #3a453c;
+
+  --texto: #edebe1;
+  --texto-2: #a8ac9e;
+  --texto-3: #6e7469;
+
+  --verde: #3bcc06;
+  --verde-fraco: rgba(59, 204, 6, 0.12);
+  --verde-tenue: rgba(59, 204, 6, 0.06);
+  --verde-fundo: #1f5c08;
+  --verde-claro: #7ce84f;
+  --sobre-verde: #0e1310;
+
+  --alerta: #f5c63c;
+  --perigo: #f2634b;
+  --info: #7fb2e5;
+
+  --display: "Sora", system-ui, sans-serif;
+  --corpo: "Archivo", system-ui, sans-serif;
+
+  --esp-4: 4px;
+  --esp-8: 8px;
+  --esp-12: 12px;
+  --esp-16: 16px;
+  --esp-20: 20px;
+  --esp-24: 24px;
+  --esp-32: 32px;
+
+  --raio-chip: 10px;
+  --raio-card: 14px;
+  --raio-pilula: 999px;
+
+  --toque: 44px;
+  --mov-base: 200ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+a,
+input,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+}
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+h1 {
+  font-size: 24px;
+  font-weight: 700;
+}
+h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: var(--esp-24) 0 var(--esp-12);
+}
+
+/* Foco visível sempre: o painel se opera no teclado, e o anel é o que diz
+   onde você está. Nunca `outline: none` sem substituto. */
+:focus-visible {
+  outline: 2px solid var(--verde-claro);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ layout */
+
+.app {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  min-height: 100vh;
+}
+
+.lateral {
+  border-right: 1px solid var(--line);
+  padding: var(--esp-24) var(--esp-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-24);
+  background: var(--surface);
+}
+
+.marca {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--display);
+}
+.marca b {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--verde);
+}
+.marca span {
+  font-size: 12px;
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav button {
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--texto-2);
+  font: inherit;
+  padding: 10px var(--esp-12);
+  border-radius: var(--raio-chip);
+  cursor: pointer;
+}
+.nav button:hover {
+  background: var(--surface-2);
+  color: var(--texto);
+}
+.nav button[aria-current="page"] {
+  background: var(--verde-fraco);
+  color: var(--verde-claro);
+  font-weight: 600;
+}
+
+.rodape-lateral {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  font-size: 13px;
+}
+
+.conteudo {
+  padding: var(--esp-32);
+  max-width: 1100px;
+}
+
+/* ------------------------------------------------------------- superfícies */
+
+.painel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--raio-card);
+  padding: var(--esp-20);
+}
+
+/* Elevação por degrau de superfície, não por sombra difusa. */
+.cartoes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--esp-16);
+}
+
+.cartao {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--raio-card);
+  padding: var(--esp-16);
+}
+.cartao .num {
+  font-family: var(--display);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.cartao .rotulo {
+  color: var(--texto-2);
+  font-size: 13px;
+}
+.cartao .aviso {
+  color: var(--texto-3);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------- controles */
+
+button.primario {
+  background: var(--verde);
+  color: var(--sobre-verde);
+  border: 0;
+  border-radius: var(--raio-chip);
+  padding: 10px var(--esp-16);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 38px;
+}
+button.primario:hover {
+  background: var(--verde-claro);
+}
+button.primario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.discreto {
+  background: none;
+  border: 1px solid var(--line-forte);
+  color: var(--texto-2);
+  border-radius: var(--raio-chip);
+  padding: 8px var(--esp-12);
+  font: inherit;
+  cursor: pointer;
+}
+button.discreto:hover {
+  color: var(--texto);
+  border-color: var(--texto-3);
+}
+button.perigo {
+  border-color: rgba(242, 99, 75, 0.4);
+  color: var(--perigo);
+}
+
+input,
+textarea,
+select {
+  background: var(--surface-2);
+  border: 1px solid var(--line-forte);
+  color: var(--texto);
+  border-radius: var(--raio-chip);
+  padding: 10px var(--esp-12);
+  font: inherit;
+  width: 100%;
+}
+textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--texto-2);
+  margin-bottom: 6px;
+}
+.campo {
+  margin-bottom: var(--esp-16);
+}
+
+/* -------------------------------------------------------------- lista/alunos */
+
+.linhas {
+  display: flex;
+  flex-direction: column;
+}
+
+.linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-16);
+  padding: var(--esp-12) 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  background: none;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  width: 100%;
+}
+.linha:first-child {
+  border-top: 0;
+}
+.linha:hover {
+  background: var(--verde-tenue);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--raio-pilula);
+  background: var(--surface-3);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.crescer {
+  flex: 1;
+  min-width: 0;
+}
+.nome {
+  font-weight: 600;
+}
+.sub {
+  color: var(--texto-3);
+  font-size: 12px;
+}
+
+/* O sinal de atenção da lista: quem sumiu aparece antes de ser procurado. */
+.selo {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--raio-pilula);
+  white-space: nowrap;
+}
+.selo.ok {
+  background: var(--verde-fraco);
+  color: var(--verde-claro);
+}
+.selo.atencao {
+  background: rgba(245, 198, 60, 0.14);
+  color: var(--alerta);
+}
+.selo.sumido {
+  background: rgba(242, 99, 75, 0.14);
+  color: var(--perigo);
+}
+.selo.neutro {
+  background: var(--surface-3);
+  color: var(--texto-3);
+}
+
+.bolinha {
+  background: var(--verde);
+  color: var(--sobre-verde);
+  border-radius: var(--raio-pilula);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+}
+
+/* --------------------------------------------------------------------- chat */
+
+.conversa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: var(--esp-8);
+}
+
+.balao {
+  max-width: 76%;
+  padding: var(--esp-8) var(--esp-12);
+  border-radius: var(--raio-card);
+  background: var(--surface-2);
+  align-self: flex-start;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.balao.meu {
+  align-self: flex-end;
+  background: var(--verde-fundo);
+}
+.balao img {
+  max-width: 100%;
+  border-radius: var(--raio-chip);
+  display: block;
+}
+.balao .quando {
+  display: block;
+  font-size: 11px;
+  color: var(--texto-3);
+  margin-top: 4px;
+}
+
+.escrever {
+  display: flex;
+  gap: var(--esp-8);
+  margin-top: var(--esp-12);
+}
+
+/* ------------------------------------------------------------------ estados */
+
+.vazio {
+  color: var(--texto-3);
+  padding: var(--esp-24) 0;
+}
+.erro {
+  color: var(--perigo);
+  font-size: 13px;
+}
+.codigo {
+  font-family: var(--display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--verde);
+}
+
+.entrar {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--esp-24);
+}
+.entrar form {
+  width: 100%;
+  max-width: 340px;
+}
+
+.duas-colunas {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--esp-16);
+  align-items: start;
+}
+
+/* O painel é de desktop, mas o coach abre no celular entre uma série e outra.
+   Uma coluna, e a navegação vira topo — sem barra inferior: aqui não há
+   quatro seções disputando o polegar. */
+@media (max-width: 860px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .lateral {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: var(--esp-16);
+    gap: var(--esp-16);
+  }
+  .nav {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .nav button {
+    white-space: nowrap;
+    min-height: var(--toque);
+  }
+  .rodape-lateral {
+    margin-top: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .conteudo {
+    padding: var(--esp-16);
+  }
+  .duas-colunas {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,6 +1,26 @@
 import mongoose, { Schema, type InferSchemaType, type HydratedDocument } from "mongoose";
 import bcrypt from "bcryptjs";
 
+/** Uma capacidade profissional: se está ativa, por quê, até quando, e o teto. */
+const capacidadeSchema = new Schema(
+  {
+    ativo: { type: Boolean, default: false },
+    /** Quem deu: liberação manual no painel ou compra. */
+    origem: { type: String, enum: ["manual", "gateway", null], default: null },
+    /** Fim do acesso. null = sem prazo. */
+    validoAte: { type: Date, default: null },
+    /**
+     * Quantos alunos esta pessoa pode acompanhar.
+     *
+     * O número vive no documento, e não numa constante, porque é o que permite
+     * abrir exceção para um coach sem mexer no código — e é por onde a cobrança
+     * por faixa entra depois, sem migração.
+     */
+    limiteDeAlunos: { type: Number, default: 10 },
+  },
+  { _id: false }
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -105,9 +125,53 @@ const userSchema = new Schema(
     },
     /** Fim da cortesia. null = sem prazo. */
     premiumUntil: { type: Date, default: null },
+
+    /**
+     * O plano do consumidor. `tier` passa a ser DERIVADO disto.
+     *
+     * Nasceu ao lado de `tier` em vez de substituí-lo porque o APK instalado lê
+     * `tier` em `publicUser()` e compara com "premium": trocar o campo
+     * rebaixaria, em silêncio, todo mundo que paga. Quem tem conta antiga não
+     * tem este campo — `planDoUsuario` deriva do `tier` dela até o backfill.
+     *
+     * SEM `default` de propósito. O mongoose aplica default ao HIDRATAR, não só
+     * ao criar: com `default: "free"`, um documento antigo sem o campo seria
+     * lido como free, e quem paga cairia para free na primeira gravação. A
+     * ausência precisa continuar sendo ausência para poder ser derivada.
+     */
+    plan: { type: String, enum: ["free", "pro", "pro_plus"] },
+
+    // --- Capacidade profissional (RUMO Pro) ---
+    //
+    // Fica FORA de `role` de propósito. `role` é enum único e, neste projeto, é
+    // privilégio concedido por script — e uma pessoa pode ser coach e nutri ao
+    // mesmo tempo, além de continuar sendo aluna. São eixos diferentes:
+    // `role` é privilégio, `plan` é o que a pessoa comprou para si, e isto aqui
+    // é o que ela pode fazer COM OS OUTROS.
+    pro: {
+      coach: { type: capacidadeSchema, default: () => ({}) },
+      nutri: { type: capacidadeSchema, default: () => ({}) },
+    },
   },
   { timestamps: true }
 );
+
+/**
+ * `tier` é derivado de `plan` — e a derivação mora aqui para não haver como
+ * esquecer dela.
+ *
+ * Deixar isso só no service significaria que qualquer `save()` que mexesse em
+ * `plan` sem passar por lá deixaria os dois campos discordando: a pessoa com
+ * `plan: "pro"` e `tier: "free"` perderia o acesso que comprou, e nada
+ * apontaria o erro. O hook só age quando `plan` muda, então conta antiga (que
+ * não tem o campo) segue intocada.
+ */
+userSchema.pre("save", function (next) {
+  if (this.isModified("plan") && this.plan) {
+    this.tier = this.plan === "free" ? "free" : "premium";
+  }
+  next();
+});
 
 export type UserDoc = HydratedDocument<InferSchemaType<typeof userSchema>>;
 
@@ -129,6 +193,13 @@ export function publicUser(user: UserDoc) {
     avatarUrl: user.avatarUrl ?? "",
     bio: user.bio ?? "",
     tier: user.tier,
+    // Aditivo: o APK antigo ignora o que não conhece, e o app novo usa isto
+    // para saber se mostra a entrada do painel profissional.
+    plan: user.plan ?? "free",
+    pro: {
+      coach: user.pro?.coach?.ativo === true,
+      nutri: user.pro?.nutri?.ativo === true,
+    },
     onboardingComplete: user.onboardingComplete,
     settings: {
       // null aqui é o que faz o app perguntar na conclusão do primeiro treino.

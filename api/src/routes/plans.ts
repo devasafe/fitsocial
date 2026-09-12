@@ -49,6 +49,9 @@ function serializePlan(plan: InstanceType<typeof Plan>) {
     workout: workout ?? treinoVazio,
     diet: plan.diet ?? dietaVazia,
     disclaimer: plan.disclaimer,
+    // Quem escreveu, quando não foi o dono. O app mostra "prescrito pelo seu
+    // coach" em vez de deixar a pessoa achar que a IA mudou o treino sozinha.
+    createdBy: plan.createdBy ? plan.createdBy.toString() : null,
     createdAt: plan.get("createdAt") as Date,
   };
 }
