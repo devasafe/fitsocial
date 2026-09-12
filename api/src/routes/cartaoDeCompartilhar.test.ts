@@ -239,6 +239,84 @@ describe("Cartao para compartilhar fora do app", () => {
       .expect(200);
   });
 
+  it("o treino que bateu recorde ganha o selo, e o cartao muda por causa dele", async () => {
+    // Usuario proprio: o limite de 12 cartoes por minuto e por pessoa, e o
+    // `dono` ja gastou a cota dele nos testes acima.
+    const recordista = await registrar("recordista@teste.com");
+    // Mesmo treino, mesma foto, mesmo layout: a unica diferenca e o recorde.
+    async function cartaoDe(prs: unknown) {
+      const atividade = await Activity.create({
+        user: new mongoose.Types.ObjectId(recordista.id),
+        sportId: "musculacao",
+        kind: "strength",
+        startedAt: new Date(),
+        durationSec: 3600,
+        metrics: { volumeTotalKg: 3200, seriesValidas: 12, ...(prs ? { prs } : {}) },
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            { name: "Supino reto", slug: "supino_reto", sets: [{ type: "valida", weightKg: 100, reps: 5, done: true }] },
+          ],
+        },
+      });
+      const post = await request(app)
+        .post("/social/posts")
+        .set(auth(recordista.token))
+        .send({ text: "treino", activityId: atividade._id.toString() });
+
+      const r = await request(app)
+        .post(`/social/posts/${post.body.post.id}/cartao?formato=feed&layout=numeros`)
+        .set(auth(recordista.token));
+      expect(r.status).toBe(200);
+
+      const png = await request(app).get(caminhoDe(r.body.url));
+      return png.body as Buffer;
+    }
+
+    const semRecorde = await cartaoDe(null);
+    const comRecorde = await cartaoDe([
+      { type: "carga_max", exerciseName: "Supino reto", value: 100, previousValue: 90, unit: "kg" },
+    ]);
+
+    // Nao da para ler texto de um PNG aqui; o que da para afirmar e que o
+    // desenho mudou, e que continua sendo uma imagem valida no tamanho certo.
+    expect(Buffer.compare(semRecorde, comRecorde)).not.toBe(0);
+    const meta = await sharp(comRecorde).metadata();
+    expect(meta.width).toBe(1080);
+    expect(meta.height).toBe(1350);
+  });
+
+  it("marco de aulas nao vira selo de recorde: o cartao anuncia forca", async () => {
+    const aluno = await registrar("cemaulas@teste.com");
+    const atividade = await Activity.create({
+      user: new mongoose.Types.ObjectId(aluno.id),
+      sportId: "musculacao",
+      kind: "strength",
+      startedAt: new Date(),
+      durationSec: 3600,
+      metrics: {
+        volumeTotalKg: 3200,
+        prs: [{ type: "aulas", exerciseName: "Aulas", value: 100, previousValue: 99, unit: "aulas" }],
+      },
+      payload: {
+        variant: "musculacao",
+        exercises: [
+          { name: "Supino reto", slug: "supino_reto", sets: [{ type: "valida", weightKg: 100, reps: 5, done: true }] },
+        ],
+      },
+    });
+    const post = await request(app)
+      .post("/social/posts")
+      .set(auth(aluno.token))
+      .send({ text: "treino", activityId: atividade._id.toString() });
+
+    const r = await request(app)
+      .post(`/social/posts/${post.body.post.id}/cartao?formato=feed&layout=numeros`)
+      .set(auth(aluno.token));
+
+    expect(r.status).toBe(200);
+  });
+
   it("exige autenticacao", async () => {
     const id = await postComCorrida(dono.token, dono.id);
     await request(app).post(`/social/posts/${id}/cartao`).expect(401);

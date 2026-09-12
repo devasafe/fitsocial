@@ -106,6 +106,24 @@ export async function createActivity(
     payload: activity.payload,
   });
 
+  // Guarda na propria atividade o que ela conquistou.
+  //
+  // E denormalizado de proposito: o cartao de compartilhar precisa saber "este
+  // treino bateu recorde?" e, sem isto, teria de consultar PersonalRecord a
+  // cada montagem. Fica junto das metricas, que ja sao derivadas e gravadas
+  // aqui pelo mesmo motivo.
+  if (newPRs.length > 0) {
+    const resumo = newPRs.map((p) => ({
+      type: p.type,
+      exerciseName: p.exerciseName,
+      value: p.value,
+      previousValue: p.previousValue,
+      unit: p.unit,
+    }));
+    activity.set("metrics", { ...activity.metrics, prs: resumo });
+    await activity.save();
+  }
+
   let post: InstanceType<typeof Post> | null = null;
   if (input.shareToFeed) {
     const sport = getSport(input.sportId);
