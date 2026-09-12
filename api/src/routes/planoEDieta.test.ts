@@ -118,7 +118,11 @@ describe("Zerar", () => {
 
     await request(app).delete("/plans/current").set(auth(u.token)).expect(200);
 
-    expect((await atual(u.token)).status).toBe(404);
+    // 200 com `plan: null`: não ter plano é estado normal de quem começou
+    // agora, e um 404 por isso pinta o console de vermelho a cada foco da Home.
+    const vazio = await atual(u.token);
+    expect(vazio.status).toBe(200);
+    expect(vazio.body.plan).toBeNull();
     // Sem isto a Home ficaria sem plano E sem pergunta: uma tela vazia.
     expect(await programacao(u.id)).toBeNull();
   });

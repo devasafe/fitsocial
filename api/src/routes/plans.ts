@@ -416,9 +416,18 @@ plansRouter.get(
     const plan = await Plan.findOne({ user: req.user!._id })
       .sort({ version: -1 })
       .populate("createdBy", "name username avatarUrl");
-    if (!plan) {
-      throw new HttpError(404, "Nenhum plano gerado ainda");
-    }
-    res.json({ plan: serializePlan(plan) });
+
+    // Sem plano é 200 com `plan: null`, e não 404.
+    //
+    // "Esta pessoa ainda não gerou um plano" é o estado NORMAL de quem acabou
+    // de se cadastrar, não uma falha — e todo 404 aparece em vermelho no
+    // console do navegador. A Home de quem não tem plano enchia o console de
+    // erro a cada foco da tela, que é como se ensina alguém a ignorar o
+    // console.
+    //
+    // Seguro para o APK instalado: `getCurrentPlan` desestrutura `{ plan }` e
+    // devolve o que vier. Com 404 ele caía no `catch` e devolvia `null`; com
+    // 200 e `plan: null` devolve o mesmo `null`, pelo caminho de cima.
+    res.json({ plan: plan ? serializePlan(plan) : null });
   })
 );
