@@ -97,12 +97,17 @@ export function NotificacoesScreen() {
 
   // Toca na notificação → abre o alvo (post / perfil / desafio).
   async function openTarget(n: NotificationItem) {
-    if (!n.targetId) return;
+    // O convite vem ANTES do guard de `targetId` de propósito: ele não precisa
+    // do alvo para abrir — a tela de acompanhamentos lista os pendentes e
+    // resolve o código sozinha. Amarrá-lo a um campo que não usa seria deixar
+    // um convite sem resposta por causa de um id ausente.
     if (n.targetKind === "convite") {
-      // O alvo é o convite, mas quem sabe resolver o código é a tela de
-      // acompanhamentos: ela lista os pendentes e abre o aceite.
       nav.navigate("Acompanhamentos");
-    } else if (n.targetKind === "challenge") {
+      return;
+    }
+
+    if (!n.targetId) return;
+    if (n.targetKind === "challenge") {
       nav.navigate("DesafioDetail", { id: n.targetId });
     } else if (n.targetKind === "profile") {
       nav.navigate("UserProfile", { userId: n.targetId });

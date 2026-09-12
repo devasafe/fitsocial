@@ -17,6 +17,7 @@ import {
   type ToqueBruto,
 } from "../components/CenaContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
+import { ConvitesPendentes } from "../components/ConvitesPendentes";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
@@ -276,6 +277,11 @@ export function HomeScreen() {
 
   return (
     <Screen scroll contentStyle={{ gap: spacing.md }}>
+      {/* Antes de tudo, inclusive do cabeçalho: é a única coisa da Home que
+          alguém está esperando uma resposta sua. Some sozinho quando não há
+          convite nenhum. */}
+      <ConvitesPendentes />
+
       {/* Cabeçalho */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
         <View style={{ flex: 1 }}>
