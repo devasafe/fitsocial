@@ -89,10 +89,17 @@ export function updatePlan(token: string, data: { summary?: string; workout?: Wo
   return apiFetch<{ plan: Plan }>("/plans/current", { method: "PUT", token, body: data });
 }
 
-/** Busca o plano atual; retorna null se ainda não houver (404). */
+/**
+ * Busca o plano atual; devolve null quando ainda não há.
+ *
+ * O servidor responde 200 com `plan: null` — não ter plano é o estado normal
+ * de quem acabou de se cadastrar, e um 404 por isso enchia o console de erro a
+ * cada foco da Home. O `catch` do 404 continua aqui porque o deploy é manual:
+ * o aplicativo pode rodar contra um servidor mais antigo por algum tempo.
+ */
 export async function getCurrentPlan(token: string): Promise<Plan | null> {
   try {
-    const { plan } = await apiFetch<{ plan: Plan }>("/plans/current", { token });
+    const { plan } = await apiFetch<{ plan: Plan | null }>("/plans/current", { token });
     return plan;
   } catch (err) {
     if (err instanceof ApiHttpError && err.status === 404) return null;

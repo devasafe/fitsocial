@@ -105,9 +105,14 @@ describe("Plans", () => {
     expect(res.status).toBe(409);
   });
 
-  it("404 ao buscar plano atual antes de gerar", async () => {
+  it("sem plano ainda é 200 com plan nulo, e não 404", async () => {
     const res = await auth(request(app).get("/plans/current"));
-    expect(res.status).toBe(404);
+    // Quem acabou de se cadastrar não tem plano, e isso é o estado normal
+    // dele. Responder 404 pintava o console do navegador de vermelho a cada
+    // foco da Home — e o app sempre tratou como "ainda não tem", nunca como
+    // falha.
+    expect(res.status).toBe(200);
+    expect(res.body.plan).toBeNull();
   });
 
   it("gera um plano válido a partir da ficha (versão 1)", async () => {
