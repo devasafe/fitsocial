@@ -5,7 +5,36 @@ import { colors, radius, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import { linhasDoCard } from "../lib/crossfitResumo";
 import { tituloPorMusculos, musculosDe } from "../lib/musculos";
-import type { TreinoPublico } from "../api/social";
+import type { PayloadDeCrossfit } from "../api/crossfit";
+import type { ActivityMetrics } from "../api/activities";
+
+/**
+ * O que o cartão precisa saber — e nada além.
+ *
+ * Era `TreinoPublico`, o contrato de `/social/users/:id/activities`, e isso
+ * prendia o cartão ao perfil de outra pessoa. A aba Atividades mostra os
+ * treinos do próprio dono, que vêm de `/activities` com uma forma parecida mas
+ * não idêntica. Pedir só os campos que ele lê deixa os dois servirem o mesmo
+ * cartão — que é o ponto: o mesmo treino tem que se apresentar igual, venha de
+ * onde vier.
+ */
+export interface TreinoNoCard {
+  sportId: string;
+  kind: string;
+  title?: string;
+  startedAt: string;
+  durationSec: number;
+  metrics?: ActivityMetrics | null;
+  /** O payload cru — daqui sai o nome de uma atividade "Outro". */
+  payload?: unknown;
+  crossfit?: PayloadDeCrossfit | null;
+  /** Os exercícios já escritos pelo servidor: "4×10  Supino reto  80 kg". */
+  movimentos?: string[] | null;
+  /** Quantos exercícios o treino tem de verdade — `movimentos` vem cortado. */
+  movimentosTotal?: number;
+  /** true quando esse treino também virou publicação no feed. */
+  compartilhado?: boolean;
+}
 
 // Como um treino se apresenta no perfil. O formato muda por esporte: corrida
 // fala em quilômetros e ritmo, musculação em volume. Mostrar "3.240 kg" numa
@@ -32,13 +61,18 @@ function ritmo(segPorKm: number): string {
 }
 
 /** Os três números que definem aquele treino, na ordem em que importam. */
-function destaques(t: TreinoPublico): { valor: string; rotulo: string }[] {
-  const m = (t.metrics ?? {}) as Record<string, number | undefined>;
+function destaques(t: TreinoNoCard): { valor: string; rotulo: string }[] {
+  const m = t.metrics ?? {};
 
   if (t.kind === "endurance" && (m.distanceKm ?? 0) > 0) {
     const out = [{ valor: `${numero(m.distanceKm!, 2)} km`, rotulo: "distância" }];
     if (t.durationSec > 0) out.push({ valor: duracao(t.durationSec), rotulo: "tempo" });
-    if ((m.paceSecPerKm ?? 0) > 0) out.push({ valor: ritmo(m.paceSecPerKm!), rotulo: "ritmo" });
+    // `avgPaceSecPerKm` é o nome que o servidor grava (`activityMetrics.ts`).
+    // Aqui liamos `paceSecPerKm`, que ninguém escreve — e o ritmo, que é o
+    // número que uma corrida tem de mostrar, nunca aparecia em cartão nenhum.
+    if ((m.avgPaceSecPerKm ?? 0) > 0) {
+      out.push({ valor: ritmo(m.avgPaceSecPerKm!), rotulo: "ritmo" });
+    }
     return out;
   }
 
@@ -64,16 +98,32 @@ function quando(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress?: () => void }) {
+export function TreinoCard({ treino, onPress }: { treino: TreinoNoCard; onPress?: () => void }) {
   const cor = sportColor(treino.sportId);
   const stats = destaques(treino);
   const linhasCrossfit = treino.crossfit ? linhasDoCard(treino.crossfit) : [];
   // CrossFit tem as linhas dele, montadas no app a partir dos blocos. O resto
   // usa o que o servidor escreveu.
   const movimentos = linhasCrossfit.length ? [] : (treino.movimentos ?? []);
+  // Quantos ficaram de fora. Conta sobre o TOTAL do servidor, e não sobre a
+  // lista que ele já cortou em oito: sem isso, todo treino de oito ou mais
+  // dizia "+2", e quem fez quinze exercícios lia que faltavam dois.
+  const total = treino.movimentosTotal ?? movimentos.length;
+  const restantes = Math.max(total - MAXIMO_DE_MOVIMENTOS, 0);
+
   // O nome que a pessoa deu ganha; sem ele, o assunto é o que foi treinado.
   // O esporte já está dito na linha colorida acima e na borda do cartão.
-  const assunto = treino.title?.trim() || tituloPorMusculos(musculosDe(treino.metrics));
+  //
+  // Numa atividade "Outro" não há músculo nem exercício para resumir: o assunto
+  // é o nome que ela escreveu. Sem isto, todo registro de "Outro" virava a
+  // linha "Outro · 45min" — a mesma queixa do histórico de musculação, um
+  // esporte adiante.
+  const nomeLivre =
+    treino.kind === "generic"
+      ? ((treino.payload as { activityName?: string } | null)?.activityName ?? "").trim()
+      : "";
+  const assunto =
+    treino.title?.trim() || nomeLivre || tituloPorMusculos(musculosDe(treino.metrics));
 
   return (
     <TouchableOpacity
@@ -126,15 +176,20 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
           {linha}
         </Txt>
       ))}
-      {movimentos.length > MAXIMO_DE_MOVIMENTOS && (
+      {restantes > 0 && (
         <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
-          +{movimentos.length - MAXIMO_DE_MOVIMENTOS} exercício
-          {movimentos.length - MAXIMO_DE_MOVIMENTOS > 1 ? "s" : ""}
+          +{restantes} exercício{restantes > 1 ? "s" : ""}
         </Txt>
       )}
 
       {stats.length > 0 && (
-        <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm }}>
+        // Com o ritmo de volta, a corrida passou a ter TRÊS números, e três em
+        // `metricMd` não cabem em 284dp úteis: o terceiro — justamente o ritmo,
+        // que é o que se abre a tela para ver — saía pela borda. Com wrap ele
+        // desce inteiro em vez de ficar cortado.
+        <View
+          style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.lg, marginTop: spacing.sm }}
+        >
           {stats.map((s) => (
             <View key={s.rotulo}>
               <Txt variant="metricMd" tabular>

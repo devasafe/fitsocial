@@ -123,6 +123,13 @@ export interface Activity {
   payload?: unknown;
   /** Treino de CrossFit já em blocos. O servidor normaliza os dois formatos. */
   crossfit?: PayloadDeCrossfit | null;
+  /** Os exercícios já escritos pelo servidor: "4×10  Supino reto  80 kg".
+   *  Mesmo formatador do feed e do perfil. */
+  movimentos?: string[] | null;
+  /** Quantos exercícios o treino tem de verdade — `movimentos` vem cortado. */
+  movimentosTotal?: number;
+  /** true quando esse treino também virou publicação no feed. Só na lista. */
+  compartilhado?: boolean;
   perceivedEffort?: number | null;
   feeling?: string | null;
   // Presente ao buscar por id (ex.: abrir treino de outra pessoa pelo feed).

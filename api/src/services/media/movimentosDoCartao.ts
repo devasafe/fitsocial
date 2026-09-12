@@ -124,11 +124,8 @@ function daForca(exercicios: StrengthPayload["exercises"]): string[] {
     });
 }
 
-/**
- * Os movimentos de um treino, prontos para desenhar. Lista vazia quando o
- * treino não tem movimento para mostrar — o layout lida com isso.
- */
-export function movimentosDoCartao(
+/** Todas as linhas, sem corte — a base das duas funções abaixo. */
+function todasAsLinhas(
   kind: string | undefined,
   payload: Record<string, unknown> | undefined
 ): string[] {
@@ -142,5 +139,31 @@ export function movimentosDoCartao(
     linhas = daForca(payload.exercises as StrengthPayload["exercises"]);
   }
 
-  return linhas.filter((l) => l.trim()).slice(0, MAXIMO);
+  return linhas.filter((l) => l.trim());
+}
+
+/**
+ * Os movimentos de um treino, prontos para desenhar. Lista vazia quando o
+ * treino não tem movimento para mostrar — o layout lida com isso.
+ */
+export function movimentosDoCartao(
+  kind: string | undefined,
+  payload: Record<string, unknown> | undefined
+): string[] {
+  return todasAsLinhas(kind, payload).slice(0, MAXIMO);
+}
+
+/**
+ * Quantos movimentos o treino tem DE VERDADE.
+ *
+ * Existe porque o corte acontece duas vezes: aqui em oito, e de novo no cartão
+ * do app em seis. Sem este número, o "+N exercícios" do cartão era calculado
+ * sobre a lista já cortada e dizia "+2" para todo treino de oito ou mais — quem
+ * fez quinze exercícios lia que faltavam dois.
+ */
+export function totalDeMovimentos(
+  kind: string | undefined,
+  payload: Record<string, unknown> | undefined
+): number {
+  return todasAsLinhas(kind, payload).length;
 }

@@ -19,6 +19,7 @@ import { User } from "../models/User.js";
 import { createActivity } from "../services/activities.js";
 import { computeStrengthMetrics, musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
+import { movimentosDoCartao, totalDeMovimentos } from "../services/media/movimentosDoCartao.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 
 export const activitiesRouter = Router();
@@ -62,6 +63,14 @@ export function serializeActivity(a: InstanceType<typeof Activity>) {
     payload: a.payload,
     // Forma normalizada em blocos, AO LADO do payload cru — não no lugar dele.
     ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
+    // Os exercícios já escritos: "4×10  Supino reto  80 kg". Pelo MESMO
+    // formatador do feed e do perfil, e não do payload cru — duas
+    // implementações da mesma formatação divergem, e aí o mesmo treino se
+    // escreve de dois jeitos dependendo de por qual tela a pessoa chegou nele.
+    // Campo aditivo: o APK 1.2.0 ignora o que não conhece.
+    movimentos: movimentosDoCartao(a.kind, (a.payload ?? {}) as Record<string, unknown>),
+    // Quantos são de verdade, porque `movimentos` já vem cortado em oito.
+    movimentosTotal: totalDeMovimentos(a.kind, (a.payload ?? {}) as Record<string, unknown>),
     // `metrics` mais os músculos garantidos, como no feed e no perfil: um
     // treino gravado antes do campo existir também abre o compositor, e a
     // prévia de lá não pode dizer "Musculação" e o card publicado "Peito".
@@ -271,7 +280,27 @@ activitiesRouter.get(
     const nextCursor =
       hasMore && last ? encodeCursor({ startedAt: last.startedAt, id: last._id.toString() }) : null;
 
-    res.json({ data: items.map(serializeActivity), meta: { nextCursor } });
+    // Quais destes também viraram publicação — o mesmo selo que o perfil mostra.
+    // Uma consulta para a página inteira, como em `/social/users/:id/activities`.
+    const idsComPost = new Set(
+      (
+        await Post.find({
+          activity: { $in: items.map((a) => a._id) },
+          hidden: { $ne: true },
+          deletedAt: null,
+        }).select("activity")
+      )
+        .map((p) => p.activity?.toString())
+        .filter(Boolean) as string[]
+    );
+
+    res.json({
+      data: items.map((a) => ({
+        ...serializeActivity(a),
+        compartilhado: idsComPost.has(a._id.toString()),
+      })),
+      meta: { nextCursor },
+    });
   })
 );
 
