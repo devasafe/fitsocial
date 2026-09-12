@@ -1,9 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   buscarAluno,
+  buscarCardio,
   buscarConquistas,
   buscarGrupos,
   buscarSerie,
+  buscarSerieDeCardio,
+  formatarCardio,
+  METRICAS_CARDIO,
+  rotuloDaMetricaCardio,
   encerrarAluno,
   ErroApi,
   JANELAS,
@@ -15,10 +20,12 @@ import {
   unidadeDaMetrica,
   valorDoRecorde,
   type Conquista,
+  type EsporteNaLista,
   type ExercicioNaLista,
   type GrupoTreinado,
   type Janela,
   type Metrica,
+  type MetricaCardio,
   type PerfilDoAluno,
   type PontoDaSerie,
 } from "../api";
@@ -61,6 +68,8 @@ export function Aluno({
    * depois de uma conversa inteira baseada nele.
    */
   const [janela, setJanela] = useState<Janela>(90);
+  /** Musculação ou cardio — a mesma divisão que o aluno tem na aba dele. */
+  const [modo, setModo] = useState<"forca" | "cardio">("forca");
   const [metrica, setMetrica] = useState<Metrica>("carga_max");
 
   const [exercicio, setExercicio] = useState<ExercicioNaLista | null>(null);
@@ -68,6 +77,13 @@ export function Aluno({
   const [grupos, setGrupos] = useState<GrupoTreinado[]>([]);
   const [conquistas, setConquistas] = useState<Conquista[]>([]);
   const [maisConquistas, setMaisConquistas] = useState<string | null>(null);
+
+  const [cardio, setCardio] = useState<EsporteNaLista[]>([]);
+  const [esporte, setEsporte] = useState<string | null>(null);
+  const [metricaCardio, setMetricaCardio] = useState<MetricaCardio>("pace");
+  const [serieCardio, setSerieCardio] = useState<PontoDaSerie[]>([]);
+  /** Vem do servidor: no pace, correr melhor é um número menor. */
+  const [paceInvertido, setPaceInvertido] = useState(false);
 
   const carregar = useCallback(async () => {
     try {
@@ -122,6 +138,41 @@ export function Aluno({
       vivo = false;
     };
   }, [token, alunoId, janela]);
+
+  useEffect(() => {
+    let vivo = true;
+    buscarCardio(token, alunoId, janela)
+      .then((r) => {
+        if (!vivo) return;
+        setCardio(r.data);
+        // Mantém o esporte escolhido quando ele existe na janela nova.
+        setEsporte((atual) =>
+          atual && r.data.some((e) => e.sportId === atual) ? atual : (r.data[0]?.sportId ?? null)
+        );
+      })
+      .catch(() => vivo && setCardio([]));
+    return () => {
+      vivo = false;
+    };
+  }, [token, alunoId, janela]);
+
+  useEffect(() => {
+    if (!esporte) {
+      setSerieCardio([]);
+      return;
+    }
+    let vivo = true;
+    buscarSerieDeCardio(token, alunoId, esporte, janela, metricaCardio)
+      .then((r) => {
+        if (!vivo) return;
+        setSerieCardio(r.pontos);
+        setPaceInvertido(r.menorEhMelhor);
+      })
+      .catch(() => vivo && setSerieCardio([]));
+    return () => {
+      vivo = false;
+    };
+  }, [token, alunoId, esporte, janela, metricaCardio]);
 
   // As conquistas não têm janela: o recorde que caiu há oito meses continua
   // sendo o recorde, e escondê-lo porque a janela é de 30 dias mentiria.
@@ -184,6 +235,50 @@ export function Aluno({
     : null;
 
   const unidade = unidadeDaMetrica(metrica);
+  const esporteAtual = cardio.find((e) => e.sportId === esporte) ?? null;
+
+  // Esteira sem marcar quilômetro não tem pace — e pace é a métrica padrão.
+  // Sem isto, o esporte aparece na lista, o coach clica e o gráfico vem vazio,
+  // o que parece defeito. Só desvia do PADRÃO: uma escolha explícita fica.
+  if (metricaCardio === "pace" && esporteAtual && esporteAtual.melhorPace === 0) {
+    setMetricaCardio("duracao");
+  }
+
+  const painelDeConquistas = (
+            <div className="painel">
+      <b>Histórico de conquistas</b>
+      {conquistas.length === 0 ? (
+        <p className="vazio">Nenhum recorde registrado ainda.</p>
+      ) : (
+        <div className="linhas" style={{ marginTop: 8 }}>
+          {conquistas.map((c) => (
+            <div key={c.id} className="linha" style={{ cursor: "default" }}>
+              <span className="crescer">
+                <span className="nome">{nomeDoExercicio(c.exerciseName)}</span>
+                <br />
+                <span className="sub">
+                  {rotuloDoRecorde(c.type, c.repRange)} · de{" "}
+                  {valorDoRecorde(c.type, c.previousValue, c.unit)} para{" "}
+                  {valorDoRecorde(c.type, c.value, c.unit)}
+                </span>
+              </span>
+              <span className="sub">
+                {new Date(c.achievedAt).toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {maisConquistas && (
+        <button className="discreto" style={{ marginTop: 12 }} onClick={verConquistasAntigas}>
+          Ver conquistas mais antigas
+        </button>
+      )}
+    </div>
+  );
   const naJanela = janela === 0 ? "no histórico todo" : `em ${rotuloDaJanela(janela).toLowerCase()}`;
 
   return (
@@ -243,6 +338,23 @@ export function Aluno({
 
       {aba === "evolucao" && (
         <>
+          <nav className="nav" style={{ flexDirection: "row", marginBottom: 12 }}>
+            {(
+              [
+                ["forca", "Musculação"],
+                ["cardio", "Cardio"],
+              ] as const
+            ).map(([id, rotulo]) => (
+              <button
+                key={id}
+                aria-current={modo === id ? "page" : undefined}
+                onClick={() => setModo(id)}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </nav>
+
           <div
             className="chips"
             role="group"
@@ -256,6 +368,85 @@ export function Aluno({
             ))}
           </div>
 
+          {modo === "cardio" && (
+            <div className="duas-colunas">
+              <div className="painel">
+                <b>{esporteAtual ? esporteAtual.nome : "Cardio"}</b>
+                {esporteAtual && (
+                  <p className="sub" style={{ marginTop: 2 }}>
+                    {formatarCardio(esporteAtual.distanciaKm, "distancia")} · {esporteAtual.vezes}{" "}
+                    {esporteAtual.vezes === 1 ? "sessão" : "sessões"} {naJanela}
+                    {esporteAtual.melhorPace > 0 && (
+                      <> · melhor pace {formatarCardio(esporteAtual.melhorPace, "pace")}/km</>
+                    )}
+                  </p>
+                )}
+
+                <div className="chips" role="group" aria-label="Métrica" style={{ marginTop: 12 }}>
+                  {METRICAS_CARDIO.map((m) => (
+                    <button
+                      key={m}
+                      aria-pressed={metricaCardio === m}
+                      onClick={() => setMetricaCardio(m)}
+                    >
+                      {rotuloDaMetricaCardio(m)}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <Suspense fallback={<p className="vazio">Carregando gráfico…</p>}>
+                    <Grafico
+                      dados={serieCardio.map((p) => ({ x: p.data, valor: p.valor, ehPR: p.ehPR }))}
+                      formatar={(v) => formatarCardio(v, metricaCardio)}
+                      menorEhMelhor={paceInvertido}
+                    />
+                  </Suspense>
+                  {paceInvertido && serieCardio.length > 1 && (
+                    <p className="sub" style={{ marginTop: 8 }}>
+                      Eixo invertido: mais alto é mais rápido.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="painel">
+                <b>O que ele pratica</b>
+                {cardio.length === 0 ? (
+                  <p className="vazio">Nenhum treino de cardio {naJanela}.</p>
+                ) : (
+                  <div className="linhas" style={{ marginTop: 8 }}>
+                    {cardio.map((e) => (
+                      <button
+                        key={e.sportId}
+                        className="linha"
+                        aria-current={esporte === e.sportId ? "true" : undefined}
+                        onClick={() => setEsporte(e.sportId)}
+                      >
+                        <span className="crescer">
+                          <span className="nome">{e.nome}</span>
+                          <br />
+                          <span className="sub">
+                            {e.vezes}x · {formatarCardio(e.distanciaKm, "distancia")}
+                          </span>
+                        </span>
+                        {e.delta !== null && (
+                          <span className={`selo ${e.delta >= 0 ? "ok" : "neutro"}`}>
+                            {/* Melhora no pace é tempo a MENOS: o sinal que o
+                                olho espera é o invertido do delta. */}
+                            {e.delta >= 0 ? "−" : "+"}
+                            {formatarCardio(Math.abs(e.delta), "pace")}/km
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {modo === "forca" && (
           <div className="duas-colunas">
             <div className="painel">
               <b>{exercicio ? exercicio.nome : "Exercícios"}</b>
@@ -330,8 +521,10 @@ export function Aluno({
               )}
             </div>
           </div>
+          )}
 
-          <div className="duas-colunas" style={{ marginTop: 16 }}>
+          {modo === "forca" && (
+          <div style={{ marginTop: 16 }}>
             <div className="painel">
               <b>Por grupo muscular</b>
               <p className="sub" style={{ marginTop: 2 }}>
@@ -344,40 +537,13 @@ export function Aluno({
               </div>
             </div>
 
-            <div className="painel">
-              <b>Histórico de conquistas</b>
-              {conquistas.length === 0 ? (
-                <p className="vazio">Nenhum recorde registrado ainda.</p>
-              ) : (
-                <div className="linhas" style={{ marginTop: 8 }}>
-                  {conquistas.map((c) => (
-                    <div key={c.id} className="linha" style={{ cursor: "default" }}>
-                      <span className="crescer">
-                        <span className="nome">{nomeDoExercicio(c.exerciseName)}</span>
-                        <br />
-                        <span className="sub">
-                          {rotuloDoRecorde(c.type, c.repRange)} · de{" "}
-                          {valorDoRecorde(c.type, c.previousValue, c.unit)} para{" "}
-                          {valorDoRecorde(c.type, c.value, c.unit)}
-                        </span>
-                      </span>
-                      <span className="sub">
-                        {new Date(c.achievedAt).toLocaleDateString("pt-BR", {
-                          day: "2-digit",
-                          month: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {maisConquistas && (
-                <button className="discreto" style={{ marginTop: 12 }} onClick={verConquistasAntigas}>
-                  Ver conquistas mais antigas
-                </button>
-              )}
-            </div>
           </div>
+          )}
+
+          {/* As conquistas ficam FORA do seletor de modo: recorde de corrida é
+              conquista do mesmo jeito, e escondê-la em "Musculação" faria a
+              lista mentir sobre o que o aluno conquistou. */}
+          <div style={{ marginTop: 16 }}>{painelDeConquistas}</div>
 
           <div className="painel" style={{ marginTop: 16 }}>
             <b>Calendário</b>

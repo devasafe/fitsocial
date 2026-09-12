@@ -3,6 +3,7 @@ import { Activity } from "../models/Activity.js";
 import { agruparPorDia, inicioDaJanela, ultimosDias } from "../utils/dia.js";
 import { MUSCLE_GROUPS, type MuscleGroup } from "./muscleGroups.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
+import { getSport } from "./sports.js";
 
 // A evolução de quem treina, respondida pelo banco e não em JavaScript.
 //
@@ -301,4 +302,270 @@ export async function calendarioDoUsuario(
     const l = mapa.get(dia);
     return { dia, treinos: l?.treinos ?? 0, minutos: Math.round((l?.segundos ?? 0) / 60) };
   });
+}
+
+
+// --------------------------------------------------------------------- cardio
+//
+// A evolução de quem corre, pedala ou nada.
+//
+// Vive aqui e não em `/checkins/cardio-progress` porque aquela rota lê UM dos
+// dois formatos em que este projeto grava cardio — e justamente o que não é
+// usado por quem registra corrida de verdade. Os dois existem, os dois estão
+// vivos, e é preciso ler os dois:
+//
+//   1. `kind: "endurance"` — uma corrida registrada pela tela de atividade,
+//      com `payload.distanceM` e `durationSec` na raiz.
+//   2. `kind: "strength"` com `durationMin`/`distanceKm` dentro de
+//      `payload.exercises[].sets[]` — é como `POST /checkins` grava a "Esteira
+//      20 min" de um plano da IA, e continua gravando hoje.
+//
+// Ler só o primeiro esconderia o cardio de quem segue plano, que é o fluxo
+// principal do app; ler só o segundo (o que a rota antiga faz) esconde toda
+// corrida registrada como atividade. A aba precisa dizer a verdade nos dois
+// casos, e por isso normaliza os dois na LEITURA — sem migrar nada.
+//
+// A chave é o `sportId` no primeiro caso e o slug do exercício no segundo. Elas
+// se encontram quando batem (uma esteira anotada dos dois jeitos vira uma linha
+// só, que é o certo) e convivem quando não batem.
+
+/** O que dá para plotar de um esporte de cardio. */
+export const METRICAS_CARDIO = ["pace", "distancia", "duracao", "velocidade"] as const;
+export type MetricaCardio = (typeof METRICAS_CARDIO)[number];
+
+/**
+ * Nesta métrica, menor é melhor?
+ *
+ * Só o pace: correr mais rápido é um número MENOR, e um gráfico que não sabe
+ * disso desenha a melhora descendo. O app já tem o `menorEhMelhor` no
+ * `LineChart` — o que faltava era o servidor dizer quando usá-lo, em vez de
+ * cada tela decidir por conta.
+ */
+export function menorEhMelhor(metrica: MetricaCardio): boolean {
+  return metrica === "pace";
+}
+
+/** Uma sessão de cardio, já normalizada, venha ela de onde vier. */
+interface SessaoDeCardio {
+  /** A atividade — é por ela que o recorde casa com o ponto. */
+  id: mongoose.Types.ObjectId;
+  chave: string;
+  nome: string;
+  quando: Date;
+  km: number;
+  minutos: number;
+}
+
+/** Só as séries que têm alguma medida de cardio. */
+const SET_DE_CARDIO = {
+  $or: [
+    { "payload.exercises.sets.durationMin": { $gt: 0 } },
+    { "payload.exercises.sets.distanceKm": { $gt: 0 } },
+  ],
+};
+
+/**
+ * As sessões de cardio da pessoa na janela, dos dois formatos, em ordem.
+ *
+ * A união é feita aqui e não num `$unionWith` de propósito: aquele estágio pede
+ * MongoDB 4.4, e este projeto não fixa a versão do servidor em lugar nenhum.
+ * O que volta do banco não é o histórico da pessoa — cada pipeline já reduziu
+ * ao nível de SESSÃO, e o número de linhas é o número de vezes que ela treinou
+ * cardio na janela. É a mesma ordem de grandeza que `serieDoExercicio` já
+ * devolve, e não a varredura que esta camada nasceu para acabar.
+ */
+async function sessoesDeCardio(
+  userId: mongoose.Types.ObjectId,
+  dias: number
+): Promise<SessaoDeCardio[]> {
+  const [atividades, dentroDoTreino] = await Promise.all([
+    Activity.aggregate<SessaoDeCardio>([
+      { $match: naJanela(userId, dias, "endurance") },
+      {
+        $project: {
+          _id: 0,
+          id: "$_id",
+          chave: "$sportId",
+          nome: "$sportId",
+          quando: "$startedAt",
+          // `metrics.distanceKm` é o mesmo número que o card do feed mostra.
+          km: { $ifNull: ["$metrics.distanceKm", 0] },
+          minutos: { $divide: [{ $ifNull: ["$durationSec", 0] }, 60] },
+        },
+      },
+    ]),
+    Activity.aggregate<SessaoDeCardio>([
+      { $match: { ...naJanela(userId, dias, "strength"), ...SET_DE_CARDIO } },
+      { $unwind: "$payload.exercises" },
+      { $unwind: "$payload.exercises.sets" },
+      { $match: SET_DE_CARDIO },
+      // Um exercício de cardio dentro de um treino é uma sessão: somar as
+      // séries dele é o que transforma "3 × 10 min de esteira" em 30 minutos.
+      {
+        $group: {
+          _id: { chave: "$payload.exercises.slug", treino: "$_id" },
+          nome: { $first: "$payload.exercises.name" },
+          quando: { $first: "$startedAt" },
+          minutos: { $sum: { $ifNull: ["$payload.exercises.sets.durationMin", 0] } },
+          km: { $sum: { $ifNull: ["$payload.exercises.sets.distanceKm", 0] } },
+        },
+      },
+      // Sem slug não há identidade: é treino antigo que ainda não passou pelo
+      // backfill, e agrupá-lo por texto cru traria de volta o problema que o
+      // slug existe para resolver.
+      { $match: { "_id.chave": { $type: "string", $ne: "" } } },
+      {
+        $project: {
+          _id: 0,
+          id: "$_id.treino",
+          chave: "$_id.chave",
+          nome: 1,
+          quando: 1,
+          km: 1,
+          minutos: 1,
+        },
+      },
+    ]),
+  ]);
+
+  return [...atividades, ...dentroDoTreino]
+    .filter((s) => s.km > 0 || s.minutos > 0)
+    .sort((a, b) => a.quando.getTime() - b.quando.getTime());
+}
+
+/**
+ * Segundos por quilômetro. Nulo quando não dá para dividir.
+ *
+ * UMA fórmula para os dois formatos, de propósito: é a mesma conta de
+ * `metrics.avgPaceSecPerKm` (`activityMetrics.ts`), e ter duas seria ter dois
+ * números para a mesma corrida.
+ */
+function pace(s: SessaoDeCardio): number | null {
+  if (s.km <= 0 || s.minutos <= 0) return null;
+  return (s.minutos * 60) / s.km;
+}
+
+export interface EsporteNaLista {
+  sportId: string;
+  nome: string;
+  vezes: number;
+  /** Quilômetros somados na janela — o número que resume o período. */
+  distanciaKm: number;
+  /** Segundos por quilômetro. Zero quando não houve distância para dividir. */
+  melhorPace: number;
+  ultimoPace: number;
+  /** Positivo é melhora: pace que CAIU. Nulo com menos de dois paces. */
+  delta: number | null;
+  ultimaVez: Date;
+}
+
+/**
+ * Os esportes de cardio que a pessoa praticou na janela.
+ *
+ * O `delta` é o primeiro pace menos o último — invertido em relação ao da
+ * força de propósito, porque aqui melhorar é diminuir, e um delta negativo
+ * significando melhora seria uma armadilha para quem for desenhar a próxima
+ * tela.
+ */
+export async function cardioDoUsuario(
+  userId: mongoose.Types.ObjectId,
+  dias: number
+): Promise<EsporteNaLista[]> {
+  const sessoes = await sessoesDeCardio(userId, dias);
+
+  const porChave = new Map<string, SessaoDeCardio[]>();
+  for (const s of sessoes) {
+    const atual = porChave.get(s.chave) ?? [];
+    atual.push(s);
+    porChave.set(s.chave, atual);
+  }
+
+  const lista: EsporteNaLista[] = [];
+  for (const [chave, doEsporte] of porChave) {
+    const paces = doEsporte.map(pace).filter((p): p is number => p != null);
+    const ultima = doEsporte[doEsporte.length - 1];
+
+    lista.push({
+      sportId: chave,
+      // O catálogo manda quando a chave é um esporte conhecido; senão vale o
+      // nome que a pessoa escreveu no treino.
+      nome: getSport(chave)?.label ?? ultima.nome,
+      vezes: doEsporte.length,
+      distanciaKm: Math.round(doEsporte.reduce((t, s) => t + s.km, 0) * 100) / 100,
+      melhorPace: paces.length > 0 ? Math.round(Math.min(...paces)) : 0,
+      ultimoPace: paces.length > 0 ? Math.round(paces[paces.length - 1]) : 0,
+      delta: paces.length > 1 ? Math.round(paces[0] - paces[paces.length - 1]) : null,
+      ultimaVez: ultima.quando,
+    });
+  }
+
+  return lista.sort((a, b) => b.ultimaVez.getTime() - a.ultimaVez.getTime());
+}
+
+/**
+ * O recorde que corresponde a cada métrica de cardio.
+ *
+ * Só a distância tem um: `best_dist` é gravado por sessão e casa ponto a ponto
+ * com a curva. `best_time` existe, mas é por trecho-alvo (5 km, 10 km), e não
+ * pela sessão — marcar o ponto de pace com ele diria "recorde" num dia em que
+ * o app não celebrou recorde nenhum. Mesma regra do `PR_DA_METRICA` da força.
+ */
+const PR_DA_METRICA_CARDIO: Partial<Record<MetricaCardio, string>> = {
+  distancia: "best_dist",
+};
+
+function valorDaSessao(s: SessaoDeCardio, metrica: MetricaCardio): number | null {
+  switch (metrica) {
+    case "pace":
+      return pace(s);
+    case "distancia":
+      return s.km > 0 ? s.km : null;
+    case "duracao":
+      return s.minutos > 0 ? s.minutos : null;
+    case "velocidade":
+      return s.km > 0 && s.minutos > 0 ? s.km / (s.minutos / 60) : null;
+  }
+}
+
+/**
+ * A curva de um esporte de cardio, um ponto por sessão.
+ *
+ * Um ponto por SESSÃO, e não por dia: quem corre de manhã e à noite fez duas
+ * corridas, e a média das duas esconderia justamente a diferença entre elas.
+ */
+export async function serieDeCardio(
+  userId: mongoose.Types.ObjectId,
+  sportId: string,
+  dias: number,
+  metrica: MetricaCardio
+): Promise<PontoDoExercicio[]> {
+  const sessoes = (await sessoesDeCardio(userId, dias)).filter((s) => s.chave === sportId);
+
+  // Nulo aqui não é "o valor foi zero", é "não dá para calcular": sessão sem
+  // distância não tem pace nem velocidade. Vira ponto ausente, e não um buraco
+  // cavado até o eixo.
+  const pontos = sessoes
+    .map((s) => ({ s, valor: valorDaSessao(s, metrica) }))
+    .filter((p): p is { s: SessaoDeCardio; valor: number } => p.valor != null && p.valor > 0);
+
+  const tipo = PR_DA_METRICA_CARDIO[metrica];
+  const comPR = new Set<string>();
+  if (tipo && pontos.length > 0) {
+    // Pelo nome, e não pelo slug: os recordes de endurance são gravados com
+    // `exerciseName: sportId` e sem slug (`prEngine.ts`). O cardio anotado
+    // dentro de um treino de força não gera recorde deste tipo, então não há
+    // risco de marcar um ponto que o app nunca celebrou.
+    const filtro: Record<string, unknown> = { user: userId, exerciseName: sportId, type: tipo };
+    if (dias > 0) filtro.achievedAt = { $gte: inicioDaJanela(dias) };
+
+    const eventos = await PersonalRecordEvent.find(filtro).select("activity");
+    for (const e of eventos) comPR.add(String(e.activity));
+  }
+
+  return pontos.map(({ s, valor }) => ({
+    data: s.quando,
+    // Pace em segundos por km fica inteiro; o resto guarda uma casa.
+    valor: metrica === "pace" ? Math.round(valor) : Math.round(valor * 10) / 10,
+    ehPR: comPR.has(String(s.id)),
+  }));
 }

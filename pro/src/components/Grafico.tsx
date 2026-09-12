@@ -75,10 +75,14 @@ export function Grafico({
   dados,
   altura = 200,
   formatar = (v: number) => String(v),
+  menorEhMelhor = false,
 }: {
   dados: PontoDoGrafico[];
   altura?: number;
   formatar?: (v: number) => string;
+  /** Vira o eixo Y. Num pace, correr melhor é um número menor — sem inverter,
+   *  a melhora desenha uma linha descendo e o coach lê o contrário do que é. */
+  menorEhMelhor?: boolean;
 }) {
   if (dados.length === 0) return <p className="vazio">Sem dados nesta janela.</p>;
 
@@ -87,7 +91,14 @@ export function Grafico({
       <AreaChart data={dados} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
         <CartesianGrid {...GRADE} vertical={false} />
         <XAxis dataKey="x" {...EIXO} tickLine={false} minTickGap={18} tickFormatter={diaEMes} />
-        <YAxis {...EIXO} tickLine={false} axisLine={false} width={44} tickFormatter={(v) => formatar(Number(v))} />
+        <YAxis
+          {...EIXO}
+          tickLine={false}
+          axisLine={false}
+          width={52}
+          reversed={menorEhMelhor}
+          tickFormatter={(v) => formatar(Number(v))}
+        />
         <Tooltip
           {...TOOLTIP}
           labelFormatter={diaEMes}

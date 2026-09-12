@@ -71,11 +71,8 @@ export function getProgress(token: string) {
   return apiFetch<{ exercises: ExerciseProgress[] }>("/checkins/progress", { token });
 }
 
-export interface CardioProgress {
-  name: string;
-  points: { date: string; durationMin: number; distanceKm: number }[];
-}
-
-export function getCardioProgress(token: string) {
-  return apiFetch<{ exercises: CardioProgress[] }>("/checkins/cardio-progress", { token });
-}
+// `GET /checkins/cardio-progress` continua de pé no servidor — o APK instalado
+// é contrato —, mas saiu daqui: ela lê `payload.exercises[].sets[].durationMin`,
+// o formato antigo de anotar esteira dentro do treino de musculação, que o
+// aplicativo parou de gravar. Uma corrida de hoje nunca aparecia nela. Quem
+// quer a evolução de cardio usa `listarCardio` em `api/evolucao.ts`.

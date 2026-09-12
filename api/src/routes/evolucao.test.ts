@@ -67,6 +67,25 @@ describe("Evolução", () => {
 
   const supino = (peso: number, reps = 5) => ({ name: "Supino reto", sets: [{ weightKg: peso, reps }] });
 
+  /** Registra uma corrida pela API, como o app faz. */
+  async function corrida(
+    { km, minutos, sportId = "corrida" }: { km: number; minutos: number; sportId?: string },
+    diasAtras = 0
+  ) {
+    const r = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        sportId,
+        kind: "endurance",
+        startedAt: new Date(Date.now() - diasAtras * DIA).toISOString(),
+        durationSec: minutos * 60,
+        payload: { distanceM: km * 1000 },
+      });
+    expect(r.status).toBe(201);
+    return r.body;
+  }
+
   describe("GET /evolucao/exercicios", () => {
     it("lista o que foi treinado na janela, com o quanto mudou", async () => {
       await treino([supino(80)], 10);
@@ -338,6 +357,215 @@ describe("Evolução", () => {
         .set("Authorization", `Bearer ${token}`);
 
       expect(r.status).toBe(400);
+    });
+  });
+
+  describe("GET /evolucao/cardio", () => {
+    it("lista o esporte, a distância somada e o quanto o pace melhorou", async () => {
+      // 10 km em 60 min = 360 s/km; 10 km em 50 min = 300 s/km. Melhorou 60.
+      await corrida({ km: 10, minutos: 60 }, 20);
+      await corrida({ km: 10, minutos: 50 }, 2);
+
+      const r = await request(app).get("/evolucao/cardio?dias=90").set("Authorization", `Bearer ${token}`);
+
+      expect(r.status).toBe(200);
+      expect(r.body.data).toHaveLength(1);
+      const [c] = r.body.data;
+      expect(c.sportId).toBe("corrida");
+      expect(c.nome).toBe("Corrida de rua");
+      expect(c.vezes).toBe(2);
+      expect(c.distanciaKm).toBe(20);
+      expect(c.melhorPace).toBe(300);
+      expect(c.ultimoPace).toBe(300);
+      // Positivo é melhora: o pace CAIU 60 segundos por quilômetro.
+      expect(c.delta).toBe(60);
+    });
+
+    it("vê a corrida que a aba antiga nunca viu", async () => {
+      await corrida({ km: 5, minutos: 30 });
+
+      // Regressão do motivo desta rota existir: `/checkins/cardio-progress` lê
+      // `payload.exercises[].sets[].durationMin`, um formato que o aplicativo
+      // parou de gravar — uma corrida registrada hoje não aparece lá.
+      const antiga = await request(app)
+        .get("/checkins/cardio-progress")
+        .set("Authorization", `Bearer ${token}`);
+      expect(antiga.body.exercises).toHaveLength(0);
+
+      const nova = await request(app).get("/evolucao/cardio").set("Authorization", `Bearer ${token}`);
+      expect(nova.body.data).toHaveLength(1);
+    });
+
+    it("separa esporte de esporte e respeita a janela", async () => {
+      await corrida({ km: 10, minutos: 60 }, 2);
+      await corrida({ km: 30, minutos: 60, sportId: "ciclismo" }, 2);
+      await corrida({ km: 8, minutos: 50 }, 200);
+
+      const r = await request(app).get("/evolucao/cardio?dias=30").set("Authorization", `Bearer ${token}`);
+
+      expect(r.body.data).toHaveLength(2);
+      expect(r.body.data.map((e: { sportId: string }) => e.sportId).sort()).toEqual(["ciclismo", "corrida"]);
+      // A corrida de 200 dias atrás ficou de fora: uma sessão só na janela.
+      expect(r.body.data.find((e: { sportId: string }) => e.sportId === "corrida").vezes).toBe(1);
+    });
+  });
+
+  describe("cardio anotado dentro do treino (POST /checkins)", () => {
+    /** Faz o check-in de um plano com uma entrada de cardio, como a Home faz. */
+    async function checkinComCardio(
+      { nome, minutos, km }: { nome: string; minutos: number; km: number },
+      diasAtras = 0
+    ) {
+      const r = await request(app)
+        .post("/checkins")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          sessionDay: "A — Peito",
+          entries: [{ exerciseName: nome, durationMin: minutos, distanceKm: km }],
+        });
+      expect(r.status).toBe(201);
+
+      // A rota grava sempre com a data de agora; para exercitar a janela é
+      // preciso mover no banco, como o resto desta suíte faz.
+      if (diasAtras > 0) {
+        await Activity.updateOne(
+          { _id: r.body.log.id },
+          { $set: { startedAt: new Date(Date.now() - diasAtras * DIA) } }
+        );
+      }
+      return r.body;
+    }
+
+    it("a esteira do plano aparece na aba de cardio", async () => {
+      // Este é o fluxo PRINCIPAL do app: quem segue plano registra a esteira
+      // pelo check-in, que grava `kind: "strength"` com durationMin/distanceKm
+      // dentro do set. Ler só `endurance` escondia o cardio dessas pessoas.
+      await checkinComCardio({ nome: "Esteira", minutos: 30, km: 5 });
+
+      const r = await request(app).get("/evolucao/cardio").set("Authorization", `Bearer ${token}`);
+
+      expect(r.status).toBe(200);
+      expect(r.body.data).toHaveLength(1);
+      expect(r.body.data[0].sportId).toBe("esteira");
+      expect(r.body.data[0].distanciaKm).toBe(5);
+      // 30 min / 5 km = 6:00/km.
+      expect(r.body.data[0].melhorPace).toBe(360);
+    });
+
+    it("a musculação do mesmo check-in não vira cardio", async () => {
+      await request(app)
+        .post("/checkins")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          sessionDay: "A — Peito",
+          entries: [
+            { exerciseName: "Supino reto", weightKg: 80, reps: 8 },
+            { exerciseName: "Esteira", durationMin: 20, distanceKm: 3 },
+          ],
+        });
+
+      const r = await request(app).get("/evolucao/cardio").set("Authorization", `Bearer ${token}`);
+
+      // Só a esteira: o supino tem carga, não distância.
+      expect(r.body.data.map((e: { sportId: string }) => e.sportId)).toEqual(["esteira"]);
+    });
+
+    it("esteira anotada dos dois jeitos vira uma linha só", async () => {
+      // A chave do cardio dentro do treino é o slug do exercício, e a da
+      // atividade é o sportId. Quando batem, é a mesma coisa — e somar é o
+      // certo, senão a pessoa veria "Esteira" duas vezes na lista.
+      await checkinComCardio({ nome: "Esteira", minutos: 30, km: 5 }, 3);
+      await corrida({ km: 4, minutos: 20, sportId: "esteira" }, 1);
+
+      const r = await request(app).get("/evolucao/cardio").set("Authorization", `Bearer ${token}`);
+
+      expect(r.body.data).toHaveLength(1);
+      expect(r.body.data[0].sportId).toBe("esteira");
+      expect(r.body.data[0].vezes).toBe(2);
+      expect(r.body.data[0].distanciaKm).toBe(9);
+      // 20 min / 4 km = 5:00/km, melhor que os 6:00 da esteira do plano.
+      expect(r.body.data[0].melhorPace).toBe(300);
+      expect(r.body.data[0].delta).toBe(60);
+    });
+
+    it("a curva junta as sessões dos dois formatos, em ordem", async () => {
+      await checkinComCardio({ nome: "Esteira", minutos: 30, km: 5 }, 5);
+      await corrida({ km: 4, minutos: 20, sportId: "esteira" }, 1);
+
+      const r = await request(app)
+        .get("/evolucao/cardio/esteira?metrica=pace")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(r.body.data.map((p: { valor: number }) => p.valor)).toEqual([360, 300]);
+    });
+
+    it("exercício de força sem cardio nenhum não entra", async () => {
+      await treino([supino(80)], 2);
+
+      const r = await request(app).get("/evolucao/cardio").set("Authorization", `Bearer ${token}`);
+      expect(r.body.data).toHaveLength(0);
+    });
+  });
+
+  describe("GET /evolucao/cardio/:sportId", () => {
+    it("dá um ponto por sessão, na métrica pedida", async () => {
+      await corrida({ km: 10, minutos: 60 }, 10);
+      await corrida({ km: 12, minutos: 60 }, 3);
+
+      const pace = await request(app)
+        .get("/evolucao/cardio/corrida?metrica=pace")
+        .set("Authorization", `Bearer ${token}`);
+      expect(pace.status).toBe(200);
+      expect(pace.body.data.map((p: { valor: number }) => p.valor)).toEqual([360, 300]);
+      // Quem desenha recebe a instrução pronta: neste eixo, menor é melhor.
+      expect(pace.body.meta.menorEhMelhor).toBe(true);
+
+      const distancia = await request(app)
+        .get("/evolucao/cardio/corrida?metrica=distancia")
+        .set("Authorization", `Bearer ${token}`);
+      expect(distancia.body.data.map((p: { valor: number }) => p.valor)).toEqual([10, 12]);
+      expect(distancia.body.meta.menorEhMelhor).toBe(false);
+
+      const duracao = await request(app)
+        .get("/evolucao/cardio/corrida?metrica=duracao")
+        .set("Authorization", `Bearer ${token}`);
+      expect(duracao.body.data.map((p: { valor: number }) => p.valor)).toEqual([60, 60]);
+    });
+
+    it("marca o recorde de distância, e só ele", async () => {
+      await corrida({ km: 5, minutos: 30 }, 10);
+      await corrida({ km: 9, minutos: 54 }, 2);
+
+      const distancia = await request(app)
+        .get("/evolucao/cardio/corrida?metrica=distancia")
+        .set("Authorization", `Bearer ${token}`);
+      // A segunda corrida superou a primeira: é recorde de distância.
+      expect(distancia.body.data.map((p: { ehPR: boolean }) => p.ehPR)).toEqual([false, true]);
+
+      // No pace, nenhum ponto é marcado: `best_time` é por trecho-alvo, não
+      // pela sessão, e marcar aqui inventaria uma conquista que não houve.
+      const pace = await request(app)
+        .get("/evolucao/cardio/corrida?metrica=pace")
+        .set("Authorization", `Bearer ${token}`);
+      expect(pace.body.data.every((p: { ehPR: boolean }) => p.ehPR === false)).toBe(true);
+    });
+
+    it("a sessão sem distância não vira ponto de pace", async () => {
+      await corrida({ km: 0, minutos: 40, sportId: "esteira" }, 5);
+      await corrida({ km: 6, minutos: 36, sportId: "esteira" }, 1);
+
+      const pace = await request(app)
+        .get("/evolucao/cardio/esteira?metrica=pace")
+        .set("Authorization", `Bearer ${token}`);
+      // Sem quilômetro não há pace: um ponto, não dois com um zero no meio.
+      expect(pace.body.data).toHaveLength(1);
+      expect(pace.body.data[0].valor).toBe(360);
+
+      const duracao = await request(app)
+        .get("/evolucao/cardio/esteira?metrica=duracao")
+        .set("Authorization", `Bearer ${token}`);
+      // A duração existe nas duas: só o pace é que não dá para calcular.
+      expect(duracao.body.data).toHaveLength(2);
     });
   });
 });

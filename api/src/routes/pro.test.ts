@@ -998,6 +998,41 @@ describe("o coach vê o mesmo que o aluno", () => {
     expect(volume.body.data[0].valor).toBe(400);
   });
 
+  it("o cardio do coach é o mesmo do aluno", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    for (const [km, min] of [[10, 60], [10, 50]]) {
+      await request(app)
+        .post("/activities")
+        .set(auth(aluno.token))
+        .send({
+          sportId: "corrida",
+          kind: "endurance",
+          durationSec: min * 60,
+          payload: { distanceM: km * 1000 },
+        });
+    }
+
+    const doCoach = await request(app).get(`/pro/alunos/${aluno.id}/cardio`).set(auth(coach.token));
+    const doAluno = await request(app).get("/evolucao/cardio").set(auth(aluno.token));
+
+    expect(doCoach.status).toBe(200);
+    expect(doCoach.body.data).toEqual(doAluno.body.data);
+    expect(doCoach.body.data[0].nome).toBe("Corrida de rua");
+
+    const curvaDoCoach = await request(app)
+      .get(`/pro/alunos/${aluno.id}/cardio/corrida?metrica=pace`)
+      .set(auth(coach.token));
+    const curvaDoAluno = await request(app)
+      .get("/evolucao/cardio/corrida?metrica=pace")
+      .set(auth(aluno.token));
+
+    expect(curvaDoCoach.body.data).toEqual(curvaDoAluno.body.data);
+    expect(curvaDoCoach.body.meta.menorEhMelhor).toBe(true);
+  });
+
   it("aluno que fechou os treinos fecha tudo junto, não só o perfil", async () => {
     const { coach, aluno, linkId } = await comTreinos();
     await request(app)
@@ -1010,6 +1045,8 @@ describe("o coach vê o mesmo que o aluno", () => {
       `/pro/alunos/${aluno.id}/grupos`,
       `/pro/alunos/${aluno.id}/conquistas`,
       `/pro/alunos/${aluno.id}/exercicios/supino_reto`,
+      `/pro/alunos/${aluno.id}/cardio`,
+      `/pro/alunos/${aluno.id}/cardio/corrida`,
     ]) {
       expect((await request(app).get(rota).set(auth(coach.token))).status).toBe(403);
     }
@@ -1022,6 +1059,8 @@ describe("o coach vê o mesmo que o aluno", () => {
     for (const rota of [
       `/pro/alunos/${aluno.id}/grupos`,
       `/pro/alunos/${aluno.id}/conquistas`,
+      `/pro/alunos/${aluno.id}/cardio`,
+      `/pro/alunos/${aluno.id}/cardio/corrida`,
     ]) {
       expect((await request(app).get(rota).set(auth(outro.token))).status).toBe(404);
     }

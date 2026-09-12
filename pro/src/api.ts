@@ -243,6 +243,72 @@ export const buscarSerie = (
     { token }
   );
 
+/* ---------- cardio ---------- */
+
+export const METRICAS_CARDIO = ["pace", "distancia", "duracao", "velocidade"] as const;
+export type MetricaCardio = (typeof METRICAS_CARDIO)[number];
+
+export function rotuloDaMetricaCardio(m: MetricaCardio): string {
+  switch (m) {
+    case "pace":
+      return "Pace";
+    case "distancia":
+      return "Distância";
+    case "duracao":
+      return "Duração";
+    case "velocidade":
+      return "Velocidade";
+  }
+}
+
+/** Pace vem em segundos por quilômetro e se lê em minutos: 300 é "5:00". */
+export function formatarCardio(v: number, m: MetricaCardio): string {
+  switch (m) {
+    case "pace": {
+      const min = Math.floor(v / 60);
+      const seg = Math.round(v % 60);
+      // 59,6 s arredonda para 60: vira o minuto seguinte, não "5:60".
+      return seg === 60 ? `${min + 1}:00` : `${min}:${String(seg).padStart(2, "0")}`;
+    }
+    case "distancia":
+      return `${v.toFixed(1).replace(".", ",")} km`;
+    case "duracao":
+      return `${Math.round(v)} min`;
+    case "velocidade":
+      return `${v.toFixed(1).replace(".", ",")} km/h`;
+  }
+}
+
+export interface EsporteNaLista {
+  sportId: string;
+  nome: string;
+  vezes: number;
+  distanciaKm: number;
+  /** Segundos por quilômetro. Zero quando nenhuma sessão teve distância. */
+  melhorPace: number;
+  ultimoPace: number;
+  /** Positivo é melhora: o pace CAIU. Nulo quando só houve uma sessão. */
+  delta: number | null;
+  ultimaVez: string;
+}
+
+export const buscarCardio = (token: string, alunoId: string, dias: Janela) =>
+  api<EsporteNaLista[]>(`/pro/alunos/${alunoId}/cardio?dias=${dias}`, { token });
+
+export async function buscarSerieDeCardio(
+  token: string,
+  alunoId: string,
+  sportId: string,
+  dias: Janela,
+  metrica: MetricaCardio
+): Promise<{ pontos: PontoDaSerie[]; menorEhMelhor: boolean }> {
+  const r = await api<PontoDaSerie[]>(
+    `/pro/alunos/${alunoId}/cardio/${encodeURIComponent(sportId)}?dias=${dias}&metrica=${metrica}`,
+    { token }
+  );
+  return { pontos: r.data, menorEhMelhor: (r.meta?.menorEhMelhor as boolean) ?? false };
+}
+
 export interface GrupoTreinado {
   grupo: string;
   series: number;

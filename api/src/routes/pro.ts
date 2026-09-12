@@ -22,9 +22,13 @@ import {
 } from "../services/vinculos.js";
 import {
   METRICAS,
+  METRICAS_CARDIO,
   calendarioDoUsuario,
+  cardioDoUsuario,
   exerciciosDoUsuario,
   gruposDoUsuario,
+  menorEhMelhor,
+  serieDeCardio,
   serieDoExercicio,
 } from "../services/evolucao.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
@@ -362,6 +366,48 @@ proRouter.get(
     const slug = z.string().min(1).max(80).parse(req.params.slug);
     const pontos = await serieDoExercicio(clientId, slug, dias, metrica);
     res.json({ data: pontos, meta: { dias, metrica, slug } });
+  })
+);
+
+/**
+ * O cardio do aluno: os esportes que ele pratica e quanto correu.
+ *
+ * Mesma função que responde ao próprio dono em `/evolucao/cardio`. Entra no
+ * mesmo escopo de `treinos`, e não num escopo próprio: para quem abriu os
+ * treinos, a corrida é treino — e inventar um quinto escopo agora pediria que
+ * toda a base voltasse na tela de consentimento para reautorizar o que já
+ * autorizou.
+ */
+proRouter.get(
+  "/alunos/:id/cardio",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+
+    const dias = janelaDoAluno.parse(req.query.dias);
+    const esportes = await cardioDoUsuario(clientId, dias);
+    res.json({ data: esportes, meta: { dias, total: esportes.length } });
+  })
+);
+
+/** A curva de um esporte de cardio do aluno. */
+proRouter.get(
+  "/alunos/:id/cardio/:sportId",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+
+    const dias = janelaDoAluno.parse(req.query.dias);
+    const metrica = z.enum(METRICAS_CARDIO).default("pace").parse(req.query.metrica);
+    const sportId = z.string().min(1).max(80).parse(req.params.sportId);
+
+    const pontos = await serieDeCardio(clientId, sportId, dias, metrica);
+    res.json({
+      data: pontos,
+      meta: { dias, metrica, sportId, menorEhMelhor: menorEhMelhor(metrica) },
+    });
   })
 );
 
