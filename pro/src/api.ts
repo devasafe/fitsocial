@@ -181,6 +181,175 @@ export interface PerfilDoAluno {
 export const buscarAluno = (token: string, id: string, dias = 90) =>
   api<PerfilDoAluno>(`/pro/alunos/${id}?dias=${dias}`, { token });
 
+/** As janelas que o painel oferece — as mesmas da aba do aluno. */
+export const JANELAS = [30, 90, 365, 0] as const;
+export type Janela = (typeof JANELAS)[number];
+
+export function rotuloDaJanela(dias: Janela): string {
+  if (dias === 0) return "Tudo";
+  if (dias === 365) return "1 ano";
+  return `${dias} dias`;
+}
+
+/** As métricas plotáveis — também as mesmas da aba do aluno. */
+export const METRICAS = ["carga_max", "rm_estimado", "volume", "series", "reps"] as const;
+export type Metrica = (typeof METRICAS)[number];
+
+export function rotuloDaMetrica(m: Metrica): string {
+  switch (m) {
+    case "carga_max":
+      return "Carga";
+    case "rm_estimado":
+      return "1RM est.";
+    case "volume":
+      return "Volume";
+    case "series":
+      return "Séries";
+    case "reps":
+      return "Repetições";
+  }
+}
+
+/** Unidade do eixo, para o rótulo do gráfico não mentir a métrica. */
+export function unidadeDaMetrica(m: Metrica): string {
+  switch (m) {
+    case "carga_max":
+    case "rm_estimado":
+    case "volume":
+      return "kg";
+    case "series":
+      return "séries";
+    case "reps":
+      return "reps";
+  }
+}
+
+export interface PontoDaSerie {
+  data: string;
+  valor: number;
+  /** Neste treino o aluno bateu o próprio recorde. */
+  ehPR: boolean;
+}
+
+export const buscarSerie = (
+  token: string,
+  alunoId: string,
+  slug: string,
+  dias: Janela,
+  metrica: Metrica
+) =>
+  api<PontoDaSerie[]>(
+    `/pro/alunos/${alunoId}/exercicios/${encodeURIComponent(slug)}?dias=${dias}&metrica=${metrica}`,
+    { token }
+  );
+
+export interface GrupoTreinado {
+  grupo: string;
+  series: number;
+}
+
+export const buscarGrupos = (token: string, alunoId: string, dias: Janela) =>
+  api<GrupoTreinado[]>(`/pro/alunos/${alunoId}/grupos?dias=${dias}`, { token });
+
+export interface Conquista {
+  id: string;
+  exerciseName: string;
+  exerciseSlug: string;
+  type: string;
+  repRange: string | null;
+  value: number;
+  previousValue: number;
+  unit: string;
+  achievedAt: string;
+}
+
+/**
+ * O histórico de conquistas, paginado por cursor — a mesma lista que o aluno
+ * rola no app dele. Sem o cursor, o coach parava nas mais recentes e não tinha
+ * como pedir o começo da história, que é justamente onde há mais o que ler.
+ */
+export async function buscarConquistas(
+  token: string,
+  alunoId: string,
+  cursor?: string | null
+): Promise<{ itens: Conquista[]; proximo: string | null }> {
+  const r = await api<Conquista[]>(
+    `/pro/alunos/${alunoId}/conquistas?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    { token }
+  );
+  return { itens: r.data, proximo: (r.meta?.nextCursor as string | null) ?? null };
+}
+
+/**
+ * Os mesmos rótulos de `app-android/src/api/prs.ts`.
+ *
+ * Duplicar aqui é deliberado: o painel não compartilha build com o app, e a
+ * alternativa seria um pacote comum para dois textos. O que não pode divergir
+ * é o TEXTO — coach e aluno olham a mesma conquista, e chamar o mesmo recorde
+ * de duas coisas diferentes é como uma conversa começa errada.
+ */
+export function rotuloDoRecorde(type: string, repRange: string | null): string {
+  switch (type) {
+    case "carga_max":
+      return "Carga máxima";
+    case "rm_estimado":
+      return "1RM estimado";
+    case "carga_faixa":
+      return `Carga · ${repRange} reps`;
+    case "best_dist":
+      return "Maior distância";
+    case "best_time":
+      return `Melhor tempo · ${repRange}`;
+    case "aulas":
+      return "Aulas";
+    case "horas":
+      return "Horas de treino";
+    case "wod_time":
+      return `Tempo · ${repRange}`;
+    case "wod_score":
+      return `Score · ${repRange}`;
+    case "wod_load":
+      return `Carga · ${repRange}`;
+    default:
+      return type;
+  }
+}
+
+/**
+ * "jiu_jitsu" vira "Jiu jitsu".
+ *
+ * O `exerciseName` de um recorde nem sempre é nome de exercício: nos recordes
+ * de aulas e de horas ele é o id do esporte, cru. Mesma função do
+ * `sportLabel` do app, pelo mesmo motivo de sempre — os dois lados olham a
+ * mesma conquista.
+ */
+export function nomeDoExercicio(nome: string): string {
+  const s = nome.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function mmss(segundos: number): string {
+  const m = Math.floor(segundos / 60);
+  const s = Math.round(segundos % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function valorDoRecorde(type: string, value: number, unit: string): string {
+  switch (type) {
+    case "best_dist":
+      return `${Math.round((value / 1000) * 100) / 100} km`;
+    case "best_time":
+    case "wod_time":
+      return mmss(value);
+    case "aulas":
+      return `${value} aulas`;
+    case "horas":
+      return `${value} h`;
+    default:
+      return `${Math.round(value * 10) / 10} ${unit}`;
+  }
+}
+
 export const encerrarAluno = (token: string, linkId: string) =>
   api<{ id: string; status: string }>(`/pro/alunos/${linkId}`, { method: "DELETE", token });
 

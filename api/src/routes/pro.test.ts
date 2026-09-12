@@ -851,3 +851,179 @@ describe("avisos do acompanhamento", () => {
     expect((await avisos(estranho.token)).body.data.conversas).toHaveLength(0);
   });
 });
+
+describe("o coach vê o mesmo que o aluno", () => {
+  /** Prepara um aluno com treino, para os dois lados terem o que comparar. */
+  async function comTreinos() {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    for (const peso of [80, 90]) {
+      await request(app)
+        .post("/activities")
+        .set(auth(aluno.token))
+        .send({
+          sportId: "musculacao",
+          kind: "strength",
+          payload: {
+            variant: "musculacao",
+            exercises: [{ name: "Supino reto", sets: [{ type: "valida", weightKg: peso, reps: 5 }] }],
+          },
+        });
+    }
+    return { coach, aluno, linkId };
+  }
+
+  it("o radar do coach é o mesmo do aluno", async () => {
+    const { coach, aluno } = await comTreinos();
+
+    const doCoach = await request(app)
+      .get(`/pro/alunos/${aluno.id}/grupos`)
+      .set(auth(coach.token));
+    const doAluno = await request(app).get("/evolucao/grupos").set(auth(aluno.token));
+
+    expect(doCoach.status).toBe(200);
+    expect(doCoach.body.data).toEqual(doAluno.body.data);
+    expect(doCoach.body.data.find((g: { grupo: string }) => g.grupo === "Peito").series).toBe(2);
+  });
+
+  it("as conquistas do coach são as mesmas do aluno", async () => {
+    const { coach, aluno } = await comTreinos();
+
+    const doCoach = await request(app)
+      .get(`/pro/alunos/${aluno.id}/conquistas`)
+      .set(auth(coach.token));
+    const doAluno = await request(app).get("/prs/historico?limit=30").set(auth(aluno.token));
+
+    expect(doCoach.status).toBe(200);
+    expect(doCoach.body.data.length).toBe(doAluno.body.data.length);
+    expect(doCoach.body.data[0].exerciseName).toBe("Supino reto");
+    expect(doCoach.body.data[0].previousValue).toBe(80);
+  });
+
+  it("o calendário é de um ano em qualquer janela, como o do aluno", async () => {
+    const { coach, aluno } = await comTreinos();
+
+    // O aluno pede sempre 365 (`MinhasAtividadesScreen`). Seguir a janela dava
+    // ao coach 30 casinhas contra o ano inteiro que o aluno vê — e, com a
+    // janela em "tudo", `Math.min(0, 365)` pedia ZERO dias.
+    for (const dias of [30, 90, 0]) {
+      const r = await request(app).get(`/pro/alunos/${aluno.id}?dias=${dias}`).set(auth(coach.token));
+      expect(r.status).toBe(200);
+      expect(r.body.data.calendario.length).toBe(365);
+      expect(r.body.meta.dias).toBe(dias);
+    }
+  });
+
+  it("as conquistas paginam por cursor, como as do aluno", async () => {
+    const { coach, aluno } = await comTreinos();
+
+    const primeira = await request(app)
+      .get(`/pro/alunos/${aluno.id}/conquistas?limit=1`)
+      .set(auth(coach.token));
+
+    expect(primeira.status).toBe(200);
+    expect(primeira.body.data.length).toBe(1);
+    expect(primeira.body.meta.nextCursor).toBeTruthy();
+
+    const segunda = await request(app)
+      .get(`/pro/alunos/${aluno.id}/conquistas?limit=1&cursor=${encodeURIComponent(primeira.body.meta.nextCursor)}`)
+      .set(auth(coach.token));
+
+    expect(segunda.status).toBe(200);
+    // Página seguinte é conteúdo NOVO, e não a mesma linha de novo — é o erro
+    // que um cursor mal montado comete sem falhar.
+    expect(segunda.body.data[0]?.id).not.toBe(primeira.body.data[0].id);
+  });
+
+  it("quem é coach E nutri do mesmo aluno não perde o acesso de coach", async () => {
+    // Dois vínculos ativos entre as mesmas duas pessoas são estado legítimo: o
+    // índice único é {professional, client, papel}. Com um `findOne` sem papel,
+    // o vínculo escolhido era o que o banco devolvesse primeiro — e, se viesse
+    // o de nutri (que não abre treinos), o próprio treinador levava 403.
+    const p = await registrar();
+    const u = (await User.findById(p.id))!;
+    u.set("pro.coach", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const aluno = await registrar();
+
+    // O de nutri PRIMEIRO, de propósito: é a ordem que reproduzia a falha.
+    const daNutri = await convite(p.token, "nutri");
+    await request(app)
+      .post(`/pro/convites/${daNutri}/aceitar`)
+      .set(auth(aluno.token))
+      .send({ treinos: false, dieta: true });
+
+    const doCoach = await convite(p.token, "coach");
+    await request(app).post(`/pro/convites/${doCoach}/aceitar`).set(auth(aluno.token)).send({});
+
+    const perfil = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(p.token));
+    expect(perfil.status).toBe(200);
+
+    const grupos = await request(app).get(`/pro/alunos/${aluno.id}/grupos`).set(auth(p.token));
+    expect(grupos.status).toBe(200);
+
+    const prescricao = await request(app)
+      .put(`/pro/alunos/${aluno.id}/treino`)
+      .set(auth(p.token))
+      .send({
+        summary: "Semana de adaptação.",
+        workout: {
+          split: "AB",
+          daysPerWeek: 3,
+          sessions: [
+            {
+              day: "A — Peito",
+              focus: "Superior",
+              exercises: [{ name: "Supino reto", sets: 4, reps: "8-12", restSeconds: 90, notes: "" }],
+            },
+          ],
+        },
+      });
+    expect(prescricao.status).toBe(201);
+  });
+
+  it("a métrica e a janela valem também para o coach", async () => {
+    const { coach, aluno } = await comTreinos();
+
+    const volume = await request(app)
+      .get(`/pro/alunos/${aluno.id}/exercicios/supino_reto?metrica=volume`)
+      .set(auth(coach.token));
+
+    expect(volume.status).toBe(200);
+    expect(volume.body.meta.metrica).toBe("volume");
+    expect(volume.body.data[0].valor).toBe(400);
+  });
+
+  it("aluno que fechou os treinos fecha tudo junto, não só o perfil", async () => {
+    const { coach, aluno, linkId } = await comTreinos();
+    await request(app)
+      .patch(`/pro/acompanhamentos/${linkId}`)
+      .set(auth(aluno.token))
+      .send({ treinos: false });
+
+    for (const rota of [
+      `/pro/alunos/${aluno.id}`,
+      `/pro/alunos/${aluno.id}/grupos`,
+      `/pro/alunos/${aluno.id}/conquistas`,
+      `/pro/alunos/${aluno.id}/exercicios/supino_reto`,
+    ]) {
+      expect((await request(app).get(rota).set(auth(coach.token))).status).toBe(403);
+    }
+  });
+
+  it("estranho não alcança nenhuma delas", async () => {
+    const { aluno } = await comTreinos();
+    const outro = await registrarProfissional();
+
+    for (const rota of [
+      `/pro/alunos/${aluno.id}/grupos`,
+      `/pro/alunos/${aluno.id}/conquistas`,
+    ]) {
+      expect((await request(app).get(rota).set(auth(outro.token))).status).toBe(404);
+    }
+  });
+});

@@ -291,13 +291,42 @@ export async function encerrarVinculo(quem: UserDoc, linkId: string): Promise<Pr
  * É a função que a camada de visibilidade consulta. Devolve o documento (e não
  * um booleano) porque quem pergunta precisa do ESCOPO: ter vínculo não é ter
  * acesso a tudo.
+ *
+ * ATENÇÃO: entre duas pessoas pode haver DOIS vínculos ativos — o índice único
+ * é `{professional, client, papel}`, e a mesma pessoa acompanhando alguém como
+ * treinador e como nutricionista é estado legítimo. Sem `papel`, esta função
+ * devolve um dos dois sem critério. Quando a pergunta é sobre acesso, use
+ * `vinculosAtivos` ou `podeVer`, que olham o escopo.
  */
 export async function vinculoAtivo(
   clientId: mongoose.Types.ObjectId,
-  professionalId: mongoose.Types.ObjectId
+  professionalId: mongoose.Types.ObjectId,
+  papel?: PapelPro
 ): Promise<ProfessionalLinkDoc | null> {
   if (clientId.equals(professionalId)) return null;
-  return ProfessionalLink.findOne({ client: clientId, professional: professionalId, status: "ativo" });
+  return ProfessionalLink.findOne({
+    client: clientId,
+    professional: professionalId,
+    status: "ativo",
+    ...(papel ? { papel } : {}),
+  });
+}
+
+/**
+ * TODOS os vínculos ativos entre duas pessoas — no máximo um por papel.
+ *
+ * Existe porque escolher entre eles é decisão de quem pergunta: para ler
+ * treino, vale o vínculo que abriu treinos, seja ele de coach ou de nutri;
+ * para prescrever, só o de coach serve. Um `findOne` aqui devolvia o vínculo
+ * errado e negava acesso a quem tinha — e de forma intermitente, que é a pior
+ * maneira de um bug de permissão aparecer.
+ */
+export async function vinculosAtivos(
+  clientId: mongoose.Types.ObjectId,
+  professionalId: mongoose.Types.ObjectId
+): Promise<ProfessionalLinkDoc[]> {
+  if (clientId.equals(professionalId)) return [];
+  return ProfessionalLink.find({ client: clientId, professional: professionalId, status: "ativo" });
 }
 
 /** O profissional pode ver esta parte da vida deste aluno? */
@@ -306,6 +335,15 @@ export async function podeVer(
   professionalId: mongoose.Types.ObjectId,
   parte: "treinos" | "dieta" | "medidas" | "fotos"
 ): Promise<boolean> {
-  const link = await vinculoAtivo(clientId, professionalId);
-  return link?.escopo?.[parte] === true;
+  if (clientId.equals(professionalId)) return false;
+  // Pergunta ao banco por um vínculo que ABRA esta parte, em vez de pegar um
+  // vínculo qualquer e olhar o escopo depois: com dois vínculos ativos, o
+  // "qualquer" podia ser justo o que não abriu.
+  const link = await ProfessionalLink.findOne({
+    client: clientId,
+    professional: professionalId,
+    status: "ativo",
+    [`escopo.${parte}`]: true,
+  });
+  return link != null;
 }
