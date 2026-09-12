@@ -11,6 +11,7 @@ import {
   ajustarEscopo,
   encerrarAcompanhamento,
   listarAcompanhamentos,
+  buscarNaoLidas,
   listarConvitesRecebidos,
   rotuloDoPapel,
   type Acompanhamento,
@@ -32,6 +33,7 @@ export function AcompanhamentosScreen() {
   const { token } = useAuth();
   const [lista, setLista] = useState<Acompanhamento[]>([]);
   const [convites, setConvites] = useState<ConviteRecebido[]>([]);
+  const [naoLidas, setNaoLidas] = useState<Record<string, number>>({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
 
@@ -50,6 +52,11 @@ export function AcompanhamentosScreen() {
       setConvites(await listarConvitesRecebidos(token!));
     } catch {
       setConvites([]);
+    }
+    try {
+      setNaoLidas(await buscarNaoLidas(token!));
+    } catch {
+      setNaoLidas({});
     }
   }, [token]);
 
@@ -183,7 +190,32 @@ export function AcompanhamentosScreen() {
                   {new Date(a.desde).toLocaleDateString("pt-BR")}
                 </Txt>
               </View>
+
+              {/* O número de não lidas no próprio cartão: sem isto, a pessoa só
+                  descobriria a mensagem abrindo a conversa por acaso. */}
+              {(naoLidas[a.id] ?? 0) > 0 && (
+                <View
+                  style={{
+                    backgroundColor: colors.lime,
+                    borderRadius: radius.full,
+                    paddingHorizontal: spacing.s8,
+                    paddingVertical: 2,
+                  }}
+                >
+                  <Txt variant="caption" color={colors.onLime}>
+                    {naoLidas[a.id]}
+                  </Txt>
+                </View>
+              )}
             </View>
+
+            <Button
+              title={(naoLidas[a.id] ?? 0) > 0 ? "Ler mensagens" : "Conversar"}
+              onPress={() =>
+                nav.navigate("Conversa", { linkId: a.id, nome: a.profissional.nome })
+              }
+              style={{ marginTop: spacing.md }}
+            />
 
             <View style={{ marginTop: spacing.md, gap: spacing.s8 }}>
               {O_QUE_ABRE.map((item) => (

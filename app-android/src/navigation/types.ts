@@ -38,6 +38,7 @@ export type AppStackParams = {
   MinhasAtividades: undefined;
   AceitarConvite: { code: string };
   Acompanhamentos: undefined;
+  Conversa: { linkId: string; nome: string };
   ActivityDetail: { activity?: Activity; activityId?: string };
   Desafios: undefined;
   CriarDesafio: undefined;

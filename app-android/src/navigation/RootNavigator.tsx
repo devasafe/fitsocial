@@ -55,6 +55,7 @@ import { MeusPRsScreen } from "../screens/MeusPRsScreen";
 import { MinhasAtividadesScreen } from "../screens/MinhasAtividadesScreen";
 import { AceitarConviteScreen } from "../screens/AceitarConviteScreen";
 import { AcompanhamentosScreen } from "../screens/AcompanhamentosScreen";
+import { ConversaScreen } from "../screens/ConversaScreen";
 import { ConviteDoLink } from "../components/ConviteDoLink";
 import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
 import { DesafiosScreen } from "../screens/DesafiosScreen";
@@ -374,6 +375,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="AceitarConvite"
             component={AceitarConviteScreen}
             options={{ headerShown: true, title: "Convite", ...headerStyle, ...transicaoDeFolha }}
+          />
+          <AppStack.Screen
+            name="Conversa"
+            component={ConversaScreen}
+            options={{ headerShown: true, title: "Conversa", ...headerStyle }}
           />
           <AppStack.Screen
             name="Acompanhamentos"

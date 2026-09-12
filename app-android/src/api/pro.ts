@@ -113,3 +113,54 @@ export async function ajustarEscopo(
 export async function encerrarAcompanhamento(token: string, id: string): Promise<void> {
   await apiFetch(`/pro/acompanhamentos/${id}`, { method: "DELETE", token });
 }
+
+// ---------------------------------------------------------------- conversa
+
+export interface Mensagem {
+  id: string;
+  autor: string;
+  texto: string;
+  imageUrl: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  lidaEm: string | null;
+  createdAt: string;
+}
+
+/**
+ * As mensagens do acompanhamento, da mais nova para trás.
+ *
+ * A MESMA rota que o painel do profissional usa: a conversa é uma só, e ter um
+ * caminho para cada lado seria duplicar a regra de quem pode ler — que é o
+ * tipo de duplicação que acaba discordando de si mesma.
+ */
+export async function buscarMensagens(
+  token: string,
+  linkId: string,
+  cursor?: string | null
+): Promise<{ itens: Mensagem[]; nextCursor: string | null; encerrado: boolean }> {
+  const q = new URLSearchParams({ limit: "30" });
+  if (cursor) q.set("cursor", cursor);
+
+  const r = await apiFetch<{
+    data: Mensagem[];
+    meta: { nextCursor: string | null; encerrado: boolean };
+  }>(`/pro/acompanhamentos/${linkId}/mensagens?${q}`, { token });
+
+  return { itens: r.data, nextCursor: r.meta.nextCursor, encerrado: r.meta.encerrado };
+}
+
+export async function enviarMensagem(token: string, linkId: string, texto: string): Promise<Mensagem> {
+  const r = await apiFetch<{ data: Mensagem }>(`/pro/acompanhamentos/${linkId}/mensagens`, {
+    method: "POST",
+    body: { texto },
+    token,
+  });
+  return r.data;
+}
+
+/** Quantas não lidas em cada acompanhamento — o ponto ao lado do nome. */
+export async function buscarNaoLidas(token: string): Promise<Record<string, number>> {
+  const r = await apiFetch<{ data: { link: string; naoLidas: number }[] }>("/pro/nao-lidas", { token });
+  return Object.fromEntries(r.data.map((x) => [x.link, x.naoLidas]));
+}
