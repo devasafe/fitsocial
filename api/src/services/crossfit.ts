@@ -8,6 +8,7 @@ import {
   type WodPayload,
 } from "../models/crossfit.js";
 import { interpretarModo } from "./crossfit/interpretarModo.js";
+import { slugify } from "./slug.js";
 
 /**
  * As leituras que o resto do sistema faz de um treino de CrossFit.
@@ -152,15 +153,12 @@ export function blocoPrincipal(wod: WodPayload): Bloco | null {
   );
 }
 
-/** Nome normalizado de um movimento, para contar "mais executados". */
+/** Nome normalizado de um movimento, para contar "mais executados".
+ *
+ *  A regra mora em `slug.ts` porque a musculacao passou a usar a mesma: se as
+ *  duas divergirem, o mesmo movimento vira duas chaves conforme o esporte. */
 export function chaveDoMovimento(nome: string): string {
-  return nome
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_|_$/g, "");
+  return slugify(nome);
 }
 
 /** Todos os movimentos do treino, de todos os blocos, sem repetir. */

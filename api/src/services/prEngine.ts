@@ -3,6 +3,7 @@ import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Activity } from "../models/Activity.js";
 import { normalizarWod, fecharScore, chaveDoMovimento } from "./crossfit.js";
 import { resolverBenchmark } from "./benchmarks.js";
+import { slugify, slugDoExercicio } from "./slug.js";
 
 // Motor de detecção de PR (Fase 2c). Ver docs/ESPORTES.md §4.4, §5.3, §7.3, §12.
 // Força e distância: "maior é melhor". Tempo: "menor é melhor". Aulas/horas:
@@ -67,6 +68,8 @@ export interface NewPR {
 
 interface Candidate {
   exerciseName: string;
+  /** A identidade do exercicio. Sem ela, vale o slug do proprio nome. */
+  exerciseSlug?: string;
   type: PrType;
   repRange: string | null;
   value: number;
@@ -92,6 +95,9 @@ interface ReadSet {
 interface ReadExercise {
   name: string;
   sets?: ReadSet[];
+  /** Gravado no salvamento por `preencherSlugs`. Falta nos treinos antigos. */
+  slug?: string | null;
+  exerciseId?: string | null;
 }
 
 function strengthCandidates(payload: unknown): Candidate[] {
@@ -101,8 +107,12 @@ function strengthCandidates(payload: unknown): Candidate[] {
     const valid = (ex.sets ?? []).filter((s) => s.type === "valida" && (s.weightKg ?? 0) > 0);
     if (valid.length === 0) continue;
 
+    // Uma vez por exercicio: o treino antigo nao tem `slug` gravado, e resolver
+    // aqui e o que faz o historico dele se juntar ao dos novos.
+    const exerciseSlug = ex.slug || slugDoExercicio(ex.name, ex.exerciseId);
+
     const maxWeight = Math.max(...valid.map((s) => s.weightKg ?? 0));
-    out.push({ exerciseName: ex.name, type: "carga_max", repRange: null, value: maxWeight, unit: "kg" });
+    out.push({ exerciseName: ex.name, exerciseSlug, type: "carga_max", repRange: null, value: maxWeight, unit: "kg" });
 
     let best1rm = 0;
     for (const s of valid) {
@@ -110,7 +120,7 @@ function strengthCandidates(payload: unknown): Candidate[] {
       if (e && e > best1rm) best1rm = e;
     }
     if (best1rm > 0) {
-      out.push({ exerciseName: ex.name, type: "rm_estimado", repRange: null, value: Math.round(best1rm * 10) / 10, unit: "kg" });
+      out.push({ exerciseName: ex.name, exerciseSlug, type: "rm_estimado", repRange: null, value: Math.round(best1rm * 10) / 10, unit: "kg" });
     }
 
     const byRange = new Map<string, number>();
@@ -121,7 +131,7 @@ function strengthCandidates(payload: unknown): Candidate[] {
       if (w > (byRange.get(r) ?? 0)) byRange.set(r, w);
     }
     for (const [r, w] of byRange) {
-      out.push({ exerciseName: ex.name, type: "carga_faixa", repRange: r, value: w, unit: "kg" });
+      out.push({ exerciseName: ex.name, exerciseSlug, type: "carga_faixa", repRange: r, value: w, unit: "kg" });
     }
   }
   return out;
@@ -301,9 +311,13 @@ async function applyCandidate(
   c: Candidate,
   celebrateEnabled: boolean
 ): Promise<NewPR | null> {
+  // A chave e o slug. Os geradores que nao passam um (endurance, aulas, wod)
+  // ja mandam nome canonico, entao o slug do proprio nome serve.
+  const exerciseSlug = c.exerciseSlug || slugify(c.exerciseName);
+
   const existing = await PersonalRecord.findOne({
     user: userId,
-    exerciseName: c.exerciseName,
+    exerciseSlug,
     type: c.type,
     repRange: c.repRange,
   });
@@ -313,6 +327,7 @@ async function applyCandidate(
       user: userId,
       sportId: activity.sportId,
       exerciseName: c.exerciseName,
+      exerciseSlug,
       type: c.type,
       repRange: c.repRange,
       value: c.value,
@@ -328,6 +343,8 @@ async function applyCandidate(
   if (!improved) return null;
 
   const prevVal = existing.value;
+  // O rotulo acompanha a grafia mais recente; a identidade (slug) nao muda.
+  existing.exerciseName = c.exerciseName;
   existing.previousValue = prevVal;
   existing.previousAchievedAt = existing.achievedAt;
   existing.value = c.value;

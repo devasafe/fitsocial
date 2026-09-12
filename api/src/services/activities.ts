@@ -7,6 +7,7 @@ import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
 import { getSport } from "./sports.js";
 import { interpretarBlocos, normalizarWod } from "./crossfit.js";
 import { computeMetrics } from "./activityMetrics.js";
+import { preencherSlugs } from "./slug.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
 
@@ -45,6 +46,13 @@ export async function createActivity(
   // interpretador melhorar.
   if (input.kind === "wod") {
     storedPayload = interpretarBlocos(normalizarWod(input.payload));
+  }
+
+  // A identidade de cada exercicio tambem e resolvida no salvamento, pelo mesmo
+  // motivo: e o servidor que tem o catalogo, e o nome digitado sozinho fazia
+  // "Supino reto" e "supino reto" virarem dois historicos do mesmo exercicio.
+  if (input.kind === "strength") {
+    storedPayload = preencherSlugs(input.payload);
   }
 
   let metrics = computeMetrics({ ...input, payload: storedPayload } as ActivityCreateInput);
