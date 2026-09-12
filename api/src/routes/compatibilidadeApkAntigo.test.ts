@@ -327,3 +327,68 @@ describe("Recorde antigo, sem slug, no intervalo até o backfill", () => {
     }
   });
 });
+
+// A escada de planos do RUMO Pro (12/09/2026).
+//
+// `plan` (free/pro/pro_plus) nasceu AO LADO de `tier`, não no lugar dele: o app
+// instalado lê `tier` em `publicUser()` e compara com "premium". Se o campo
+// novo virasse a única verdade, todo mundo que paga seria rebaixado em
+// silêncio na primeira gravação da conta.
+describe("Planos novos e o app que só entende tier", () => {
+  it("quem tem plano pago continua sendo premium para quem lê tier", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Paga", email: "paga@teste.com", password: "senha-bem-longa" });
+
+    const u = (await User.findById(reg.body.user.id))!;
+    u.plan = "pro";
+    u.premiumSource = "purchase";
+    await u.save();
+
+    const me = await request(app).get("/auth/me").set(auth(reg.body.token));
+    expect(me.body.user.tier).toBe("premium");
+    expect(me.body.user.plan).toBe("pro");
+  });
+
+  // O mongoose aplica `default` ao HIDRATAR, não só ao criar. Se `plan` tivesse
+  // default "free", este documento seria lido como free e a conta cairia para
+  // free no primeiro save — que é o que este teste existe para impedir.
+  it("conta antiga, premium e sem o campo plan, não é rebaixada", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Antiga", email: "antiga@teste.com", password: "senha-bem-longa" });
+
+    // Exatamente como está gravado hoje em produção: tier premium, sem `plan`.
+    await User.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(reg.body.user.id) },
+      { $set: { tier: "premium", premiumSource: "purchase" }, $unset: { plan: "" } }
+    );
+
+    const me = await request(app).get("/auth/me").set(auth(reg.body.token));
+    expect(me.body.user.tier).toBe("premium");
+
+    // E continua premium depois de uma gravação qualquer na conta.
+    const depois = (await User.findById(reg.body.user.id))!;
+    depois.bio = "mexi em outra coisa";
+    await depois.save();
+    expect((await User.findById(reg.body.user.id))!.tier).toBe("premium");
+  });
+
+  // `tier` é derivado de `plan`: os dois discordando significa alguém pagando e
+  // sem acesso, sem nada apontando o erro.
+  it("gravar plan mantém tier em sincronia sozinho", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Sync", email: "sync@teste.com", password: "senha-bem-longa" });
+
+    const u = (await User.findById(reg.body.user.id))!;
+    u.plan = "pro_plus";
+    await u.save();
+    expect((await User.findById(u._id))!.tier).toBe("premium");
+
+    const v = (await User.findById(u._id))!;
+    v.plan = "free";
+    await v.save();
+    expect((await User.findById(u._id))!.tier).toBe("free");
+  });
+});
