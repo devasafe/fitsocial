@@ -7,6 +7,7 @@ import {
   type ProfessionalLinkDoc,
 } from "../models/ProfessionalLink.js";
 import { ProfessionalInvite, gerarCodigoDeConvite } from "../models/ProfessionalInvite.js";
+import { createNotification } from "./notifications.js";
 import { limiteDeAlunos, temCapacidade } from "./entitlement.js";
 
 // Quem acompanha quem, e com qual permissão.
@@ -48,10 +49,25 @@ export async function quantosAlunos(
 export async function gerarConvite(
   professional: UserDoc,
   papel: PapelPro,
-  usos = 1
-): Promise<{ code: string; expiraEm: Date; usosRestantes: number }> {
+  usos = 1,
+  /** Quando vem, o convite é endereçado: só esta pessoa pode aceitar. */
+  para?: UserDoc | null
+): Promise<{ code: string; expiraEm: Date; usosRestantes: number; para: string | null }> {
   if (!temCapacidade(professional, papel)) {
     throw new HttpError(403, "Esta conta não tem acesso profissional.");
+  }
+
+  if (para) {
+    if (para._id.equals(professional._id)) {
+      throw new HttpError(400, "Você não pode convidar a si mesmo.");
+    }
+    const jaTem = await ProfessionalLink.exists({
+      professional: professional._id,
+      client: para._id,
+      papel,
+      status: { $ne: "encerrado" },
+    });
+    if (jaTem) throw new HttpError(409, "Você já acompanha esta pessoa.");
   }
 
   const teto = limiteDeAlunos(professional, papel);
@@ -67,10 +83,38 @@ export async function gerarConvite(
   const expiraEm = new Date(Date.now() + DIAS_DE_VALIDADE * 24 * 60 * 60 * 1000);
   // O teto também limita quantas pessoas um link só pode trazer: um convite de
   // 50 usos num coach de 10 alunos só geraria frustração na hora do aceite.
-  const usosRestantes = Math.max(1, Math.min(usos, teto - atuais));
+  // Convite endereçado é sempre de um uso: ele tem dono.
+  const usosRestantes = para ? 1 : Math.max(1, Math.min(usos, teto - atuais));
 
-  await ProfessionalInvite.create({ professional: professional._id, papel, code, usosRestantes, expiraEm });
-  return { code, expiraEm, usosRestantes };
+  const convite = await ProfessionalInvite.create({
+    professional: professional._id,
+    papel,
+    code,
+    usosRestantes,
+    expiraEm,
+    para: para?._id ?? null,
+  });
+
+  // O convite endereçado precisa CHEGAR. Sem isto ele seria um código no banco
+  // que ninguém vê — e o coach ficaria esperando um aceite que nunca vem.
+  //
+  // O alvo é o convite, e não o código: `targetId` é ObjectId no modelo, e o
+  // app resolve o código na tela de convites recebidos. O APK antigo não sabe
+  // o que é `targetKind: "convite"` e simplesmente não navega ao tocar — o
+  // texto, que é o que importa, aparece igual.
+  if (para) {
+    await createNotification({
+      userId: para._id,
+      actorId: professional._id,
+      actorName: professional.name,
+      type: "convite_pro",
+      text: `${professional.name} quer te acompanhar como ${papel === "coach" ? "treinador" : "nutricionista"}.`,
+      targetKind: "convite",
+      targetId: convite._id,
+    });
+  }
+
+  return { code, expiraEm, usosRestantes, para: para?._id.toString() ?? null };
 }
 
 export interface ConvitePreview {
@@ -93,6 +137,11 @@ export async function verConvite(code: string, quem?: mongoose.Types.ObjectId): 
   if (convite.revogadoEm) throw new HttpError(410, "Este convite foi cancelado.");
   if (convite.expiraEm.getTime() < Date.now()) throw new HttpError(410, "Este convite expirou.");
   if (convite.usosRestantes <= 0) throw new HttpError(410, "Este convite já foi usado.");
+  // Convite endereçado não é link: quem não é o dono nem fica sabendo de quem
+  // era — daí 404 e não 403.
+  if (convite.para && quem && !convite.para.equals(quem)) {
+    throw new HttpError(404, "Convite não encontrado.");
+  }
 
   const prof = await User.findById(convite.professional).select("name username avatarUrl");
   if (!prof) throw new HttpError(404, "Convite não encontrado.");
@@ -141,6 +190,9 @@ export async function aceitarConvite(
 
   if (convite.professional.equals(aluno._id)) {
     throw new HttpError(400, "Você não pode se acompanhar pelo próprio convite.");
+  }
+  if (convite.para && !convite.para.equals(aluno._id)) {
+    throw new HttpError(404, "Convite não encontrado.");
   }
 
   const professional = await User.findById(convite.professional);

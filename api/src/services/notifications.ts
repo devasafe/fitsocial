@@ -23,6 +23,11 @@ const PREFERENCIA: Record<NotificationType, "interacoes" | "desafios" | "sistema
   // Sem opção de desligar, de propósito: seu conteúdo saiu do ar, e você
   // precisa saber disso mesmo com tudo silenciado. Não é divulgação, é aviso.
   post_removido: "sempre",
+  // Também sem opção, e pelo mesmo motivo: um convite PEDE resposta. Silenciado,
+  // ele vira um profissional esperando indefinidamente por alguém que nunca
+  // soube que foi convidado. E não há risco de virar ruído — o teto é de dez
+  // alunos, e um convite endereçado só existe depois que alguém digitou o @.
+  convite_pro: "sempre",
 };
 
 interface Preferencias {

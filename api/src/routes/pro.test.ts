@@ -567,3 +567,145 @@ describe("a curva de um exercício do aluno", () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe("convite por nome de usuário", () => {
+  /** Registra alguém já com @username, que é o que o convite endereçado usa. */
+  async function comUsername(username: string) {
+    n++;
+    const r = await request(app)
+      .post("/auth/register")
+      .send({ name: `P${n}`, email: `pro${n}@teste.com`, password: "senha-bem-longa", username });
+    return { token: r.body.token as string, id: r.body.user.id as string, username };
+  }
+
+  it("o coach convida pelo @ e a pessoa recebe", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await comUsername("joao");
+
+    const r = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "joao" });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.enviadoPara.username).toBe("joao");
+
+    const recebidos = await request(app).get("/pro/convites-recebidos").set(auth(aluno.token));
+    expect(recebidos.body.data).toHaveLength(1);
+    expect(recebidos.body.data[0].code).toBe(r.body.data.code);
+  });
+
+  // Um convite PEDE resposta: sem chegar, o coach espera indefinidamente por
+  // alguém que nunca soube que foi convidado.
+  it("chega como notificação, com o nome de quem convidou", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await comUsername("maria");
+
+    await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "maria" });
+
+    const notifs = await request(app).get("/notifications").set(auth(aluno.token));
+    const convite = notifs.body.data.find((n: { type: string }) => n.type === "convite_pro");
+
+    expect(convite).toBeTruthy();
+    expect(convite.text).toContain("quer te acompanhar");
+    expect(convite.targetKind).toBe("convite");
+  });
+
+  // O link endereçado tem dono. Se vazar no grupo da academia, não traz a turma.
+  it("só o destinatário abre e aceita", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await comUsername("pedro");
+    const intruso = await registrar();
+
+    const r = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "pedro" });
+    const code = r.body.data.code;
+
+    // Nem descobre de quem era: 404, não 403.
+    expect((await request(app).get(`/pro/convites/${code}`).set(auth(intruso.token))).status).toBe(404);
+    expect(
+      (await request(app).post(`/pro/convites/${code}/aceitar`).set(auth(intruso.token)).send({})).status
+    ).toBe(404);
+
+    const ok = await request(app).post(`/pro/convites/${code}/aceitar`).set(auth(aluno.token)).send({});
+    expect(ok.status).toBe(201);
+  });
+
+  it("username que não existe é 404, e nenhum convite é criado", async () => {
+    const coach = await registrarProfissional();
+
+    const r = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "nao_existe_ninguem" });
+
+    expect(r.status).toBe(404);
+    expect(await ProfessionalInvite.countDocuments()).toBe(0);
+  });
+
+  it("não convida quem já é seu aluno", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await comUsername("repetido");
+    await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "repetido" })
+      .then((r) =>
+        request(app).post(`/pro/convites/${r.body.data.code}/aceitar`).set(auth(aluno.token)).send({})
+      );
+
+    const denovo = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "repetido" });
+
+    expect(denovo.status).toBe(409);
+  });
+
+  it("nem a si mesmo", async () => {
+    const coach = await registrarProfissional();
+    const eu = (await User.findById(coach.id))!;
+    eu.username = "eumesmo";
+    await eu.save();
+
+    const r = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "eumesmo" });
+
+    expect(r.status).toBe(400);
+  });
+
+  it("aceito o convite, ele some da lista de recebidos", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await comUsername("some");
+
+    const r = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "some" });
+    await request(app).post(`/pro/convites/${r.body.data.code}/aceitar`).set(auth(aluno.token)).send({});
+
+    const recebidos = await request(app).get("/pro/convites-recebidos").set(auth(aluno.token));
+    expect(recebidos.body.data).toHaveLength(0);
+  });
+
+  it("o link aberto continua funcionando para qualquer um", async () => {
+    const coach = await registrarProfissional();
+    const qualquer = await registrar();
+
+    const r = await request(app).post("/pro/convites").set(auth(coach.token)).send({ papel: "coach" });
+    expect(r.body.data.enviadoPara).toBeNull();
+
+    const ok = await request(app)
+      .post(`/pro/convites/${r.body.data.code}/aceitar`)
+      .set(auth(qualquer.token))
+      .send({});
+    expect(ok.status).toBe(201);
+  });
+});

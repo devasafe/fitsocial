@@ -18,6 +18,15 @@ const inviteSchema = new Schema(
   {
     professional: { type: Schema.Types.ObjectId, ref: "User", required: true },
     papel: { type: String, enum: PAPEIS_PRO, required: true },
+    /**
+     * Para quem este convite foi enviado. Nulo = link aberto, que qualquer um
+     * com o código usa.
+     *
+     * Quando tem destinatário, só ELE aceita: o código deixa de ser uma porta e
+     * vira um endereço. É o que permite convidar pelo @ sem que o link, se
+     * vazar no grupo da academia, traga a turma inteira.
+     */
+    para: { type: Schema.Types.ObjectId, ref: "User", default: null },
     code: { type: String, required: true, unique: true, uppercase: true, trim: true },
     /** Quantas pessoas ainda podem entrar por este link. */
     usosRestantes: { type: Number, default: 1, min: 0 },
@@ -32,6 +41,8 @@ const inviteSchema = new Schema(
 // criaria dois índices iguais na coleção.
 // O profissional lista os convites que criou.
 inviteSchema.index({ professional: 1, createdAt: -1 });
+// E o aluno lista os que recebeu — a tela que faz o convite endereçado chegar.
+inviteSchema.index({ para: 1, createdAt: -1 });
 
 export type ProfessionalInviteDoc = HydratedDocument<InferSchemaType<typeof inviteSchema>>;
 
