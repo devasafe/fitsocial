@@ -11,6 +11,10 @@ import type { TreinoPublico } from "../api/social";
 // fala em quilômetros e ritmo, musculação em volume. Mostrar "3.240 kg" numa
 // corrida ou "5:01/km" numa série de supino não diz nada a ninguém.
 
+/** O cartão resume; o detalhe abre. Seis é onde a lista deixa de ser um
+ *  resumo — o mesmo teto que o cartão do feed usa. */
+const MAXIMO_DE_MOVIMENTOS = 6;
+
 function duracao(seg: number): string {
   const h = Math.floor(seg / 3600);
   const m = Math.round((seg % 3600) / 60);
@@ -39,16 +43,10 @@ function destaques(t: TreinoPublico): { valor: string; rotulo: string }[] {
   }
 
   if (t.kind === "strength") {
-    // `volumeKg` e `workingSets` nunca existiram: o servidor grava
-    // `volumeTotalKg` e `seriesValidas` (api/src/services/activityMetrics.ts) e
-    // manda `metrics` cru. Este card mostrava só o tempo desde sempre.
-    const out: { valor: string; rotulo: string }[] = [];
-    if ((m.volumeTotalKg ?? 0) > 0)
-      out.push({ valor: `${numero(m.volumeTotalKg!)} kg`, rotulo: "volume" });
-    if ((m.seriesValidas ?? 0) > 0)
-      out.push({ valor: String(m.seriesValidas), rotulo: "séries" });
-    if (t.durationSec > 0) out.push({ valor: duracao(t.durationSec), rotulo: "tempo" });
-    return out;
+    // Só o tempo, igual ao feed. Volume total e contagem de séries são métrica
+    // de acompanhamento e vivem no detalhe do treino — o assunto do cartão é o
+    // que foi treinado, que está no título e na lista de exercícios.
+    return t.durationSec > 0 ? [{ valor: duracao(t.durationSec), rotulo: "tempo" }] : [];
   }
 
   // Demais esportes: o tempo é o que sempre existe.
@@ -70,6 +68,9 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
   const cor = sportColor(treino.sportId);
   const stats = destaques(treino);
   const linhasCrossfit = treino.crossfit ? linhasDoCard(treino.crossfit) : [];
+  // CrossFit tem as linhas dele, montadas no app a partir dos blocos. O resto
+  // usa o que o servidor escreveu.
+  const movimentos = linhasCrossfit.length ? [] : (treino.movimentos ?? []);
   // O nome que a pessoa deu ganha; sem ele, o assunto é o que foi treinado.
   // O esporte já está dito na linha colorida acima e na borda do cartão.
   const assunto = treino.title?.trim() || tituloPorMusculos(musculosDe(treino.metrics));
@@ -119,6 +120,18 @@ export function TreinoCard({ treino, onPress }: { treino: TreinoPublico; onPress
           {linha}
         </Txt>
       ))}
+
+      {movimentos.slice(0, MAXIMO_DE_MOVIMENTOS).map((linha, i) => (
+        <Txt key={i} variant="caption" color={colors.text2} style={{ marginTop: i === 0 ? 6 : 2 }}>
+          {linha}
+        </Txt>
+      ))}
+      {movimentos.length > MAXIMO_DE_MOVIMENTOS && (
+        <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+          +{movimentos.length - MAXIMO_DE_MOVIMENTOS} exercício
+          {movimentos.length - MAXIMO_DE_MOVIMENTOS > 1 ? "s" : ""}
+        </Txt>
+      )}
 
       {stats.length > 0 && (
         <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm }}>

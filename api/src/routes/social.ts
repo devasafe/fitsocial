@@ -812,6 +812,11 @@ socialRouter.get(
         // o card do perfil mostra o mesmo assunto que o card do feed, e nenhum
         // dos dois espera o backfill.
         metrics: comMusculos(a),
+        // Os exercícios já escritos, como no feed. Vem do servidor pelo MESMO
+        // formatador, e não do payload cru: duas implementações da mesma
+        // formatação divergem, e aí o mesmo treino se escreve de dois jeitos
+        // dependendo de por qual tela a pessoa chegou nele.
+        movimentos: movimentosDoCartao(a.kind, (a.payload ?? {}) as Record<string, unknown>),
         // Blocos normalizados ao lado do payload cru — o card de CrossFit lê
         // daqui, e o app instalado continua lendo o payload.
         ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),

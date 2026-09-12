@@ -81,6 +81,9 @@ export interface TreinoPublico {
   payload: Record<string, unknown>;
   /** CrossFit já em blocos — o servidor normaliza os dois formatos. */
   crossfit?: PayloadDeCrossfit | null;
+  /** Os exercícios já escritos pelo servidor: "4×10  Supino reto  80 kg".
+   *  O mesmo formatador que serve o feed e o cartão de compartilhar. */
+  movimentos?: string[] | null;
   /** true quando esse treino também virou publicação no feed. */
   compartilhado: boolean;
 }
