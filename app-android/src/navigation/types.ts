@@ -36,6 +36,8 @@ export type AppStackParams = {
   MeusPRs: undefined;
   Benchmarks: undefined;
   MinhasAtividades: undefined;
+  AceitarConvite: { code: string };
+  Acompanhamentos: undefined;
   ActivityDetail: { activity?: Activity; activityId?: string };
   Desafios: undefined;
   CriarDesafio: undefined;

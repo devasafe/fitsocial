@@ -9,9 +9,15 @@ import {
   type Convite,
 } from "../api";
 
-/** O link que o coach manda no WhatsApp. O app abre esta rota e pede o aceite. */
+/**
+ * O link que o coach manda no WhatsApp.
+ *
+ * Caminho, e não hash: o app na web usa history API, e o Caddy dele já serve o
+ * index.html para qualquer caminho. Quem abrir sem ter conta cai no cadastro e
+ * o código fica guardado até a conta existir.
+ */
 function linkDoConvite(code: string): string {
-  return `https://fit.satriz.club/#/convite/${code}`;
+  return `https://fit.satriz.club/convite/${code}`;
 }
 
 export function Convites({ token }: { token: string }) {

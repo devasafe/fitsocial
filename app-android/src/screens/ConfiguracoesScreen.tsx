@@ -153,10 +153,17 @@ export function ConfiguracoesScreen() {
         />
       </Secao>
 
+      {/* Fica na Privacidade, e não numa seção própria, porque a pergunta que
+          leva a pessoa até aqui é a mesma: "quem vê o que é meu?". */}
       <Secao
         titulo="Privacidade"
         nota="Vale para todo mundo que abrir seu perfil, inclusive quem não te segue."
       >
+        <Linha
+          titulo="Quem me acompanha"
+          detalhe="Treinador e nutricionista"
+          onPress={() => nav.navigate("Acompanhamentos")}
+        />
         {settings ? (
           <>
             <Chave
