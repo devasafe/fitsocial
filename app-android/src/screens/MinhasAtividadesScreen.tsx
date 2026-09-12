@@ -1,38 +1,17 @@
 import React, { useCallback, useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
+import { TreinoCard } from "../components/TreinoCard";
 import { EmptyState } from "../components/EmptyState";
 import { listActivities, type Activity } from "../api/activities";
 import { calendario, type DiaDoCalendario } from "../api/evolucao";
 import { Heatmap } from "../components/Heatmap";
 import { colors, spacing } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
-import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
-
-function mmss(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function summary(a: Activity): string {
-  const m = a.metrics ?? {};
-  if (a.kind === "endurance" && m.distanceKm != null) {
-    const pace = m.avgPaceSecPerKm ? ` · ${mmss(m.avgPaceSecPerKm)} /km` : "";
-    return `${m.distanceKm.toFixed(2)} km${pace}`;
-  }
-  if (a.kind === "strength" && m.volumeTotalKg != null) return `${Math.round(m.volumeTotalKg)} kg de volume`;
-  if (m.minutes != null) return `${m.minutes} min`;
-  return "";
-}
-
-function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
 
 export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
@@ -125,21 +104,25 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
           onAction={() => nav.navigate("Registrar")}
         />
       ) : (
-        items.map((a) => (
-          <TouchableOpacity key={a.id} activeOpacity={0.85} onPress={() => nav.navigate("ActivityDetail", { activity: a })}>
-            <Card sport={a.sportId} style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={{ flex: 1 }}>
-                <Txt variant="titleCard">{a.title?.trim() || sportLabel(a.sportId)}</Txt>
-                <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>
-                  {summary(a)}
-                </Txt>
-              </View>
-              <Txt variant="label" color={colors.text3}>
-                {shortDate(a.startedAt)}
-              </Txt>
-            </Card>
-          </TouchableOpacity>
-        ))
+        // O MESMO cartão do feed e do perfil. O daqui era de antes de ele
+        // existir: dizia "Musculação" em toda linha, porque é esse o `sportId`
+        // de todo check-in de plano — e o que a pessoa quer ler é o que ela
+        // treinou, que agora sai no título e na lista de exercícios.
+        // Num embrulho só: o cartão já traz a própria margem embaixo, e a tela
+        // separa os BLOCOS. Sem isto, o espaço entre treinos viraria a soma dos
+        // dois e a lista ficaria arejada demais para um histórico.
+        // A margem negativa cancela o `marginBottom` do ÚLTIMO cartão: o `gap`
+        // do Screen já separa este bloco do que vem depois, e os dois somados
+        // abriam um vão antes do "Carregar mais".
+        <View style={{ marginBottom: -spacing.sm }}>
+          {items.map((a) => (
+            <TreinoCard
+              key={a.id}
+              treino={a}
+              onPress={() => nav.navigate("ActivityDetail", { activity: a })}
+            />
+          ))}
+        </View>
       )}
 
       {cursor ? (

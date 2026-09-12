@@ -28,7 +28,7 @@ import {
   type Formato,
   type Layout,
 } from "../services/media/cartaoDeCompartilhar.js";
-import { movimentosDoCartao } from "../services/media/movimentosDoCartao.js";
+import { movimentosDoCartao, totalDeMovimentos } from "../services/media/movimentosDoCartao.js";
 import { musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { normalizarWod, blocoPrincipal } from "../services/crossfit.js";
 import { getStorageProvider } from "../services/storage/index.js";
@@ -847,6 +847,7 @@ socialRouter.get(
         // formatação divergem, e aí o mesmo treino se escreve de dois jeitos
         // dependendo de por qual tela a pessoa chegou nele.
         movimentos: movimentosDoCartao(a.kind, (a.payload ?? {}) as Record<string, unknown>),
+        movimentosTotal: totalDeMovimentos(a.kind, (a.payload ?? {}) as Record<string, unknown>),
         // Blocos normalizados ao lado do payload cru — o card de CrossFit lê
         // daqui, e o app instalado continua lendo o payload.
         ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),

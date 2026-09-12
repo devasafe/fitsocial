@@ -1,5 +1,6 @@
 import type { PayloadDeCrossfit } from "./crossfit";
 import { apiFetch } from "./client";
+import type { ActivityMetrics } from "./activities";
 
 export interface SearchUser {
   id: string;
@@ -77,13 +78,15 @@ export interface TreinoPublico {
   title: string;
   startedAt: string;
   durationSec: number;
-  metrics: Record<string, unknown>;
+  metrics: ActivityMetrics;
   payload: Record<string, unknown>;
   /** CrossFit já em blocos — o servidor normaliza os dois formatos. */
   crossfit?: PayloadDeCrossfit | null;
   /** Os exercícios já escritos pelo servidor: "4×10  Supino reto  80 kg".
    *  O mesmo formatador que serve o feed e o cartão de compartilhar. */
   movimentos?: string[] | null;
+  /** Quantos exercícios o treino tem de verdade — `movimentos` vem cortado. */
+  movimentosTotal?: number;
   /** true quando esse treino também virou publicação no feed. */
   compartilhado: boolean;
 }

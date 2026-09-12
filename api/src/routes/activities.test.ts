@@ -106,6 +106,48 @@ describe("Activities", () => {
     expect(p2.body.data[0].id).not.toBe(p1.body.data[0].id);
   });
 
+  // A aba Atividades mostrava o mesmo texto — "Musculação" — em toda linha,
+  // porque é esse o `sportId` de todo check-in de plano. O que a lista precisa
+  // dizer é o que a pessoa TREINOU, e isso vem pronto do servidor pelo mesmo
+  // formatador do feed e do perfil.
+  it("a lista traz os exercícios escritos, e não só o esporte", async () => {
+    await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody());
+
+    const r = await request(app).get("/activities?limit=1").set("Authorization", `Bearer ${tokenA}`);
+
+    expect(r.status).toBe(200);
+    expect(Array.isArray(r.body.data[0].movimentos)).toBe(true);
+    expect(r.body.data[0].movimentos.length).toBeGreaterThan(0);
+    // O total vem separado porque a lista ja chega cortada em oito — sem ele,
+    // o "+N exercicios" do cartao contava sobre o que sobrou e dizia sempre "+2".
+    expect(r.body.data[0].movimentosTotal).toBe(r.body.data[0].movimentos.length);
+    // Os músculos vêm junto: é deles que sai o título quando a pessoa não
+    // nomeou o treino, e é o mesmo assunto que o card do feed mostra.
+    expect(r.body.data[0].metrics.musculos.length).toBeGreaterThan(0);
+  });
+
+  it("a lista diz quais treinos também viraram publicação", async () => {
+    const compartilhado = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ shareToFeed: true, caption: "foi" }));
+    const guardado = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody());
+
+    const r = await request(app).get("/activities?limit=50").set("Authorization", `Bearer ${tokenA}`);
+
+    const porId = new Map(
+      (r.body.data as { id: string; compartilhado: boolean }[]).map((a) => [a.id, a.compartilhado])
+    );
+    expect(porId.get(compartilhado.body.data.id)).toBe(true);
+    expect(porId.get(guardado.body.data.id)).toBe(false);
+  });
+
   it("edita e apaga a própria atividade", async () => {
     const created = await request(app)
       .post("/activities")
