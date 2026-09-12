@@ -255,7 +255,7 @@ export function CheckInScreen() {
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
       celebratePR(res.newPRs ?? []);
       // Sempre abre o compositor com o treino anexado (foto/texto ou "Agora não").
-      nav.navigate("CreatePost", { activity: res.activity });
+      nav.navigate("CreatePost", { activity: res.activity, newPRs: res.newPRs ?? [] });
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);
     } finally {

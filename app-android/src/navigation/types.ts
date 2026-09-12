@@ -1,7 +1,7 @@
 // Tipos das rotas de navegação, compartilhados entre telas e navegadores.
 import type { Workout, Diet, Session } from "../api/plans";
 import type { Post } from "../api/social";
-import type { Activity } from "../api/activities";
+import type { Activity, NewPR } from "../api/activities";
 import type { MuscleGroup } from "../api/library";
 
 export type AuthStackParams = {
@@ -21,7 +21,7 @@ export type AppStackParams = {
   EditWorkout: undefined;
   EditDiet: undefined;
   CheckIn: { session: Session };
-  CreatePost: { activity?: Activity } | undefined;
+  CreatePost: { activity?: Activity; newPRs?: NewPR[] } | undefined;
   EditProfile: undefined;
   Configuracoes: undefined;
   AlterarSenha: undefined;

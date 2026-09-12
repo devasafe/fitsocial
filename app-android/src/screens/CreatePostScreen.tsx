@@ -31,6 +31,7 @@ import {
 } from "../components/CenaContext";
 import { sportLabel } from "../lib/sportLabel";
 import { legendaSugerida } from "../lib/crossfitResumo";
+import { legendaDeRecorde } from "../api/prs";
 import { proporcaoDaFoto } from "../lib/proporcaoDaFoto";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -77,9 +78,15 @@ export function CreatePostScreen() {
   // O texto de um treino de CrossFit já vem pronto — e editável. Escrever do
   // zero "Fran, 5:32, RX, Back Squat 100 kg" logo depois de treinar é o tipo de
   // trabalho que o app tem os dados para poupar.
-  const [text, setText] = useState(
-    fromWorkout?.crossfit ? legendaSugerida(fromWorkout.crossfit, fromWorkout.perceivedEffort) : ""
-  );
+  // Recorde primeiro: quando o treino bateu um, e ele a noticia — o resumo do
+  // WOD continua valendo para todos os outros casos.
+  const [text, setText] = useState(() => {
+    const doRecorde = legendaDeRecorde(route.params?.newPRs ?? []);
+    if (doRecorde) return doRecorde;
+    return fromWorkout?.crossfit
+      ? legendaSugerida(fromWorkout.crossfit, fromWorkout.perceivedEffort)
+      : "";
+  });
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   // Guardado para o feed poder reservar a proporção certa sem esperar a
   // imagem carregar — e para o preview aqui ser o mesmo recorte de lá.
