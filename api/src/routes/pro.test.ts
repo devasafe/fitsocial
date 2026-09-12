@@ -426,3 +426,104 @@ describe("prescrição de treino", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("conversa", () => {
+  async function dupla() {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+    return { coach, aluno, linkId };
+  }
+
+  const mandar = (token: string, linkId: string, body: Record<string, unknown>) =>
+    request(app).post(`/pro/acompanhamentos/${linkId}/mensagens`).set(auth(token)).send(body);
+
+  const ler = (token: string, linkId: string, query = "") =>
+    request(app).get(`/pro/acompanhamentos/${linkId}/mensagens${query}`).set(auth(token));
+
+  it("os dois lados falam na mesma conversa", async () => {
+    const { coach, aluno, linkId } = await dupla();
+
+    await mandar(coach.token, linkId, { texto: "Bom treino hoje!" }).expect(201);
+    await mandar(aluno.token, linkId, { texto: "Valeu, professor" }).expect(201);
+
+    const doCoach = await ler(coach.token, linkId);
+    const doAluno = await ler(aluno.token, linkId);
+
+    expect(doCoach.body.data).toHaveLength(2);
+    expect(doAluno.body.data).toHaveLength(2);
+    // Mais recente primeiro.
+    expect(doCoach.body.data[0].texto).toBe("Valeu, professor");
+  });
+
+  it("aceita foto, que é metade da conversa real", async () => {
+    const { aluno, linkId } = await dupla();
+
+    const r = await mandar(aluno.token, linkId, {
+      imageUrl: "https://fitcdn.satriz.club/x.jpg",
+      imageWidth: 1080,
+      imageHeight: 1350,
+    });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.imageUrl).toBe("https://fitcdn.satriz.club/x.jpg");
+  });
+
+  it("mensagem vazia não passa", async () => {
+    const { coach, linkId } = await dupla();
+    expect((await mandar(coach.token, linkId, {})).status).toBe(400);
+    expect((await mandar(coach.token, linkId, { texto: "   " })).status).toBe(400);
+  });
+
+  it("estranho não lê nem escreve na conversa dos outros", async () => {
+    const { linkId } = await dupla();
+    const estranho = await registrar();
+
+    expect((await ler(estranho.token, linkId)).status).toBe(404);
+    expect((await mandar(estranho.token, linkId, { texto: "oi" })).status).toBe(404);
+  });
+
+  // Marcar as próprias como lidas seria dizer que a pessoa leu o que ela mesma
+  // escreveu — e a bolinha do outro lado nunca apareceria.
+  it("abrir a conversa marca como lida só o que o outro mandou", async () => {
+    const { coach, aluno, linkId } = await dupla();
+    await mandar(coach.token, linkId, { texto: "Oi" });
+
+    const antes = await request(app).get("/pro/nao-lidas").set(auth(aluno.token));
+    expect(antes.body.meta.total).toBe(1);
+
+    // O próprio coach abrindo não zera a do aluno.
+    await ler(coach.token, linkId);
+    expect((await request(app).get("/pro/nao-lidas").set(auth(aluno.token))).body.meta.total).toBe(1);
+
+    await ler(aluno.token, linkId);
+    expect((await request(app).get("/pro/nao-lidas").set(auth(aluno.token))).body.meta.total).toBe(0);
+  });
+
+  it("pagina por cursor sem repetir mensagem", async () => {
+    const { coach, aluno, linkId } = await dupla();
+    for (let i = 0; i < 5; i++) await mandar(coach.token, linkId, { texto: `msg ${i}` });
+
+    const p1 = await ler(aluno.token, linkId, "?limit=2");
+    expect(p1.body.data).toHaveLength(2);
+
+    const p2 = await ler(aluno.token, linkId, `?limit=2&cursor=${encodeURIComponent(p1.body.meta.nextCursor)}`);
+    const ids = [...p1.body.data, ...p2.body.data].map((m: { id: string }) => m.id);
+    expect(new Set(ids).size).toBe(4);
+  });
+
+  // O histórico é dos dois. Encerrar fecha a porta, não queima o arquivo.
+  it("encerrado, a conversa fica legível mas ninguém escreve mais", async () => {
+    const { coach, aluno, linkId } = await dupla();
+    await mandar(coach.token, linkId, { texto: "última" });
+
+    await request(app).delete(`/pro/acompanhamentos/${linkId}`).set(auth(aluno.token)).expect(200);
+
+    const lido = await ler(aluno.token, linkId);
+    expect(lido.status).toBe(200);
+    expect(lido.body.data).toHaveLength(1);
+    expect(lido.body.meta.encerrado).toBe(true);
+
+    expect((await mandar(coach.token, linkId, { texto: "oi?" })).status).toBe(409);
+  });
+});

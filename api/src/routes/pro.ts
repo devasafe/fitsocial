@@ -23,6 +23,8 @@ import {
 import { calendarioDoUsuario, exerciciosDoUsuario } from "../services/evolucao.js";
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema } from "../models/Plan.js";
+import { ProMessage } from "../models/ProMessage.js";
+import { decodeCursorCriacao, encodeCursorCriacao } from "../utils/cursor.js";
 
 /**
  * O aviso que acompanha um treino escrito por gente, e não pela IA.
@@ -387,6 +389,148 @@ proRouter.put(
     res.status(201).json({
       data: { id: plan._id.toString(), version: plan.version, createdBy: req.user!._id.toString() },
       meta: {},
+    });
+  })
+);
+
+// ------------------------------------------------------------------ conversa
+
+const novaMensagemSchema = z
+  .object({
+    texto: z.string().max(2000).optional(),
+    imageUrl: z.string().max(500).optional(),
+    imageWidth: z.number().int().positive().max(10000).optional(),
+    imageHeight: z.number().int().positive().max(10000).optional(),
+  })
+  // Mensagem vazia não é mensagem. Uma das duas coisas precisa vir.
+  .refine((m) => Boolean(m.texto?.trim()) || Boolean(m.imageUrl), {
+    message: "Escreva algo ou anexe uma foto.",
+  });
+
+/**
+ * O acompanhamento visto por quem participa dele, seja qual for o lado.
+ *
+ * As duas pontas usam a mesma rota de propósito: a conversa é uma só, e ter
+ * uma rota para o coach e outra para o aluno seria duplicar a regra de quem
+ * pode ler — que é o tipo de duplicação que acaba discordando de si mesma.
+ */
+async function conversaDoParticipante(req: { user?: { _id: mongoose.Types.ObjectId } }, linkId: string) {
+  if (!mongoose.isValidObjectId(linkId)) throw new HttpError(404, "Acompanhamento não encontrado.");
+
+  const link = await ProfessionalLink.findById(linkId);
+  if (!link) throw new HttpError(404, "Acompanhamento não encontrado.");
+
+  const eu = req.user!._id;
+  if (!link.client.equals(eu) && !link.professional.equals(eu)) {
+    throw new HttpError(404, "Acompanhamento não encontrado.");
+  }
+  // Encerrado, a conversa fica legível mas fechada para escrita — o histórico
+  // é dos dois, e apagá-lo seria apagar o acompanhamento que existiu.
+  return link;
+}
+
+/** Histórico da conversa, do mais recente para trás, paginado por cursor. */
+proRouter.get(
+  "/acompanhamentos/:id/mensagens",
+  asyncHandler(async (req, res) => {
+    const link = await conversaDoParticipante(req, String(req.params.id));
+    const { limit, cursor: raw } = z
+      .object({ limit: z.coerce.number().int().min(1).max(100).default(30), cursor: z.string().optional() })
+      .parse(req.query);
+
+    const cursor = raw ? decodeCursorCriacao(raw) : null;
+    const filtro: mongoose.FilterQuery<unknown> = { link: link._id };
+    if (cursor) {
+      filtro.$or = [
+        { createdAt: { $lt: cursor.createdAt } },
+        { createdAt: cursor.createdAt, _id: { $lt: new mongoose.Types.ObjectId(cursor.id) } },
+      ];
+    }
+
+    const docs = await ProMessage.find(filtro).sort({ createdAt: -1, _id: -1 }).limit(limit + 1);
+    const temMais = docs.length > limit;
+    const itens = temMais ? docs.slice(0, limit) : docs;
+    const ultimo = itens[itens.length - 1];
+
+    // Abrir a conversa marca como lida o que o OUTRO mandou. Só isso: marcar as
+    // próprias seria dizer que a pessoa leu o que ela mesma escreveu.
+    await ProMessage.updateMany(
+      { link: link._id, autor: { $ne: req.user!._id }, lidaEm: null },
+      { $set: { lidaEm: new Date() } }
+    );
+
+    res.json({
+      data: itens.map((m) => ({
+        id: m._id.toString(),
+        autor: m.autor.toString(),
+        texto: m.texto,
+        imageUrl: m.imageUrl || null,
+        imageWidth: m.imageWidth ?? null,
+        imageHeight: m.imageHeight ?? null,
+        lidaEm: m.lidaEm,
+        createdAt: m.get("createdAt") as Date,
+      })),
+      meta: {
+        nextCursor:
+          temMais && ultimo
+            ? encodeCursorCriacao({ createdAt: ultimo.get("createdAt") as Date, id: ultimo._id.toString() })
+            : null,
+        encerrado: link.status === "encerrado",
+      },
+    });
+  })
+);
+
+proRouter.post(
+  "/acompanhamentos/:id/mensagens",
+  rateLimit({ windowMs: 60_000, max: 40, name: "pro-mensagem" }),
+  asyncHandler(async (req, res) => {
+    const link = await conversaDoParticipante(req, String(req.params.id));
+    if (link.status === "encerrado") {
+      throw new HttpError(409, "Este acompanhamento foi encerrado.");
+    }
+
+    const body = novaMensagemSchema.parse(req.body ?? {});
+    const msg = await ProMessage.create({
+      link: link._id,
+      autor: req.user!._id,
+      texto: body.texto?.trim() ?? "",
+      imageUrl: body.imageUrl ?? "",
+      imageWidth: body.imageWidth ?? null,
+      imageHeight: body.imageHeight ?? null,
+    });
+
+    res.status(201).json({
+      data: {
+        id: msg._id.toString(),
+        autor: msg.autor.toString(),
+        texto: msg.texto,
+        imageUrl: msg.imageUrl || null,
+        createdAt: msg.get("createdAt") as Date,
+      },
+      meta: {},
+    });
+  })
+);
+
+/** Quantas mensagens não lidas em cada acompanhamento — a bolinha da lista. */
+proRouter.get(
+  "/nao-lidas",
+  asyncHandler(async (req, res) => {
+    const eu = req.user!._id;
+    const links = await ProfessionalLink.find({
+      $or: [{ client: eu }, { professional: eu }],
+      status: { $ne: "encerrado" },
+    }).select("_id");
+
+    const porLink = await ProMessage.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
+      { $match: { link: { $in: links.map((l) => l._id) }, autor: { $ne: eu }, lidaEm: null } },
+      { $group: { _id: "$link", total: { $sum: 1 } } },
+    ]);
+
+    res.json({
+      data: porLink.map((l) => ({ link: l._id.toString(), naoLidas: l.total })),
+      meta: { total: porLink.reduce((s, l) => s + l.total, 0) },
     });
   })
 );
