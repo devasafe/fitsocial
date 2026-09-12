@@ -29,6 +29,7 @@ import {
   type Layout,
 } from "../services/media/cartaoDeCompartilhar.js";
 import { movimentosDoCartao } from "../services/media/movimentosDoCartao.js";
+import { musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { normalizarWod, blocoPrincipal } from "../services/crossfit.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { rateLimit } from "../middleware/rateLimit.js";
@@ -132,7 +133,8 @@ interface ActivityPayload {
   level?: string;
   activityName?: string;
   sessionType?: string;
-  exercises?: unknown[];
+  /** Força: o que basta para redescobrir o músculo de um treino antigo. */
+  exercises?: { name?: string; muscle?: string | null; exerciseId?: string | null }[];
   resultTimeSec?: number | null;
   resultRounds?: number | null;
   resultReps?: number | null;
@@ -140,13 +142,70 @@ interface ActivityPayload {
   /** Track de GPS de corrida e pedal — o cartao de compartilhar desenha o traco. */
   points?: { lat: number; lng: number }[];
 }
+/** O que o card lê de `metrics` — o campo é `Mixed`, então o tipo mora aqui. */
+interface ActivityMetrics {
+  volumeTotalKg?: number;
+  seriesValidas?: number;
+  distanceKm?: number;
+  avgPaceSecPerKm?: number;
+  minutes?: number;
+  /** Grupos musculares do treino, do mais trabalhado para o menos. */
+  musculos?: string[];
+}
+
 interface PopulatedActivity {
   _id: mongoose.Types.ObjectId;
   kind: string;
   sportId: string;
+  title?: string;
   durationSec?: number;
-  metrics?: Record<string, number>;
+  metrics?: ActivityMetrics;
   payload?: ActivityPayload;
+}
+
+/**
+ * "Quadríceps · Panturrilha". Três é o teto: o card é lido de passagem, e uma
+ * lista de seis grupos não é mais informativa que "+3" — é só mais longa.
+ */
+const MAX_MUSCULOS_NO_TITULO = 3;
+
+/**
+ * Versão do CONTEÚDO do cartão de compartilhar.
+ *
+ * O cartão é um PNG montado uma vez e guardado em `post.cartoes`, com chave por
+ * formato e layout. Quando o que o cartão ESCREVE muda — como agora, que o
+ * título de um treino de força virou os músculos e a carga total saiu dos
+ * stats — os cartões já montados continuariam sendo servidos com o texto
+ * antigo, para sempre, enquanto o feed mostra o novo.
+ *
+ * Suba este número sempre que mudar `activitySummary` ou `movimentosDoCartao`.
+ * Os PNGs da versão anterior ficam órfãos no storage: é o preço de não servir
+ * imagem desatualizada, e é uma limpeza de ops, não de código.
+ */
+const VERSAO_DO_CARTAO = 2;
+
+function tituloPorMusculos(musculos: string[]): string {
+  if (!musculos.length) return "";
+  const mostrados = musculos.slice(0, MAX_MUSCULOS_NO_TITULO);
+  const resto = musculos.length - mostrados.length;
+  return mostrados.join(" · ") + (resto > 0 ? ` +${resto}` : "");
+}
+
+/** `metrics` com os músculos garantidos — para as telas que leem métrica crua. */
+function comMusculos(a: {
+  kind: string;
+  metrics?: Record<string, unknown> | null;
+  payload?: unknown;
+}): Record<string, unknown> {
+  const metrics = { ...(a.metrics ?? {}) };
+  if (a.kind !== "strength") return metrics;
+
+  const musculos = musculosDoTreinoSalvo({
+    metrics: metrics as { musculos?: unknown },
+    payload: a.payload,
+  });
+  if (musculos.length) metrics.musculos = musculos;
+  return metrics;
 }
 
 // Resumo do treino para o card do feed — genérico por kind (title + stats + movimentos do WOD).
@@ -164,9 +223,14 @@ function activitySummary(post: InstanceType<typeof Post>) {
   let movements: string[] | null = null;
 
   if (a.kind === "strength") {
-    const n = Array.isArray(pl.exercises) ? pl.exercises.length : 0;
-    if (n) stats.push(`${n} exercício${n > 1 ? "s" : ""}`);
-    if (m.volumeTotalKg) stats.push(`${Math.round(m.volumeTotalKg)} kg`);
+    // O assunto de um treino de força é o que foi treinado, não quanto pesou.
+    // Carga total é métrica de acompanhamento — vive no detalhe e no progresso,
+    // não no feed: ninguém conta treino em toneladas. Sem nenhum músculo
+    // reconhecido, o título volta a ser o esporte, como sempre foi.
+    // O nome que a pessoa deu ganha; depois o que ela treinou; por último o
+    // esporte, como sempre foi. A query já trazia `title` e o card o ignorava —
+    // e o cartão do perfil, que lê o mesmo treino, sempre preferiu o nome.
+    title = a.title?.trim() || tituloPorMusculos(musculosDoTreinoSalvo(a)) || label;
     if (dur) stats.push(mmss(dur));
   } else if (a.kind === "endurance") {
     if (m.distanceKm) stats.push(`${numero(m.distanceKm)} km`);
@@ -198,16 +262,20 @@ function activitySummary(post: InstanceType<typeof Post>) {
                 : null;
     if (resultado) stats.push(resultado);
     if (wod.tamanhoDoTime > 1) stats.push(`em ${wod.tamanhoDoTime}`);
-
-    // O MESMO formatador do cartão de compartilhar. Eram dois caminhos, e os
-    // dois tinham que concordar sobre como se escreve "21-15-9 Thruster 43 kg".
-    movements = movimentosDoCartao("wod", a.payload as Record<string, unknown>);
   } else {
     // generic
     if (pl.activityName) title = String(pl.activityName);
     if (m.minutes) stats.push(`${Math.round(m.minutes)} min`);
     else if (dur) stats.push(mmss(dur));
   }
+
+  // O MESMO formatador do cartão de compartilhar, agora para todo formato que
+  // tenha o que listar. Eram dois caminhos, e os dois tinham que concordar
+  // sobre como se escreve "21-15-9  Thruster  43 kg" — e agora também
+  // "4×10  Agachamento livre  100 kg". `null` quando não há nada: é o que o
+  // app instalado espera, e ele já sabe desenhar a lista.
+  const linhas = movimentosDoCartao(a.kind, a.payload as Record<string, unknown>);
+  movements = linhas.length ? linhas : null;
 
   return { id: a._id.toString(), kind: a.kind, sportId: a.sportId, title, stats, movements };
 }
@@ -393,7 +461,7 @@ socialRouter.post(
     }
 
     const layout = layoutEfetivo(pedido, !!foto);
-    const chave = `${formato}:${layout}`;
+    const chave = `${formato}:${layout}:${VERSAO_DO_CARTAO}`;
 
     // Já montado antes: devolve o mesmo arquivo. Olhar os três layouts para
     // escolher é o uso normal, e sem isto cada olhada deixa um PNG órfão.
@@ -740,7 +808,15 @@ socialRouter.get(
         title: a.title ?? "",
         startedAt: a.startedAt,
         durationSec: a.durationSec,
-        metrics: a.metrics ?? {},
+        // Os músculos entram aqui mesmo quando não foram calculados no save —
+        // o card do perfil mostra o mesmo assunto que o card do feed, e nenhum
+        // dos dois espera o backfill.
+        metrics: comMusculos(a),
+        // Os exercícios já escritos, como no feed. Vem do servidor pelo MESMO
+        // formatador, e não do payload cru: duas implementações da mesma
+        // formatação divergem, e aí o mesmo treino se escreve de dois jeitos
+        // dependendo de por qual tela a pessoa chegou nele.
+        movimentos: movimentosDoCartao(a.kind, (a.payload ?? {}) as Record<string, unknown>),
         // Blocos normalizados ao lado do payload cru — o card de CrossFit lê
         // daqui, e o app instalado continua lendo o payload.
         ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),

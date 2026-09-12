@@ -251,6 +251,41 @@ describe("Preferências", () => {
     expect(r.body.data.routesPublic).toBe(false);
   });
 
+  it("o cartão do perfil traz os exercícios e os músculos, como o do feed", async () => {
+    const u = await registrar("atleta@teste.com");
+    await tornarTreinosPublicos(u.token);
+    await registrarTreino(u.token, {
+      payload: {
+        variant: "musculacao",
+        exercises: [
+          {
+            name: "Agachamento livre",
+            sets: [
+              { type: "valida", weightKg: 100, reps: 5, done: true },
+              { type: "valida", weightKg: 100, reps: 5, done: true },
+            ],
+          },
+          {
+            name: "Panturrilha em pé",
+            sets: [{ type: "valida", weightKg: 80, reps: 15, done: true }],
+          },
+        ],
+      },
+    });
+
+    const r = await request(app).get(`/social/users/${u.id}/activities`).set(auth(u.token)).expect(200);
+    const treino = r.body.data[0];
+
+    // A MESMA linha que o feed e o cartão de compartilhar escrevem.
+    expect(treino.movimentos).toEqual([
+      "2×5  Agachamento livre  100 kg",
+      "1×15  Panturrilha em pé  80 kg",
+    ]);
+    expect(treino.metrics.musculos).toEqual(["Quadríceps", "Panturrilha"]);
+    // O volume continua no dado — o cartão é que não o mostra mais.
+    expect(treino.metrics.volumeTotalKg).toBe(2200);
+  });
+
   it("a resposta vale para os treinos seguintes, não para os anteriores", async () => {
     const u = await registrar("atleta@teste.com");
 

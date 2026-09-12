@@ -1,10 +1,36 @@
 import { apiFetch } from "./client";
 
+/**
+ * Os grupos musculares que o servidor conhece — espelho de
+ * `api/src/services/muscleGroups.ts`.
+ *
+ * É o vocabulário gravado, então tem que bater letra por letra: um valor fora
+ * desta lista é recusado pelo zod na hora de salvar o treino. A REGRA de
+ * resolver nome→músculo continua só no servidor; aqui é a lista de opções que
+ * a pessoa vê quando o app não reconheceu o exercício.
+ */
+export const MUSCLE_GROUPS = [
+  "Peito",
+  "Costas",
+  "Quadríceps",
+  "Posterior de coxa",
+  "Glúteo",
+  "Panturrilha",
+  "Ombro",
+  "Trapézio",
+  "Bíceps",
+  "Tríceps",
+  "Abdômen",
+  "Corpo todo",
+] as const;
+
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
+
 export interface ExerciseDef {
   id: string;
   name: string;
   nameEn?: string;
-  muscle: string;
+  muscle: MuscleGroup;
   equipment: string;
   unilateral?: boolean;
   category: "musculacao" | "calistenia";

@@ -34,6 +34,7 @@ import { legendaSugerida } from "../lib/crossfitResumo";
 import { proporcaoDaFoto } from "../lib/proporcaoDaFoto";
 import { colors, radius, spacing, sportColor, type as typeScale } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { tituloPorMusculos, musculosDe } from "../lib/musculos";
 
 function mmss(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -41,16 +42,25 @@ function mmss(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 // Prévia enxuta do treino anexado no compositor.
+//
+// Tem que dizer o MESMO que o card vai dizer depois de publicado — senão a
+// prévia mente sobre o que a pessoa está prestes a postar. Quem monta o card de
+// verdade é o servidor (`api/src/routes/social.ts`, `activitySummary`).
 function workoutTitle(a: Activity): string {
   const pl = (a.payload ?? {}) as { name?: string; activityName?: string };
   if (a.kind === "wod" && pl.name) return pl.name;
   if (a.kind === "generic" && pl.activityName) return pl.activityName;
+  if (a.kind === "strength") {
+    const musculos = tituloPorMusculos(musculosDe(a.metrics));
+    if (musculos) return musculos;
+  }
   return a.title?.trim() || sportLabel(a.sportId);
 }
 function workoutStats(a: Activity): string[] {
   const m = a.metrics ?? {};
   const out: string[] = [];
-  if (a.kind === "strength" && m.volumeTotalKg) out.push(`${Math.round(m.volumeTotalKg)} kg`);
+  // Força não mostra carga total aqui: ela é métrica de acompanhamento e vive
+  // no detalhe do treino. O assunto do post é o que foi treinado.
   if (a.kind === "endurance" && m.distanceKm) out.push(`${Math.round(m.distanceKm * 100) / 100} km`);
   if (a.durationSec) out.push(mmss(a.durationSec));
   return out;

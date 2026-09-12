@@ -1,5 +1,6 @@
 import type { PayloadDeCrossfit, Leitura } from "./crossfit";
 import { apiFetch } from "./client";
+import type { MuscleGroup } from "./library";
 
 export interface StrengthSetInput {
   type?: "aquecimento" | "valida" | "drop" | "falha" | "rest_pause" | "backoff";
@@ -10,6 +11,11 @@ export interface StrengthSetInput {
 export interface StrengthExerciseInput {
   name: string;
   sets: StrengthSetInput[];
+  /** Id do catálogo, quando o exercício veio do autocomplete. */
+  exerciseId?: string | null;
+  /** O músculo — herdado do catálogo ou marcado pela pessoa. Sem isto o
+   *  servidor ainda resolve pelo nome; com isto ele não precisa adivinhar. */
+  muscle?: MuscleGroup | null;
 }
 
 interface CommonInput {
@@ -80,6 +86,10 @@ export interface ActivityMetrics {
   minutes?: number;
   volumeTotalKg?: number;
   seriesValidas?: number;
+  /** Força: os grupos do treino, do mais trabalhado para o menos. */
+  musculos?: MuscleGroup[];
+  /** Força: séries válidas por grupo. */
+  seriesPorGrupo?: Partial<Record<MuscleGroup, number>>;
   distanceKm?: number;
   avgPaceSecPerKm?: number;
   speedKmh?: number;

@@ -2,6 +2,7 @@
 import type { Workout, Diet, Session } from "../api/plans";
 import type { Post } from "../api/social";
 import type { Activity } from "../api/activities";
+import type { MuscleGroup } from "../api/library";
 
 export type AuthStackParams = {
   Login: undefined;
@@ -50,7 +51,15 @@ export type AppStackParams = {
   RegisterActivity: {
     sportId: string;
     // "Repetir último": pré-preenche os exercícios/séries a partir do último treino.
-    prefill?: { name: string; sets: { weightKg: string; reps: string }[] }[];
+    // Leva também o vínculo com o catálogo — sem ele, repetir um treino
+    // transformava exercícios escolhidos da lista em nomes digitados, e a tela
+    // abria perguntando o músculo de coisa que ela já sabia.
+    prefill?: {
+      name: string;
+      sets: { weightKg: string; reps: string }[];
+      exerciseId?: string | null;
+      muscle?: MuscleGroup | null;
+    }[];
   };
   RegisterEndurance: { sportId: string };
   RegisterClass: { sportId: string };

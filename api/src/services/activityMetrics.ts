@@ -1,4 +1,5 @@
 import type { StrengthPayload, ActivityCreateInput } from "../models/Activity.js";
+import { resolveMuscle, isMuscleGroup, type MuscleGroup } from "./muscleGroups.js";
 import {
   normalizarWod,
   blocoPrincipal,
@@ -11,6 +12,11 @@ import {
 export interface StrengthMetrics {
   volumeTotalKg: number;
   seriesValidas: number;
+  /** Séries válidas por grupo muscular — alimenta o card e o alerta de
+   *  desequilíbrio do coach (docs/ESPORTES.md §4.3). */
+  seriesPorGrupo: Partial<Record<MuscleGroup, number>>;
+  /** Os grupos do treino, do mais trabalhado para o menos. */
+  musculos: MuscleGroup[];
 }
 
 /**
@@ -22,7 +28,12 @@ export function computeMetrics(input: ActivityCreateInput): Record<string, unkno
   switch (input.kind) {
     case "strength": {
       const m = computeStrengthMetrics(input.payload);
-      return { volumeTotalKg: m.volumeTotalKg, seriesValidas: m.seriesValidas };
+      return {
+        volumeTotalKg: m.volumeTotalKg,
+        seriesValidas: m.seriesValidas,
+        seriesPorGrupo: m.seriesPorGrupo,
+        musculos: m.musculos,
+      };
     }
     case "endurance": {
       const distanceKm = input.payload.distanceM / 1000;
@@ -107,13 +118,67 @@ export function computeStrengthMetrics(payload: StrengthPayload): StrengthMetric
   let volumeTotalKg = 0;
   let seriesValidas = 0;
 
-  for (const exercise of payload.exercises) {
-    for (const set of exercise.sets) {
+  const seriesPorGrupo: Partial<Record<MuscleGroup, number>> = {};
+  const volumePorGrupo: Partial<Record<MuscleGroup, number>> = {};
+
+  // `?? []` e `Array.isArray`: esta função também é chamada na LEITURA, com o
+  // payload cru do Mongo (o campo é `Mixed`), que não passou pelo zod de hoje.
+  for (const exercise of Array.isArray(payload?.exercises) ? payload.exercises : []) {
+    if (!exercise) continue;
+    // Um exercício resolve para um grupo uma vez, não a cada série.
+    const grupo = resolveMuscle(exercise);
+
+    for (const set of Array.isArray(exercise.sets) ? exercise.sets : []) {
       if (set.type !== "valida") continue;
       seriesValidas += 1;
-      volumeTotalKg += (set.weightKg ?? 0) * (set.reps ?? 0);
+      const volume = (set.weightKg ?? 0) * (set.reps ?? 0);
+      volumeTotalKg += volume;
+
+      // Exercício que não resolve fica de fora da conta por grupo, mas continua
+      // no volume total: a pessoa levantou aquilo, só não se sabe com o quê.
+      if (!grupo) continue;
+      seriesPorGrupo[grupo] = (seriesPorGrupo[grupo] ?? 0) + 1;
+      volumePorGrupo[grupo] = (volumePorGrupo[grupo] ?? 0) + volume;
     }
   }
 
-  return { volumeTotalKg, seriesValidas };
+  // Do mais trabalhado para o menos: séries primeiro, porque é o que define o
+  // foco do dia; volume desempata; o nome desempata o desempate, para a mesma
+  // entrada dar sempre a mesma ordem.
+  const musculos = (Object.keys(seriesPorGrupo) as MuscleGroup[]).sort((a, b) => {
+    const porSerie = (seriesPorGrupo[b] ?? 0) - (seriesPorGrupo[a] ?? 0);
+    if (porSerie !== 0) return porSerie;
+    const porVolume = (volumePorGrupo[b] ?? 0) - (volumePorGrupo[a] ?? 0);
+    if (porVolume !== 0) return porVolume;
+    return a.localeCompare(b, "pt-BR");
+  });
+
+  return { volumeTotalKg, seriesValidas, seriesPorGrupo, musculos };
+}
+
+/**
+ * Os músculos de um treino de força já gravado.
+ *
+ * Prefere o que foi calculado no save. Cai no payload para os treinos gravados
+ * antes de o campo existir — assim o feed e o perfil não esperam o backfill.
+ *
+ * Os dois caminhos passam pela MESMA ordenação de `computeStrengthMetrics`, de
+ * propósito: se o fallback ordenasse diferente, um treino antigo e um novo
+ * apareceriam com os músculos em ordens distintas no mesmo feed — e rodar o
+ * backfill mudaria o título de posts que já estavam publicados, sem ninguém ter
+ * editado nada.
+ */
+export function musculosDoTreinoSalvo(a: {
+  metrics?: { musculos?: unknown } | null;
+  payload?: unknown;
+}): MuscleGroup[] {
+  // Filtra ANTES de decidir: uma lista gravada só com valor fora do vocabulário
+  // (rename futuro, dado de teste) não pode virar "sei que não é nada" e cortar
+  // o fallback — o payload ainda sabe responder.
+  const salvos = Array.isArray(a.metrics?.musculos)
+    ? a.metrics.musculos.filter(isMuscleGroup)
+    : [];
+  if (salvos.length) return salvos;
+
+  return computeStrengthMetrics(a.payload as StrengthPayload).musculos;
 }

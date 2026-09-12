@@ -1,12 +1,18 @@
 // Catálogo curado de exercícios (musculação + calistenia) para o autocomplete do
 // registro de força. Conjunto inicial correto; expandir é só acrescentar itens.
 // Referência: docs/ESPORTES.md §10.
+//
+// `muscle` é o vocabulário fechado de `muscleGroups.ts` — import de TIPO, que
+// o compilador apaga: quem resolve nome→músculo lê ESTE catálogo, e um ciclo
+// em tempo de execução travaria os dois.
+
+import type { MuscleGroup } from "./muscleGroups.js";
 
 export interface ExerciseDef {
   id: string;
   name: string;
   nameEn?: string;
-  muscle: string; // grupo muscular primário
+  muscle: MuscleGroup; // grupo muscular primário
   equipment: string;
   unilateral?: boolean;
   category: "musculacao" | "calistenia";

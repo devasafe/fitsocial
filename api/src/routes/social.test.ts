@@ -282,6 +282,203 @@ describe("Rede social", () => {
     expect(wodPost.activity.movements[0]).toBe("5  Pull-ups");
   });
 
+  it("treino de musculação leva os MÚSCULOS no título, não a carga total", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 3600,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            {
+              name: "Agachamento livre",
+              sets: [
+                { type: "valida", weightKg: 100, reps: 5, done: true },
+                { type: "valida", weightKg: 100, reps: 5, done: true },
+              ],
+            },
+            {
+              name: "Panturrilha em pé",
+              sets: [{ type: "valida", weightKg: 80, reps: 15, done: true }],
+            },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { kind?: string; title?: string } }) =>
+        p.activity?.kind === "strength" && p.activity.title === "Quadríceps · Panturrilha"
+    );
+    expect(post).toBeTruthy();
+
+    // Carga total é métrica de acompanhamento: vive no detalhe, não no feed.
+    expect(post.activity.stats.join(" ")).not.toMatch(/kg/);
+    expect(post.activity.stats.join(" ")).not.toMatch(/exercício/);
+    expect(post.activity.stats).toEqual(["60:00"]);
+
+    // E os exercícios aparecem, pelo mesmo formatador do cartão de compartilhar.
+    expect(post.activity.movements).toEqual([
+      "2×5  Agachamento livre  100 kg",
+      "1×15  Panturrilha em pé  80 kg",
+    ]);
+  });
+
+  it("treino de corpo inteiro corta em três músculos e diz quantos sobraram", async () => {
+    const serie = { type: "valida", weightKg: 40, reps: 10, done: true };
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 3600,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            // Peito ganha com 2 séries; os outros empatam em 1 e desempatam
+            // por volume e depois por nome.
+            { name: "Supino reto", sets: [serie, serie] },
+            { name: "Remada curvada", sets: [{ ...serie, weightKg: 60 }] },
+            { name: "Agachamento livre", sets: [{ ...serie, weightKg: 50 }] },
+            { name: "Rosca direta", sets: [{ ...serie, weightKg: 20 }] },
+            { name: "Tríceps corda", sets: [{ ...serie, weightKg: 15 }] },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { id?: string } }) => p.activity?.id === create.body.data.id
+    );
+
+    expect(post.activity.title).toBe("Peito · Costas · Quadríceps +2");
+  });
+
+  it("o nome que a pessoa deu ao treino ganha dos músculos", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        title: "Treino do inferno",
+        durationSec: 600,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            { name: "Supino reto", sets: [{ type: "valida", weightKg: 80, reps: 8, done: true }] },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { id?: string } }) => p.activity?.id === create.body.data.id
+    );
+    expect(post.activity.title).toBe("Treino do inferno");
+  });
+
+  it("treino antigo, sem músculo gravado, é resolvido na leitura", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 1800,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            { name: "Supino reto", sets: [{ type: "valida", weightKg: 80, reps: 8, done: true }] },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    // Simula o histórico: tudo que foi gravado antes desta mudança não tem
+    // `musculos` em metrics. O feed não pode depender de um backfill ter rodado.
+    await mongoose.connection
+      .collection("activities")
+      .updateOne(
+        { _id: new mongoose.Types.ObjectId(create.body.data.id) },
+        { $unset: { "metrics.musculos": "", "metrics.seriesPorGrupo": "" } }
+      );
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { id?: string } }) => p.activity?.id === create.body.data.id
+    );
+    expect(post.activity.title).toBe("Peito");
+  });
+
+  it("sem nenhum músculo reconhecido, o título volta a ser o esporte", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 600,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            {
+              name: "aquele aparelho do canto",
+              sets: [{ type: "valida", weightKg: 30, reps: 10, done: true }],
+            },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { id?: string } }) => p.activity?.id === create.body.data.id
+    );
+    expect(post.activity.title).toBe("Musculação");
+  });
+
+  it("o músculo marcado no registro ganha do nome do exercício", async () => {
+    const create = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${bruno.token}`)
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 600,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            {
+              name: "maquina nova da academia",
+              muscle: "Costas",
+              sets: [{ type: "valida", weightKg: 50, reps: 10, done: true }],
+            },
+          ],
+        },
+        shareToFeed: true,
+      });
+    expect(create.status).toBe(201);
+
+    const feed = await request(app).get("/social/feed").set("Authorization", `Bearer ${ana.token}`);
+    const post = feed.body.posts.find(
+      (p: { activity?: { id?: string } }) => p.activity?.id === create.body.data.id
+    );
+    expect(post.activity.title).toBe("Costas");
+  });
+
   it("GET /social/search acha por username e por nome, excluindo você", async () => {
     const byUsername = await request(app)
       .get("/social/search?q=brun")
