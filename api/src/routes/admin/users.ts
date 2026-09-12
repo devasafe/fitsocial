@@ -9,7 +9,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { HttpError } from "../../utils/httpError.js";
 import { encodeCursorCriacao, decodeCursorCriacao } from "../../utils/cursor.js";
 import { banir, desbanir, suspender, definirVisibilidade, serializeUser } from "../../services/adminUsers.js";
-import { concederPremium, revogarPremium } from "../../services/entitlement.js";
+import { concederPremium, concederPro, revogarPremium, revogarPro } from "../../services/entitlement.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
 
 export const adminUsersRouter = Router();
@@ -170,6 +170,41 @@ adminUsersRouter.post(
 
     const r = await revogarPremium(req.user!, alvo, reason);
     res.json({ data: serializeUser(r.user), meta: { aindaPremiumPor: r.aindaPremiumPor } });
+  })
+);
+
+const proSchema = z.object({
+  capacidade: z.enum(["coach", "nutri"]),
+  grant: z.boolean(),
+  durationDays: z.number().int().positive().max(3650).nullable().default(null),
+  /** Teto de alunos. Ausente mantém o que a conta já tinha. */
+  limite: z.number().int().min(1).max(500).optional(),
+  reason: motivoSchema,
+});
+
+/**
+ * Libera ou tira o acesso profissional (coach/nutri).
+ *
+ * Existe ao lado do `scripts/grantPro.ts` porque o script é como o PRIMEIRO
+ * profissional entra — antes de haver tela — e continua servindo para
+ * emergência. O dia a dia é aqui: liberar alguém não pode depender de acesso
+ * ao terminal do container.
+ *
+ * Não é escalada de privilégio, diferente de `role`: quem recebe ganha a
+ * possibilidade de convidar alunos, e cada aluno ainda precisa aceitar.
+ */
+adminUsersRouter.post(
+  "/:id/pro",
+  asyncHandler(async (req, res) => {
+    const { capacidade, grant, durationDays, limite, reason } = proSchema.parse(req.body);
+    const alvo = await carregar(req.params.id);
+
+    if (grant) {
+      await concederPro(req.user!, alvo, capacidade, durationDays, reason, limite);
+    } else {
+      await revogarPro(req.user!, alvo, capacidade, reason);
+    }
+    res.json({ data: serializeUser(alvo), meta: {} });
   })
 );
 

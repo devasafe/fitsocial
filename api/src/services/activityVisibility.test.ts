@@ -130,7 +130,10 @@ describe("o profissional e os treinos do aluno", () => {
     expect(paraOCoach).not.toHaveProperty("polyline");
   });
 
-  it("quem liga routesPublic mostra a rota para todos, inclusive o coach", async () => {
+  // O ajuste que liberava a rota foi aposentado. O campo pode continuar
+  // gravado em contas antigas, e não vale mais nada — é este teste que impede
+  // alguém de voltar a respeitá-lo sem perceber.
+  it("nem o ajuste antigo devolve a rota para o profissional", async () => {
     const { coach, aluno } = await dupla();
     aluno.set("settings.routesPublic", true);
     await aluno.save();
@@ -138,6 +141,16 @@ describe("o profissional e os treinos do aluno", () => {
     const payload = { distanceM: 5000, points: [{ lat: -23.5, lng: -46.6 }] };
     const paraOCoach = await podarRotaSePrivada(payload, aluno._id, coach._id);
 
-    expect(paraOCoach).toHaveProperty("points");
+    expect(paraOCoach).not.toHaveProperty("points");
+    expect(paraOCoach.distanceM).toBe(5000);
+  });
+
+  it("o dono continua vendo o próprio percurso", async () => {
+    const { aluno } = await dupla();
+    const payload = { distanceM: 5000, points: [{ lat: -23.5, lng: -46.6 }] };
+
+    const paraEleMesmo = await podarRotaSePrivada(payload, aluno._id, aluno._id);
+
+    expect(paraEleMesmo).toHaveProperty("points");
   });
 });

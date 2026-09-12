@@ -195,7 +195,11 @@ describe("Rota de GPS", () => {
     expect(detalhe.body.data.payload.points?.length).toBeGreaterThan(0);
   });
 
-  it("com rotas públicas, o traçado sai", async () => {
+  // Havia um interruptor que liberava o traçado para todo mundo. Ele foi
+  // aposentado em 12/09/2026: o mapa diz de que porta a pessoa sai e a que
+  // horas, e isso deixou de ser uma escolha de configuração. O GPS existe para
+  // ELA registrar onde correu.
+  it("nem com o ajuste antigo ligado o traçado sai para outra pessoa", async () => {
     const dono = await registrar("corredor@teste.com");
     const visitante = await registrar("visitante@teste.com");
     await tornarTreinosPublicos(dono.token);
@@ -203,7 +207,11 @@ describe("Rota de GPS", () => {
     const criada = await request(app).post("/activities").set(auth(dono.token)).send(corrida);
 
     const detalhe = await request(app).get(`/activities/${criada.body.data.id}`).set(auth(visitante.token));
-    expect(detalhe.body.data.payload.points?.length).toBeGreaterThan(0);
+
+    expect(detalhe.body.data.payload.points).toBeUndefined();
+    expect(detalhe.body.data.payload.polyline).toBeUndefined();
+    // E o treino continua visível: esconder a rota não é esconder a corrida.
+    expect(detalhe.body.data.metrics.distanceKm).toBeGreaterThan(0);
   });
 });
 

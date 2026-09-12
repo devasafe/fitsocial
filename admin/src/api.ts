@@ -131,6 +131,11 @@ export interface UsuarioAdmin {
   statusReason: string;
   suspendedUntil: string | null;
   contentVisible: boolean;
+  /** Capacidade profissional: quem já é coach/nutri, com que teto e até quando. */
+  pro?: {
+    coach: { ativo: boolean; limite: number; validoAte: string | null };
+    nutri: { ativo: boolean; limite: number; validoAte: string | null };
+  };
   createdAt: string;
 }
 
@@ -167,6 +172,27 @@ export const desbanirUsuario = (token: string, id: string, reason: string) =>
 
 export const suspenderUsuario = (token: string, id: string, until: string, reason: string) =>
   api<UsuarioAdmin>(`/admin/users/${id}/suspend`, { method: "POST", body: { until, reason }, token });
+
+/**
+ * Libera ou tira o acesso profissional.
+ *
+ * `limite` ausente mantém o teto que a conta já tinha — renovar o acesso de um
+ * coach não pode devolvê-lo ao padrão sem querer.
+ */
+export const definirPro = (
+  token: string,
+  id: string,
+  capacidade: "coach" | "nutri",
+  grant: boolean,
+  durationDays: number | null,
+  reason: string,
+  limite?: number
+) =>
+  api<UsuarioAdmin>(`/admin/users/${id}/pro`, {
+    method: "POST",
+    body: { capacidade, grant, durationDays, reason, limite },
+    token,
+  });
 
 export const definirPremium = (
   token: string,

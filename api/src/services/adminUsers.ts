@@ -3,6 +3,7 @@ import { User, type UserDoc } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
 import { recordAudit, maskEmail } from "./adminAudit.js";
 import { definirVisibilidadeDoConteudo, invalidarOcultos } from "./moderation.js";
+import { limiteDeAlunos, temCapacidade } from "./entitlement.js";
 
 /** Estado que o painel mostra — já resolve suspensão vencida, para a lista não
  *  mentir enquanto a pessoa não tenta acessar o app. */
@@ -39,6 +40,20 @@ export function serializeUser(u: UserDoc) {
     suspendedUntil: u.suspendedUntil ?? null,
     contentVisible: u.contentVisible !== false,
     deletedAt: u.deletedAt ?? null,
+    // Capacidade profissional: o painel precisa mostrar quem ja e coach/nutri
+    // e com que teto, senao liberar vira adivinhacao.
+    pro: {
+      coach: {
+        ativo: temCapacidade(u, "coach"),
+        limite: limiteDeAlunos(u, "coach"),
+        validoAte: u.pro?.coach?.validoAte ?? null,
+      },
+      nutri: {
+        ativo: temCapacidade(u, "nutri"),
+        limite: limiteDeAlunos(u, "nutri"),
+        validoAte: u.pro?.nutri?.validoAte ?? null,
+      },
+    },
     createdAt: u.get("createdAt") as Date,
   };
 }

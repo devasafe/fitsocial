@@ -77,24 +77,29 @@ export async function podeVerAtividade(
   return false;
 }
 
-/** O traçado de GPS sai do payload quando o dono não o tornou público.
+/**
+ * O traçado de GPS nunca sai para outra pessoa. Nem para seguidor, nem para o
+ * profissional que acompanha, nem se o treino for público.
  *
- *  Distância, tempo e ritmo continuam; só o caminho some. Devolve uma cópia —
- *  mexer no documento carregado arriscaria persistir a versão podada. */
+ * Antes havia um interruptor (`settings.routesPublic`) que permitia mostrar o
+ * percurso a todo mundo. Ele foi aposentado em 12/09/2026, por decisão de
+ * produto: o mapa diz por onde a pessoa passou e, principalmente, de que porta
+ * ela sai e a que horas. O GPS existe para ELA registrar onde correu — não
+ * para virar rastro que alguém acompanha.
+ *
+ * Distância, tempo e ritmo continuam saindo; só o caminho some. Devolve uma
+ * cópia: mexer no documento carregado arriscaria persistir a versão podada.
+ *
+ * Continua `async` porque é chamada com `await` em vários lugares e a
+ * assinatura é contrato — mudar isso aqui seria uma mudança grande por um
+ * ganho nenhum.
+ */
 export async function podarRotaSePrivada<T extends Record<string, unknown>>(
   payload: T,
   donoId: mongoose.Types.ObjectId,
   espectadorId: mongoose.Types.ObjectId
 ): Promise<T> {
   if (donoId.equals(espectadorId)) return payload;
-
-  // A rota continua saindo para o profissional, mesmo com o vínculo aberto.
-  //
-  // Ver os treinos é uma coisa; saber de que porta a pessoa sai para correr
-  // todo dia é outra, e ela não foi perguntada sobre isso. Quem quiser mostrar
-  // o percurso liga `routesPublic`, que vale para todo mundo.
-  const dono = await User.findById(donoId).select("settings");
-  if (dono?.settings?.routesPublic === true) return payload;
 
   const { points, polyline, ...resto } = payload as Record<string, unknown>;
   void points;
