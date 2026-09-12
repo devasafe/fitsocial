@@ -1,10 +1,9 @@
-import React, { useCallback, useState } from "react";
-import { View, Image, AppState } from "react-native";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import React from "react";
+import { View, Image } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useAuth } from "../context/AuthContext";
 import { Txt, Card, Button } from "./ui";
-import { buscarAvisos, rotuloDoPapel, type Avisos } from "../api/pro";
+import { rotuloDoPapel, type Avisos } from "../api/pro";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -15,17 +14,12 @@ import type { AppStackParams } from "../navigation/types";
  * convite que ninguém respondeu deixa um profissional esperando; uma mensagem
  * não lida deixa uma conversa pela metade.
  *
- * Aparece SOZINHO, sem recarregar a tela: enquanto a Home está na frente da
- * pessoa, pergunta a cada vinte segundos se há algo novo. Vinte, e não oito
- * como na conversa, porque aqui ninguém está esperando resposta — é um aviso
- * que pode chegar com meio minuto de atraso sem prejuízo nenhum, e a Home fica
- * aberta muito mais tempo que uma conversa.
+ * Os dados chegam de fora (`useAcompanhamento`, na Home): o cartão do treinador
+ * precisa da MESMA resposta, e dois relógios batendo na mesma rota seria pagar
+ * duas vezes por ela.
  *
  * Some inteiro quando não há nada pendente: no dia a dia, não custa espaço.
  */
-const DE_QUANTO_EM_QUANTO_MS = 20_000;
-
-const VAZIO: Avisos = { convites: [], conversas: [] };
 
 function Avatar({ url, tamanho = 44 }: { url?: string; tamanho?: number }) {
   if (url) {
@@ -48,38 +42,8 @@ function Avatar({ url, tamanho = 44 }: { url?: string; tamanho?: number }) {
   );
 }
 
-export function AvisosDoAcompanhamento() {
+export function AvisosDoAcompanhamento({ avisos }: { avisos: Avisos }) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const { token } = useAuth();
-  const [avisos, setAvisos] = useState<Avisos>(VAZIO);
-
-  useFocusEffect(
-    useCallback(() => {
-      let vivo = true;
-
-      // Silencioso de propósito: é um extra da Home, e uma falha aqui não pode
-      // encher a tela de erro sobre algo que talvez nem exista.
-      const buscar = () => {
-        if (AppState.currentState !== "active") return;
-        buscarAvisos(token!)
-          .then((r) => vivo && setAvisos(r))
-          .catch(() => vivo && setAvisos(VAZIO));
-      };
-
-      buscar();
-      const relogio = setInterval(buscar, DE_QUANTO_EM_QUANTO_MS);
-      // Voltar para o app é quando mais provavelmente há algo novo.
-      const sub = AppState.addEventListener("change", (estado) => {
-        if (estado === "active") buscar();
-      });
-
-      return () => {
-        vivo = false;
-        clearInterval(relogio);
-        sub.remove();
-      };
-    }, [token])
-  );
 
   if (avisos.convites.length === 0 && avisos.conversas.length === 0) return null;
 
@@ -104,6 +68,11 @@ export function AvisosDoAcompanhamento() {
         </Card>
       ))}
 
+      {/* O treinador tem cartão próprio na Home — mas ele fica DEPOIS de
+          constância, comida e água. Enquanto há mensagem não lida, ela sobe
+          para cá, que é o topo: o aviso de um treino novo é a primeira coisa
+          que a pessoa precisa ver, não a sexta. Sem nada para ler, some daqui
+          e o cartão dele lá embaixo basta. */}
       {avisos.conversas.map((c) => (
         <Card key={c.id} level={1}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>

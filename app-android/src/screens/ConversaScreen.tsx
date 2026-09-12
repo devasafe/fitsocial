@@ -283,6 +283,16 @@ export function ConversaScreen() {
 
               {item.texto ? <Txt variant="body">{item.texto}</Txt> : null}
 
+              {/* A mensagem que anuncia um treino leva até ele. Sem isto, o
+                  aluno lê "atualizei seu treino" e tem de ir procurar onde. */}
+              {item.plan && !meu ? (
+                <Pressable onPress={() => nav.navigate("TodayWorkout")} style={{ marginTop: spacing.s8 }}>
+                  <Txt variant="label" color={colors.lime}>
+                    Ver treino ›
+                  </Txt>
+                </Pressable>
+              ) : null}
+
               <Txt variant="caption" color={colors.text3} style={{ marginTop: 4 }}>
                 {new Date(item.createdAt).toLocaleString("pt-BR", {
                   day: "2-digit",

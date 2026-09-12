@@ -18,6 +18,8 @@ import {
 } from "../components/CenaContext";
 import { Txt, Screen, Card, Button, MetricTile } from "../components/ui";
 import { AvisosDoAcompanhamento } from "../components/AvisosDoAcompanhamento";
+import { CartaoDoTreinador } from "../components/CartaoDoTreinador";
+import { useAcompanhamento, treinadorDe } from "../hooks/useAcompanhamento";
 import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { CoachSheet } from "../components/CoachSheet";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
@@ -77,6 +79,28 @@ export function HomeScreen() {
   const programacao = user?.settings?.programacao ?? null;
   const seguePropria = programacao === "propria";
 
+  /**
+   * Quem tem treinador não recebe treino da IA.
+   *
+   * Uma pergunta só serve os dois cartões daqui (este e o de avisos), e ela já
+   * era feita: a Home pergunta por convites e mensagens a cada vinte segundos.
+   * Com o treinador na mesma resposta, o cartão dele aparece e some sozinho,
+   * sem recarregar a tela.
+   *
+   * O servidor recusa `POST /plans/generate` para quem tem treinador — esconder
+   * os botões aqui é o mesmo assunto dito na tela, e não a regra em si.
+   */
+  const acompanhamento = useAcompanhamento();
+  const treinador = treinadorDe(acompanhamento);
+  /**
+   * Enquanto não sei, não decido.
+   *
+   * Sem isto, toda abertura da Home piscava o cartão da IA e a oferta de gerar
+   * um plano antes de a resposta chegar — para quem tem treinador, um convite
+   * de alguns quadros para fazer o que o servidor vai recusar.
+   */
+  const seiQuemCuida = acompanhamento.carregado;
+
   async function escolherProgramacao(escolha: "plano" | "propria" | null, evento?: ToqueBruto) {
     setOrigemDaGota(origemDoToque(evento));
     setEscolhendoProgramacao(true);
@@ -90,6 +114,16 @@ export function HomeScreen() {
       setEscolhendoProgramacao(false);
     }
   }
+
+  /**
+   * O treino prescrito chega pelo poll; o plano, não.
+   *
+   * `load()` só roda no foco da tela. Quem está com a Home aberta esperando o
+   * primeiro treino via o cartão do treinador mudar lá embaixo enquanto o
+   * cartão principal continuava dizendo "assim que ele montar" — até sair da
+   * tela e voltar. O id da última prescrição é o sinal de que há o que buscar.
+   */
+  const ultimaPrescricao = treinador?.ultima?.plan ?? null;
 
   const reloadDay = useCallback(() => {
     getDay(token!, todayStr())
@@ -140,6 +174,12 @@ export function HomeScreen() {
     }, [load])
   );
 
+  // Prescrição nova detectada pelo poll: busca o plano sem esperar a pessoa
+  // sair da tela e voltar.
+  useEffect(() => {
+    if (ultimaPrescricao) void load();
+  }, [ultimaPrescricao, load]);
+
   async function handleGenerate() {
     setGenerating(true);
     setErroPlano(null);
@@ -152,7 +192,12 @@ export function HomeScreen() {
       } else {
         // Fica na tela, com botão de tentar de novo, em vez de um alerta que
         // some e deixa a pessoa sem saber o que fazer.
+        // Avisa TAMBÉM por notificação: o `erroPlano` só é desenhado dentro do
+        // cartão "Como você treina?", que não existe para quem já tem treino —
+        // e aí a mensagem do servidor ("quem escreve o seu treino é o seu
+        // treinador") era jogada fora e o botão parecia não funcionar.
         setErroPlano((err as Error).message);
+        notify("Não deu para gerar", (err as Error).message);
       }
     } finally {
       setGenerating(false);
@@ -280,7 +325,7 @@ export function HomeScreen() {
       {/* Antes de tudo, inclusive do cabeçalho: é o que alguém está esperando
           de você — um convite sem resposta ou uma mensagem sem ler. Some
           sozinho quando não há nada pendente. */}
-      <AvisosDoAcompanhamento />
+      <AvisosDoAcompanhamento avisos={acompanhamento} />
 
       {/* Cabeçalho */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -320,9 +365,27 @@ export function HomeScreen() {
           <Txt variant="label" color={colors.text2}>
             Treino de hoje
           </Txt>
-          <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
+          <Txt variant="titleSection" style={{ marginTop: 2 }}>
             {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
           </Txt>
+          {/* Quem assinou. Só aparece quando há um nome para dizer: sem
+              treinador, "seu coach" já é como o resto da tela chama a IA, e
+              dois nomes para o mesmo sujeito na mesma tela confundem mais do
+              que a ausência do rótulo. */}
+          {plan.autor ? (
+            <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+              prescrito por {plan.autor.nome}
+            </Txt>
+          ) : treinador ? (
+            // O plano é o velho, da IA, e já existe treinador: dizer isso é
+            // melhor que deixar a tela afirmar duas coisas opostas ao mesmo
+            // tempo — "montado pela assistente" aqui e "Fulana cuida do seu
+            // treino" no cartão abaixo.
+            <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+              {`montado antes de ${treinador.profissional.nome.split(" ")[0]} assumir`}
+            </Txt>
+          ) : null}
+          <View style={{ height: spacing.md }} />
           <Button title="Começar treino" onPress={(e) => void startToday(e)} size="lg" glow />
           <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
             <Txt variant="label" color={colors.text2}>
@@ -346,6 +409,28 @@ export function HomeScreen() {
               Ver meus treinos
             </Txt>
           </TouchableOpacity>
+        </Card>
+      ) : (
+        !seiQuemCuida ? null : treinador ? (
+        /* Com treinador, não há o que escolher: o treino dele está a caminho.
+           Oferecer "montar um plano pra mim" aqui seria a IA disputando o lugar
+           de quem já foi contratado — e o servidor recusaria de qualquer jeito. */
+        <Card level={2} style={{ marginTop: spacing.sm }}>
+          <Txt variant="titleCard">{treinador.profissional.nome} cuida do seu treino</Txt>
+          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
+            Assim que o treino estiver pronto, ele aparece aqui — e você recebe um aviso.
+          </Txt>
+          <Button
+            title={`Falar com ${treinador.profissional.nome.split(" ")[0]}`}
+            variant="secondary"
+            onPress={() =>
+              navigation.navigate("Conversa", {
+                linkId: treinador.id,
+                nome: treinador.profissional.nome,
+              })
+            }
+            style={{ marginTop: spacing.md }}
+          />
         </Card>
       ) : (
         /* Ainda não escolheu. Três caminhos, e nenhum deles é obrigatório. */
@@ -389,6 +474,7 @@ export function HomeScreen() {
             </View>
           )}
         </Card>
+      )
       )}
 
       {/* ---- Daqui para baixo, nada depende de existir um plano ----
@@ -420,30 +506,54 @@ export function HomeScreen() {
 
       <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
 
-      {/* Coach contextual */}
-      <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
-        <Card>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
-            <Txt variant="titleCard" color={colors.lime}>✦</Txt>
-            <Txt variant="titleCard">Seu coach</Txt>
-          </View>
-          {stats && (
-            <Txt variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
-              {coachLine(stats)}
+      {/* Quem cuida do treino. Gente, quando há gente — e aí a IA desce para
+          onde ela continua útil: tirar dúvida, e não mandar no plano. */}
+      {!seiQuemCuida ? null : treinador ? (
+        <>
+          <CartaoDoTreinador
+            treinador={treinador}
+            temTreinoDele={plan?.autor?.id === treinador.profissional.id}
+          />
+          <TouchableOpacity
+            onPress={() => setCoachOpen(true)}
+            activeOpacity={0.7}
+            style={{ alignItems: "center", paddingVertical: spacing.sm }}
+          >
+            <Txt variant="label" color={colors.text2}>
+              Tirar dúvida com a assistente ✦
             </Txt>
-          )}
-          <Txt variant="body" color={colors.text2}>
-            {plan?.summary ?? "Pergunte sobre treino, técnica ou alimentação quando quiser."}
-          </Txt>
-          <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
-            Conversar com o coach ›
-          </Txt>
-        </Card>
-      </TouchableOpacity>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
+          <Card>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
+              <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+              <Txt variant="titleCard">Seu coach</Txt>
+            </View>
+            {stats && (
+              <Txt variant="bodyStrong" style={{ marginBottom: spacing.sm }}>
+                {coachLine(stats)}
+              </Txt>
+            )}
+            <Txt variant="body" color={colors.text2}>
+              {plan?.summary ?? "Pergunte sobre treino, técnica ou alimentação quando quiser."}
+            </Txt>
+            <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
+              Conversar com o coach ›
+            </Txt>
+          </Card>
+        </TouchableOpacity>
+      )}
 
       {/* Referência: cada metade aparece só se existir. */}
       {temTreino && plan?.workout ? (
-        <NavRow title="Meu treino" sub={plan.workout.split} onPress={() => navigation.navigate("Workout", { workout: plan.workout! })} />
+        <NavRow title="Meu treino" sub={plan.workout.split} onPress={() =>
+            navigation.navigate("Workout", {
+              workout: plan.workout!,
+              prescritoPor: plan.autor?.nome,
+            })
+          } />
       ) : null}
       {temDieta && plan?.diet ? (
         <NavRow title="Minha dieta" sub={`${plan.diet.dailyCalories} kcal por dia`} onPress={() => navigation.navigate("Diet", { diet: plan.diet! })} />
@@ -465,7 +575,10 @@ export function HomeScreen() {
         </TouchableOpacity>
       )}
 
-      {temTreino ? (
+      {/* Gerar, reajustar e importar somem para quem tem treinador: os três
+          escreveriam por cima do que ele prescreveu. O servidor já recusa; o
+          que muda aqui é não oferecer um botão que só pode dar erro. */}
+      {temTreino && !treinador ? (
         /* Ações secundárias do plano de treino */
         <View style={{ flexDirection: "row", justifyContent: "center", gap: spacing.xl, marginTop: spacing.sm }}>
           <TouchableOpacity onPress={handleAdjust} disabled={adjusting} activeOpacity={0.7}>
@@ -488,7 +601,10 @@ export function HomeScreen() {
 
       {/* Voltar atrás. Sempre disponível: escolher como treina não pode ser
           uma porta de mão única. */}
-      {plan || seguePropria ? (
+      {/* Zerar também some com treinador: `DELETE /plans/current` apagaria a
+          prescrição inteira, e o treinador continuaria vendo no painel um
+          treino que não existe mais. O servidor já recusa. */}
+      {(plan || seguePropria) && !treinador ? (
         <View style={{ alignItems: "center", gap: spacing.sm, marginTop: spacing.sm }}>
           {temTreino && temDieta ? (
             <TouchableOpacity onPress={() => zerarParte("diet")} activeOpacity={0.7}>
@@ -542,6 +658,7 @@ export function HomeScreen() {
         token={token!}
         onClose={() => setCoachOpen(false)}
         onOpenSubscription={() => navigation.navigate("Subscription")}
+        temTreinador={!!treinador}
       />
     </Screen>
   );

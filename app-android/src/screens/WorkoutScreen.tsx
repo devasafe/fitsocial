@@ -11,7 +11,7 @@ import { Txt, Card, Button } from "../components/ui";
 type Props = NativeStackScreenProps<AppStackParams, "Workout">;
 
 export function WorkoutScreen({ route, navigation }: Props) {
-  const { workout } = route.params;
+  const { workout, prescritoPor } = route.params;
   const { token } = useAuth();
   const [videos, setVideos] = useState<Record<string, VideoRef | null>>({});
   const [loadingVideos, setLoadingVideos] = useState(true);
@@ -33,11 +33,23 @@ export function WorkoutScreen({ route, navigation }: Props) {
       <View style={styles.head}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Txt variant="titleScreen">{workout.split}</Txt>
-          <Button title="Editar" variant="secondary" size="sm" onPress={() => navigation.navigate("EditWorkout")} />
+          {/* Sem "Editar" no treino que um profissional assinou: a edição grava
+              no mesmo documento sem trocar o autor, e a tela passaria a dizer
+              "prescrito por Fulano" sobre um treino que a própria pessoa mudou.
+              O servidor recusa; aqui é só não oferecer. */}
+          {!prescritoPor && (
+            <Button title="Editar" variant="secondary" size="sm" onPress={() => navigation.navigate("EditWorkout")} />
+          )}
         </View>
         <Txt variant="label" color={colors.text2} style={{ marginTop: 4 }}>
           {workout.daysPerWeek} treinos por semana
         </Txt>
+        {prescritoPor && (
+          <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+            Prescrito por {prescritoPor}. Para mudar, fale com {prescritoPor.split(" ")[0]} pelo
+            acompanhamento.
+          </Txt>
+        )}
       </View>
 
       {workout.sessions.map((session, i) => (

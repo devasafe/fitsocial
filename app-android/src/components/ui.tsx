@@ -116,7 +116,11 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[typeScale.bodyStrong, { color: fg }]}>{title}</Text>
+        // Uma linha: num aparelho estreito, "Ler mensagens" ao lado de outro
+        // botão quebrava em duas e dobrava a altura do botão.
+        <Text numberOfLines={1} style={[typeScale.bodyStrong, { color: fg }]}>
+          {title}
+        </Text>
       )}
     </TouchableOpacity>
   );

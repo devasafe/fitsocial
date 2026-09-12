@@ -29,6 +29,14 @@ const messageSchema = new Schema(
     imageUrl: { type: String, default: "" },
     imageWidth: { type: Number, default: null },
     imageHeight: { type: Number, default: null },
+    /**
+     * O plano que esta mensagem anuncia, quando ela nasceu de uma prescrição.
+     *
+     * Campo ADITIVO e opcional: toda mensagem já gravada continua válida sem
+     * ele. É o que dá o "→ Ver treino" dentro do balão — sem isto, o aluno lê
+     * "atualizei seu treino" e tem de ir procurar onde.
+     */
+    plan: { type: Schema.Types.ObjectId, ref: "Plan", default: null },
     /** Quando o OUTRO lado leu. Null enquanto não leu. */
     lidaEm: { type: Date, default: null },
   },

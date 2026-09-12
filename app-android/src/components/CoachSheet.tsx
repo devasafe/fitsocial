@@ -24,11 +24,14 @@ export function CoachSheet({
   token,
   onClose,
   onOpenSubscription,
+  temTreinador = false,
 }: {
   visible: boolean;
   token: string;
   onClose: () => void;
   onOpenSubscription: () => void;
+  /** Quem tem treinador de verdade não tem DOIS coaches: aqui vira assistente. */
+  temTreinador?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -63,13 +66,27 @@ export function CoachSheet({
     try {
       const res = await sendCoachMessage(token, text);
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
+      // Com treinador, a assistente NÃO mexe no treino: o servidor recusa, e
+      // anunciar "estou refazendo seu plano" para depois se desdizer três
+      // segundos adiante é o pior tipo de erro — o que afirma que algo
+      // aconteceu e depois nega. A dieta continua sendo com ela.
+      const podeMexerNoTreino = !temTreinador;
       const ajuste = res.dietAdjustPending
         ? { rotulo: "sua dieta", executar: () => generateDiet(token!) }
-        : res.adjustPending || res.planAdjusted
+        : (res.adjustPending || res.planAdjusted) && podeMexerNoTreino
           ? { rotulo: "seu plano", executar: () => adjustPlan(token!) }
           : null;
 
-      if (ajuste) {
+      if (!ajuste && (res.adjustPending || res.planAdjusted) && temTreinador) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "Quem mexe no seu treino é o seu treinador. Manda essa para ele pelo acompanhamento — ele vê e ajusta.",
+          },
+        ]);
+      } else if (ajuste) {
         // O reajuste é uma segunda conversa com a IA e leva o seu tempo; avisa
         // que está acontecendo em vez de deixar a tela quieta.
         setMessages((prev) => [
@@ -127,7 +144,9 @@ export function CoachSheet({
                 <Txt variant="titleSection" color={colors.lime}>
                   ✦
                 </Txt>
-                <Txt variant="titleSection">Seu coach</Txt>
+                {/* "Seu coach" é cargo de uma pessoa só. Quem contratou um
+                    treinador não pode abrir a Home e encontrar dois. */}
+                <Txt variant="titleSection">{temTreinador ? "Assistente" : "Seu coach"}</Txt>
               </View>
               <TouchableOpacity onPress={onClose} hitSlop={8}>
                 <Txt variant="label" color={colors.text2}>
@@ -182,7 +201,7 @@ export function CoachSheet({
                 <TextInput
                   value={input}
                   onChangeText={setInput}
-                  placeholder="Pergunte ao seu coach…"
+                  placeholder={temTreinador ? "Tire uma dúvida…" : "Pergunte ao seu coach…"}
                   placeholderTextColor={colors.text3}
                   multiline
                   style={{ flex: 1, maxHeight: 100, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line, borderRadius: radius.chip, paddingHorizontal: spacing.md, paddingVertical: 10, color: colors.text, fontSize: 15 }}

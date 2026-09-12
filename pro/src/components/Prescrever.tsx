@@ -97,6 +97,7 @@ export function Prescrever({
   aoSalvar: () => void;
 }) {
   const [resumo, setResumo] = useState("");
+  const [recado, setRecado] = useState("");
   const [texto, setTexto] = useState("");
   const [split, setSplit] = useState("AB");
   const [erro, setErro] = useState<string | null>(null);
@@ -114,14 +115,21 @@ export function Prescrever({
     setSalvando(true);
     setErro(null);
     try {
-      await prescrever(token, alunoId, resumo.trim() || "Treino prescrito.", {
-        split: split.trim() || "Treino",
-        daysPerWeek: Math.min(Math.max(sessions.length, 1), 7),
-        sessions,
-      });
+      await prescrever(
+        token,
+        alunoId,
+        resumo.trim() || "Treino prescrito.",
+        {
+          split: split.trim() || "Treino",
+          daysPerWeek: Math.min(Math.max(sessions.length, 1), 7),
+          sessions,
+        },
+        recado
+      );
       setSalvo(true);
       setTexto("");
       setResumo("");
+      setRecado("");
       aoSalvar();
     } catch (e) {
       setErro(e instanceof ErroApi ? e.message : "Não foi possível salvar o treino.");
@@ -140,6 +148,22 @@ export function Prescrever({
           onChange={(e) => setResumo(e.target.value)}
           placeholder="Semana de adaptação, foco em técnica."
           maxLength={500}
+        />
+      </div>
+
+      {/* O treino novo chega ao aluno como mensagem sua, na conversa — e não
+          trocando sozinho na tela dele. O resumo acima vai junto; isto aqui é
+          o que você diria por cima. */}
+      <div className="campo">
+        <label htmlFor="recado">Recado para o aluno (opcional)</label>
+        <textarea
+          id="recado"
+          value={recado}
+          onChange={(e) => setRecado(e.target.value)}
+          placeholder="Foco em perna nas próximas três semanas. Qualquer dor, me avisa."
+          maxLength={1000}
+          rows={3}
+          style={{ fontFamily: "var(--corpo)" }}
         />
       </div>
 

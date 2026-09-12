@@ -329,6 +329,22 @@ export async function vinculosAtivos(
   return ProfessionalLink.find({ client: clientId, professional: professionalId, status: "ativo" });
 }
 
+/**
+ * Esta pessoa é acompanhada por um profissional deste papel?
+ *
+ * Diferente de `podeVer`: aqui a pergunta não é sobre acesso, é sobre QUEM
+ * responde pelo treino dela. Quem tem treinador não recebe treino da IA —
+ * `POST /plans/generate` criaria uma versão nova por cima da prescrição, em
+ * silêncio, e a pessoa passaria a seguir um treino que o coach dela nunca viu.
+ */
+export async function temProfissional(
+  clientId: mongoose.Types.ObjectId,
+  papel: PapelPro
+): Promise<boolean> {
+  const link = await ProfessionalLink.findOne({ client: clientId, papel, status: "ativo" }).select("_id");
+  return link != null;
+}
+
 /** O profissional pode ver esta parte da vida deste aluno? */
 export async function podeVer(
   clientId: mongoose.Types.ObjectId,
