@@ -380,6 +380,86 @@ proRouter.get(
   })
 );
 
+/**
+ * Tudo que o acompanhamento está esperando de mim, numa requisição só.
+ *
+ * A Home consultava três rotas para desenhar um card que quase sempre não
+ * aparece — e, para o card surgir sozinho sem recarregar a página, essas três
+ * teriam de se repetir a cada ciclo. Juntas numa só, o custo de perguntar
+ * "tem algo novo?" cabe num intervalo curto.
+ *
+ * Devolve o mínimo para desenhar: quem convidou, quantas mensagens, e o id
+ * para abrir. Nada de conteúdo de mensagem — isso é da tela da conversa.
+ */
+proRouter.get(
+  "/avisos",
+  asyncHandler(async (req, res) => {
+    const eu = req.user!._id;
+    const agora = new Date();
+
+    const [convites, links] = await Promise.all([
+      ProfessionalInvite.find({
+        para: eu,
+        revogadoEm: null,
+        expiraEm: { $gt: agora },
+        usosRestantes: { $gt: 0 },
+      })
+        .sort({ createdAt: -1 })
+        .populate("professional", "name username avatarUrl"),
+      ProfessionalLink.find({ client: eu, status: { $ne: "encerrado" } }).populate(
+        "professional",
+        "name username avatarUrl"
+      ),
+    ]);
+
+    type Pessoa = {
+      _id: mongoose.Types.ObjectId;
+      name: string;
+      username?: string;
+      avatarUrl?: string;
+    };
+    const comoPessoa = (p: unknown) => {
+      const x = p as Pessoa;
+      return {
+        id: x._id.toString(),
+        nome: x.name,
+        username: x.username ?? null,
+        avatarUrl: x.avatarUrl ?? "",
+      };
+    };
+
+    // Quem já é acompanhado não precisa ver o convite de novo.
+    const jaVinculados = new Set(links.map((l) => `${l.professional._id ?? l.professional}|${l.papel}`));
+
+    const naoLidas = await ProMessage.aggregate<{ _id: mongoose.Types.ObjectId; total: number }>([
+      { $match: { link: { $in: links.map((l) => l._id) }, autor: { $ne: eu }, lidaEm: null } },
+      { $group: { _id: "$link", total: { $sum: 1 } } },
+    ]);
+    const porLink = new Map(naoLidas.map((n) => [n._id.toString(), n.total]));
+
+    res.json({
+      data: {
+        convites: convites
+          .filter((c) => !jaVinculados.has(`${(c.professional as unknown as Pessoa)._id}|${c.papel}`))
+          .map((c) => ({
+            code: c.code,
+            papel: c.papel,
+            expiraEm: c.expiraEm,
+            profissional: comoPessoa(c.professional),
+          })),
+        conversas: links
+          .filter((l) => (porLink.get(l._id.toString()) ?? 0) > 0)
+          .map((l) => ({
+            id: l._id.toString(),
+            naoLidas: porLink.get(l._id.toString()) ?? 0,
+            profissional: comoPessoa(l.professional),
+          })),
+      },
+      meta: {},
+    });
+  })
+);
+
 /** O que o convite é, antes de aceitar. Só exige estar logado. */
 proRouter.get(
   "/convites/:code",

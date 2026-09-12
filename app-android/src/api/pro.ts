@@ -168,3 +168,25 @@ export async function buscarNaoLidas(token: string): Promise<Record<string, numb
   const r = await apiFetch<{ data: { link: string; naoLidas: number }[] }>("/pro/nao-lidas", { token });
   return Object.fromEntries(r.data.map((x) => [x.link, x.naoLidas]));
 }
+
+/**
+ * O que o acompanhamento está esperando de você: convites sem resposta e
+ * conversas sem ler, numa requisição só.
+ *
+ * Uma rota, e não três, porque a Home pergunta isso repetidamente enquanto
+ * está aberta — e três requisições por ciclo seria pagar caro para quase
+ * sempre ouvir "nada novo".
+ */
+export interface Avisos {
+  convites: ConviteRecebido[];
+  conversas: {
+    id: string;
+    naoLidas: number;
+    profissional: { id: string; nome: string; username: string | null; avatarUrl: string };
+  }[];
+}
+
+export async function buscarAvisos(token: string): Promise<Avisos> {
+  const r = await apiFetch<{ data: Avisos }>("/pro/avisos", { token });
+  return r.data;
+}

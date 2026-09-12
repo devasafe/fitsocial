@@ -745,3 +745,109 @@ describe("foto na conversa", () => {
     expect(r.body.data.texto).toBe("tá certo assim?");
   });
 });
+
+describe("avisos do acompanhamento", () => {
+  const avisos = (token: string) => request(app).get("/pro/avisos").set(auth(token));
+
+  it("sem nada pendente, vem vazio dos dois lados", async () => {
+    const aluno = await registrar();
+    const r = await avisos(aluno.token);
+
+    expect(r.status).toBe(200);
+    expect(r.body.data.convites).toEqual([]);
+    expect(r.body.data.conversas).toEqual([]);
+  });
+
+  it("junta convite e mensagem não lida numa requisição só", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(coach.token))
+      .send({ texto: "bom treino" });
+
+    const outro = await registrarProfissional("nutri");
+    await request(app)
+      .post("/pro/convites")
+      .set(auth(outro.token))
+      .send({ papel: "nutri" })
+      .then((r) =>
+        request(app)
+          .get(`/pro/convites/${r.body.data.code}`)
+          .set(auth(aluno.token))
+          .then(() => r)
+      );
+
+    const r = await avisos(aluno.token);
+    expect(r.body.data.conversas).toHaveLength(1);
+    expect(r.body.data.conversas[0].naoLidas).toBe(1);
+    expect(r.body.data.conversas[0].profissional.nome).toBeTruthy();
+  });
+
+  // Ler a conversa é o que zera o aviso: sem isto, o card ficaria para sempre.
+  it("depois de ler, o aviso some", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+    await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(coach.token))
+      .send({ texto: "oi" });
+
+    expect((await avisos(aluno.token)).body.data.conversas).toHaveLength(1);
+
+    await request(app).get(`/pro/acompanhamentos/${linkId}/mensagens`).set(auth(aluno.token));
+
+    expect((await avisos(aluno.token)).body.data.conversas).toHaveLength(0);
+  });
+
+  it("a própria mensagem não vira aviso para quem mandou", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token))
+      .send({ texto: "professor?" });
+
+    expect((await avisos(aluno.token)).body.data.conversas).toHaveLength(0);
+  });
+
+  it("convite endereçado aparece; aceito, some", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const u = (await User.findById(aluno.id))!;
+    u.username = "avisado";
+    await u.save();
+
+    const c = await request(app)
+      .post("/pro/convites")
+      .set(auth(coach.token))
+      .send({ papel: "coach", username: "avisado" });
+
+    expect((await avisos(aluno.token)).body.data.convites).toHaveLength(1);
+
+    await request(app)
+      .post(`/pro/convites/${c.body.data.code}/aceitar`)
+      .set(auth(aluno.token))
+      .send({});
+
+    expect((await avisos(aluno.token)).body.data.convites).toHaveLength(0);
+  });
+
+  it("não vaza aviso de outra pessoa", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+    await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(coach.token))
+      .send({ texto: "particular" });
+
+    const estranho = await registrar();
+    expect((await avisos(estranho.token)).body.data.conversas).toHaveLength(0);
+  });
+});

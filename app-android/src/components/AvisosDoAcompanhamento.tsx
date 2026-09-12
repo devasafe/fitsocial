@@ -1,17 +1,10 @@
 import React, { useCallback, useState } from "react";
-import { View, Image } from "react-native";
+import { View, Image, AppState } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Card, Button } from "./ui";
-import {
-  buscarNaoLidas,
-  listarAcompanhamentos,
-  listarConvitesRecebidos,
-  rotuloDoPapel,
-  type Acompanhamento,
-  type ConviteRecebido,
-} from "../api/pro";
+import { buscarAvisos, rotuloDoPapel, type Avisos } from "../api/pro";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 
@@ -20,12 +13,20 @@ import type { AppStackParams } from "../navigation/types";
  *
  * Duas coisas moram aqui, e as duas pelo mesmo motivo: pedem resposta. Um
  * convite que ninguém respondeu deixa um profissional esperando; uma mensagem
- * não lida deixa uma conversa pela metade. Nenhuma das duas podia depender de
- * a pessoa entrar em Configurações para descobrir que existe.
+ * não lida deixa uma conversa pela metade.
  *
- * Some inteiro quando não há nada pendente — no dia a dia, não custa espaço
- * nenhum na tela.
+ * Aparece SOZINHO, sem recarregar a tela: enquanto a Home está na frente da
+ * pessoa, pergunta a cada vinte segundos se há algo novo. Vinte, e não oito
+ * como na conversa, porque aqui ninguém está esperando resposta — é um aviso
+ * que pode chegar com meio minuto de atraso sem prejuízo nenhum, e a Home fica
+ * aberta muito mais tempo que uma conversa.
+ *
+ * Some inteiro quando não há nada pendente: no dia a dia, não custa espaço.
  */
+const DE_QUANTO_EM_QUANTO_MS = 20_000;
+
+const VAZIO: Avisos = { convites: [], conversas: [] };
+
 function Avatar({ url, tamanho = 44 }: { url?: string; tamanho?: number }) {
   if (url) {
     return (
@@ -50,8 +51,7 @@ function Avatar({ url, tamanho = 44 }: { url?: string; tamanho?: number }) {
 export function AvisosDoAcompanhamento() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
-  const [convites, setConvites] = useState<ConviteRecebido[]>([]);
-  const [comMensagem, setComMensagem] = useState<{ a: Acompanhamento; quantas: number }[]>([]);
+  const [avisos, setAvisos] = useState<Avisos>(VAZIO);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,31 +59,33 @@ export function AvisosDoAcompanhamento() {
 
       // Silencioso de propósito: é um extra da Home, e uma falha aqui não pode
       // encher a tela de erro sobre algo que talvez nem exista.
-      Promise.all([
-        listarConvitesRecebidos(token!).catch(() => []),
-        listarAcompanhamentos(token!).catch(() => []),
-        buscarNaoLidas(token!).catch(() => ({}) as Record<string, number>),
-      ]).then(([recebidos, acompanhamentos, naoLidas]) => {
-        if (!vivo) return;
-        setConvites(recebidos);
-        setComMensagem(
-          acompanhamentos
-            .map((a) => ({ a, quantas: naoLidas[a.id] ?? 0 }))
-            .filter((x) => x.quantas > 0)
-        );
+      const buscar = () => {
+        if (AppState.currentState !== "active") return;
+        buscarAvisos(token!)
+          .then((r) => vivo && setAvisos(r))
+          .catch(() => vivo && setAvisos(VAZIO));
+      };
+
+      buscar();
+      const relogio = setInterval(buscar, DE_QUANTO_EM_QUANTO_MS);
+      // Voltar para o app é quando mais provavelmente há algo novo.
+      const sub = AppState.addEventListener("change", (estado) => {
+        if (estado === "active") buscar();
       });
 
       return () => {
         vivo = false;
+        clearInterval(relogio);
+        sub.remove();
       };
     }, [token])
   );
 
-  if (convites.length === 0 && comMensagem.length === 0) return null;
+  if (avisos.convites.length === 0 && avisos.conversas.length === 0) return null;
 
   return (
     <>
-      {convites.map((c) => (
+      {avisos.convites.map((c) => (
         <Card key={c.code} level={2}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
             <Avatar url={c.profissional.avatarUrl} />
@@ -102,20 +104,20 @@ export function AvisosDoAcompanhamento() {
         </Card>
       ))}
 
-      {comMensagem.map(({ a, quantas }) => (
-        <Card key={a.id} level={1}>
+      {avisos.conversas.map((c) => (
+        <Card key={c.id} level={1}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
-            <Avatar url={a.profissional.avatarUrl} />
+            <Avatar url={c.profissional.avatarUrl} />
             <View style={{ flex: 1 }}>
-              <Txt variant="titleCard">{a.profissional.nome}</Txt>
+              <Txt variant="titleCard">{c.profissional.nome}</Txt>
               <Txt variant="caption" color={colors.lime}>
-                {quantas === 1 ? "1 mensagem nova" : `${quantas} mensagens novas`}
+                {c.naoLidas === 1 ? "1 mensagem nova" : `${c.naoLidas} mensagens novas`}
               </Txt>
             </View>
           </View>
           <Button
             title="Ler mensagens"
-            onPress={() => nav.navigate("Conversa", { linkId: a.id, nome: a.profissional.nome })}
+            onPress={() => nav.navigate("Conversa", { linkId: c.id, nome: c.profissional.nome })}
             style={{ marginTop: spacing.md }}
           />
         </Card>
