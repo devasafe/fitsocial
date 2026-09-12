@@ -8,6 +8,9 @@ import {
   Platform,
   ActivityIndicator,
   Pressable,
+  Modal,
+  useWindowDimensions,
+  AppState,
 } from "react-native";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -45,6 +48,9 @@ export function ConversaScreen() {
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /** Foto aberta em tela cheia: a miniatura não mostra o detalhe da execução. */
+  const [ampliada, setAmpliada] = useState<string | null>(null);
+  const { width: larguraDaTela, height: alturaDaTela } = useWindowDimensions();
   const carregandoMais = useRef(false);
 
   const carregar = useCallback(async () => {
@@ -61,9 +67,31 @@ export function ConversaScreen() {
     }
   }, [token, linkId]);
 
+  /**
+   * Atualiza sozinho enquanto a conversa está na frente da pessoa.
+   *
+   * `useFocusEffect` já garante que só roda com a tela aberta; o `AppState`
+   * cuida do resto — app em segundo plano não gasta bateria batendo na API. É
+   * o tempo real que esta conversa precisa, sem WebSocket: quem está com o
+   * celular no bolso é avisado por push, e socket não sobreviveria ao bolso de
+   * qualquer forma.
+   */
   useFocusEffect(
     useCallback(() => {
       carregar();
+
+      const relogio = setInterval(() => {
+        if (AppState.currentState === "active") carregar();
+      }, 8000);
+
+      const sub = AppState.addEventListener("change", (estado) => {
+        if (estado === "active") carregar();
+      });
+
+      return () => {
+        clearInterval(relogio);
+        sub.remove();
+      };
     }, [carregar])
   );
 
@@ -178,6 +206,41 @@ export function ConversaScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={90}
     >
+      {/* Tela cheia por cima de tudo. Toque em qualquer lugar fecha, e o botão
+          voltar do Android também — `onRequestClose` é o que garante isso. */}
+      <Modal
+        visible={!!ampliada}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAmpliada(null)}
+      >
+        <Pressable
+          onPress={() => setAmpliada(null)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(14, 19, 16, 0.96)",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: spacing.gutter,
+          }}
+        >
+          {ampliada && (
+            <Image
+              source={{ uri: ampliada }}
+              style={{
+                width: larguraDaTela - spacing.gutter * 2,
+                height: alturaDaTela * 0.75,
+                borderRadius: radius.card,
+              }}
+              resizeMode="contain"
+            />
+          )}
+          <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.md }}>
+            Toque para fechar
+          </Txt>
+        </Pressable>
+      </Modal>
+
       <FlatList
         data={mensagens}
         inverted
@@ -204,16 +267,18 @@ export function ConversaScreen() {
               }}
             >
               {item.imageUrl ? (
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  style={{
-                    width: 220,
-                    height: 220,
-                    borderRadius: radius.chip,
-                    marginBottom: item.texto ? spacing.s8 : 0,
-                  }}
-                  resizeMode="cover"
-                />
+                <Pressable onPress={() => setAmpliada(item.imageUrl)}>
+                  <Image
+                    source={{ uri: item.imageUrl }}
+                    style={{
+                      width: 220,
+                      height: 220,
+                      borderRadius: radius.chip,
+                      marginBottom: item.texto ? spacing.s8 : 0,
+                    }}
+                    resizeMode="cover"
+                  />
+                </Pressable>
               ) : null}
 
               {item.texto ? <Txt variant="body">{item.texto}</Txt> : null}

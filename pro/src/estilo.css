@@ -430,6 +430,30 @@ label {
   text-align: right;
 }
 
+/* A foto em tela cheia. Fundo quase opaco: o que importa é a foto, e o painel
+   por baixo só distrairia. */
+.cortina-foto {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(14, 19, 16, 0.94);
+  display: grid;
+  place-items: center;
+  padding: var(--esp-24);
+  cursor: zoom-out;
+}
+.cortina-foto img {
+  max-width: 100%;
+  max-height: 88vh;
+  border-radius: var(--raio-card);
+  cursor: default;
+}
+.fechar-foto {
+  position: absolute;
+  top: var(--esp-16);
+  right: var(--esp-16);
+}
+
 .escrever {
   display: flex;
   gap: var(--esp-8);

@@ -33,6 +33,9 @@ export function Conversa({
   const [enviando, setEnviando] = useState(false);
   const [subindoFoto, setSubindoFoto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /** Foto aberta em tela cheia. A conversa mostra miniatura; o detalhe do
+   *  agachamento só se vê grande. */
+  const [ampliada, setAmpliada] = useState<string | null>(null);
   const fim = useRef<HTMLDivElement>(null);
   const arquivo = useRef<HTMLInputElement>(null);
 
@@ -53,12 +56,28 @@ export function Conversa({
     carregar();
   }, [carregar]);
 
+  /**
+   * Atualiza sozinho enquanto a conversa está ABERTA e a aba VISÍVEL.
+   *
+   * É o tempo real que esta conversa precisa, sem WebSocket. O intervalo só
+   * existe com a tela na frente da pessoa: minimizou ou trocou de aba, para —
+   * e é isso que separa isto de um `setInterval` solto, que ficaria batendo na
+   * API o dia todo no balcão da academia.
+   *
+   * Oito segundos porque a conversa aqui é assíncrona: ninguém digita esperando
+   * resposta no mesmo segundo, e cada segundo a menos multiplica requisição por
+   * nada.
+   */
   useEffect(() => {
-    const aoVoltar = () => {
+    const atualizar = () => {
       if (document.visibilityState === "visible") carregar();
     };
-    document.addEventListener("visibilitychange", aoVoltar);
-    return () => document.removeEventListener("visibilitychange", aoVoltar);
+    document.addEventListener("visibilitychange", atualizar);
+    const relogio = setInterval(atualizar, 8000);
+    return () => {
+      document.removeEventListener("visibilitychange", atualizar);
+      clearInterval(relogio);
+    };
   }, [carregar]);
 
   useEffect(() => {
@@ -107,6 +126,26 @@ export function Conversa({
 
   return (
     <div>
+      {/* Tela cheia por cima de tudo. Fecha no clique, no Esc e no botão —
+          três saídas, porque uma foto que não fecha é uma tela travada. */}
+      {ampliada && (
+        <div
+          className="cortina-foto"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Foto ampliada"
+          onClick={() => setAmpliada(null)}
+          onKeyDown={(e) => e.key === "Escape" && setAmpliada(null)}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+        >
+          <button className="discreto fechar-foto" onClick={() => setAmpliada(null)}>
+            Fechar
+          </button>
+          <img src={ampliada} alt="Foto ampliada" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+
       <div className="conversa">
         {mensagens.length === 0 && (
           <p className="vazio" style={{ padding: 8 }}>
@@ -124,7 +163,15 @@ export function Conversa({
             <div key={m.id} className={`fala ${meu ? "minha" : "dele"}`}>
               {mudouDeLado && <span className="quem">{meu ? "Você" : nomeDoAluno}</span>}
               <div className="balao">
-                {m.imageUrl && <img src={m.imageUrl} alt="" loading="lazy" />}
+                {m.imageUrl && (
+                  <img
+                    src={m.imageUrl}
+                    alt="Foto enviada na conversa"
+                    loading="lazy"
+                    onClick={() => setAmpliada(m.imageUrl)}
+                    style={{ cursor: "zoom-in" }}
+                  />
+                )}
                 {m.texto}
                 <span className="quando">
                   {new Date(m.createdAt).toLocaleString("pt-BR", {
