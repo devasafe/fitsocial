@@ -527,3 +527,43 @@ describe("conversa", () => {
     expect((await mandar(coach.token, linkId, { texto: "oi?" })).status).toBe(409);
   });
 });
+
+describe("a curva de um exercício do aluno", () => {
+  it("devolve a mesma série que o aluno vê na aba dele", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+
+    for (const peso of [80, 90]) {
+      await request(app)
+        .post("/activities")
+        .set(auth(aluno.token))
+        .send({
+          sportId: "musculacao",
+          kind: "strength",
+          payload: { variant: "musculacao", exercises: [{ name: "Supino reto", sets: [{ type: "valida", weightKg: peso, reps: 5 }] }] },
+        });
+    }
+
+    const doCoach = await request(app)
+      .get(`/pro/alunos/${aluno.id}/exercicios/supino_reto`)
+      .set(auth(coach.token));
+    const doAluno = await request(app)
+      .get("/evolucao/exercicios/supino_reto")
+      .set(auth(aluno.token));
+
+    expect(doCoach.status).toBe(200);
+    expect(doCoach.body.data.map((p: { valor: number }) => p.valor)).toEqual([80, 90]);
+    expect(doCoach.body.data).toEqual(doAluno.body.data);
+  });
+
+  it("estranho não puxa a curva de ninguém", async () => {
+    const coach = await registrarProfissional();
+    const estranho = await registrar();
+
+    const r = await request(app)
+      .get(`/pro/alunos/${estranho.id}/exercicios/supino_reto`)
+      .set(auth(coach.token));
+    expect(r.status).toBe(404);
+  });
+});

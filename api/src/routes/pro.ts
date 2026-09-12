@@ -20,7 +20,7 @@ import {
   verConvite,
   vinculoAtivo,
 } from "../services/vinculos.js";
-import { calendarioDoUsuario, exerciciosDoUsuario } from "../services/evolucao.js";
+import { METRICAS, calendarioDoUsuario, exerciciosDoUsuario, serieDoExercicio } from "../services/evolucao.js";
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema } from "../models/Plan.js";
 import { ProMessage } from "../models/ProMessage.js";
@@ -245,6 +245,40 @@ proRouter.get(
       },
       meta: { dias },
     });
+  })
+);
+
+/**
+ * A curva de um exercício do aluno.
+ *
+ * Mesma função que responde ao próprio dono em `/evolucao` — o profissional vê
+ * o mesmo número que o aluno vê, e não uma segunda versão do cálculo que
+ * poderia discordar dele na frente dos dois.
+ */
+proRouter.get(
+  "/alunos/:id/exercicios/:slug",
+  requirePro("coach", "nutri"),
+  asyncHandler(async (req, res) => {
+    const alunoId = String(req.params.id);
+    if (!mongoose.isValidObjectId(alunoId)) throw new HttpError(404, "Aluno não encontrado.");
+
+    const clientId = new mongoose.Types.ObjectId(alunoId);
+    const link = await vinculoAtivo(clientId, req.user!._id);
+    if (!link) throw new HttpError(404, "Este não é seu aluno.");
+    if (link.escopo?.treinos !== true) {
+      throw new HttpError(403, "Este aluno não abriu os treinos para você.");
+    }
+
+    const { dias, metrica } = z
+      .object({
+        dias: z.coerce.number().int().min(0).max(3650).default(90),
+        metrica: z.enum(METRICAS).default("carga_max"),
+      })
+      .parse(req.query);
+
+    const slug = z.string().min(1).max(80).parse(req.params.slug);
+    const pontos = await serieDoExercicio(clientId, slug, dias, metrica);
+    res.json({ data: pontos, meta: { dias, metrica, slug } });
   })
 );
 
