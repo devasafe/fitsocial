@@ -103,6 +103,74 @@ export async function calendario(token: string, dias = 365): Promise<DiaDoCalend
   return r.data;
 }
 
+// ------------------------------------------------------------------- cardio
+
+/** O que dá para plotar de um esporte de cardio. */
+export const METRICAS_CARDIO = ["pace", "distancia", "duracao", "velocidade"] as const;
+export type MetricaCardio = (typeof METRICAS_CARDIO)[number];
+
+export function rotuloDaMetricaCardio(m: MetricaCardio): string {
+  switch (m) {
+    case "pace":
+      return "Pace";
+    case "distancia":
+      return "Distância";
+    case "duracao":
+      return "Duração";
+    case "velocidade":
+      return "Velocidade";
+  }
+}
+
+/** Pace vem em segundos por quilômetro e se lê em minutos: 300 é "5:00/km". */
+export function formatarCardio(v: number, m: MetricaCardio): string {
+  switch (m) {
+    case "pace": {
+      const min = Math.floor(v / 60);
+      const seg = Math.round(v % 60);
+      // 59,6 s arredonda para 60: vira o minuto seguinte, não "5:60".
+      return seg === 60 ? `${min + 1}:00` : `${min}:${String(seg).padStart(2, "0")}`;
+    }
+    case "distancia":
+      return `${v.toFixed(1).replace(".", ",")} km`;
+    case "duracao":
+      return `${Math.round(v)} min`;
+    case "velocidade":
+      return `${v.toFixed(1).replace(".", ",")} km/h`;
+  }
+}
+
+export interface EsporteNaLista {
+  sportId: string;
+  nome: string;
+  vezes: number;
+  distanciaKm: number;
+  /** Segundos por quilômetro. Zero quando nenhuma sessão teve distância. */
+  melhorPace: number;
+  ultimoPace: number;
+  /** Positivo é melhora: o pace CAIU. Nulo quando só houve uma sessão. */
+  delta: number | null;
+  ultimaVez: string;
+}
+
+export async function listarCardio(token: string, dias: Janela): Promise<EsporteNaLista[]> {
+  const r = await apiFetch<{ data: EsporteNaLista[] }>(`/evolucao/cardio?dias=${dias}`, { token });
+  return r.data;
+}
+
+export async function serieDeCardio(
+  token: string,
+  sportId: string,
+  dias: Janela,
+  metrica: MetricaCardio
+): Promise<{ pontos: PontoDoExercicio[]; menorEhMelhor: boolean }> {
+  const r = await apiFetch<{
+    data: PontoDoExercicio[];
+    meta: { menorEhMelhor: boolean };
+  }>(`/evolucao/cardio/${encodeURIComponent(sportId)}?dias=${dias}&metrica=${metrica}`, { token });
+  return { pontos: r.data, menorEhMelhor: r.meta.menorEhMelhor };
+}
+
 export interface Conquista {
   id: string;
   sportId: string;

@@ -5,9 +5,13 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   METRICAS,
+  METRICAS_CARDIO,
   calendarioDoUsuario,
+  cardioDoUsuario,
   exerciciosDoUsuario,
   gruposDoUsuario,
+  menorEhMelhor,
+  serieDeCardio,
   serieDoExercicio,
 } from "../services/evolucao.js";
 
@@ -61,6 +65,44 @@ evolucaoRouter.get(
     const slug = slugSchema.parse(req.params.slug);
     const pontos = await serieDoExercicio(req.user!._id, slug, dias, metrica);
     res.json({ data: pontos, meta: { dias, metrica, slug } });
+  })
+);
+
+const serieDeCardioSchema = z.object({
+  dias: janelaSchema,
+  metrica: z.enum(METRICAS_CARDIO).default("pace"),
+});
+
+/**
+ * Os esportes de cardio praticados na janela.
+ *
+ * Separado de `/exercicios` porque a unidade é outra: na força se compara
+ * exercício com exercício, no cardio se compara corrida com corrida. Juntar os
+ * dois numa lista só daria um seletor onde "Supino reto" e "Corrida de rua"
+ * disputam a mesma linha sem ter o que comparar.
+ */
+evolucaoRouter.get(
+  "/cardio",
+  asyncHandler(async (req, res) => {
+    const dias = janelaSchema.parse(req.query.dias);
+    const esportes = await cardioDoUsuario(req.user!._id, dias);
+    res.json({ data: esportes, meta: { dias, total: esportes.length } });
+  })
+);
+
+/** A curva de um esporte de cardio ao longo do tempo. */
+evolucaoRouter.get(
+  "/cardio/:sportId",
+  asyncHandler(async (req, res) => {
+    const { dias, metrica } = serieDeCardioSchema.parse(req.query);
+    const sportId = slugSchema.parse(req.params.sportId);
+    const pontos = await serieDeCardio(req.user!._id, sportId, dias, metrica);
+    res.json({
+      data: pontos,
+      // `menorEhMelhor` viaja com a resposta para o gráfico não precisar saber
+      // que pace é o caso especial: quem desenha recebe a instrução pronta.
+      meta: { dias, metrica, sportId, menorEhMelhor: menorEhMelhor(metrica) },
+    });
   })
 );
 
