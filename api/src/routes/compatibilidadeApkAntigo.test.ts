@@ -7,6 +7,7 @@ import { User } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { Plan } from "../models/Plan.js";
+import { Post } from "../models/Post.js";
 
 // Cada teste aqui defende uma regra que JÁ QUEBROU uma vez, em produção.
 //
@@ -35,6 +36,9 @@ beforeEach(async () => {
     Activity.deleteMany({}),
     PersonalRecord.deleteMany({}),
     Plan.deleteMany({}),
+    // Sem isto, um post de um teste sobrevive ao autor e ao treino que o teste
+    // seguinte apaga, e o feed quebra no teste errado — foi o que aconteceu.
+    Post.deleteMany({}),
   ]);
 });
 
@@ -157,5 +161,64 @@ describe("Regras de recorde que ja quebraram", () => {
     // o app na abertura, e o sintoma não aponta para a causa.
     expect(r.body.plan.workout).not.toBeNull();
     expect(r.body.plan.workout.sessions).toEqual([]);
+  });
+
+  it("o resumo do treino no feed mantém a FORMA que o app desenha", async () => {
+    const u = await registrar();
+
+    // O card do app lê três campos e só: um título de texto, uma lista de
+    // números já escritos, e uma lista de linhas (ou nada). Mudar o CONTEÚDO é
+    // o trabalho; mudar a FORMA quebra o app instalado em silêncio — um número
+    // onde ele espera string, um objeto onde ele espera linha pronta.
+    const criado = await request(app)
+      .post("/activities")
+      .set(auth(u.token))
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 1800,
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            { name: "Supino reto", sets: [{ type: "valida", weightKg: 80, reps: 8, done: true }] },
+          ],
+        },
+        shareToFeed: true,
+      })
+      .expect(201);
+    expect(criado.body.data.id).toBeTruthy();
+
+    const feed = await request(app).get("/social/feed").set(auth(u.token)).expect(200);
+    const resumo = feed.body.posts[0].activity;
+
+    expect(typeof resumo.title).toBe("string");
+    expect(resumo.title.length).toBeGreaterThan(0);
+
+    expect(Array.isArray(resumo.stats)).toBe(true);
+    for (const linha of resumo.stats) expect(typeof linha).toBe("string");
+
+    // Lista de linhas prontas ou null — nunca objeto, nunca undefined.
+    expect(resumo.movements === null || Array.isArray(resumo.movements)).toBe(true);
+    for (const linha of resumo.movements ?? []) expect(typeof linha).toBe("string");
+  });
+
+  it("exercício sem séries no banco não derruba o feed inteiro", async () => {
+    const u = await registrar();
+
+    // O payload é `Mixed`: o que está gravado não passou pelo zod de hoje.
+    // Agora que o feed LISTA os exercícios de força, um exercício torto deixaria
+    // todo mundo sem feed, não só o dono do treino.
+    await Activity.create({
+      user: u.id,
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 600,
+      visibility: "public",
+      payload: { variant: "musculacao", exercises: [{ name: "Supino reto" }] },
+      metrics: {},
+    });
+
+    const feed = await request(app).get("/social/explore").set(auth(u.token));
+    expect(feed.status).toBe(200);
   });
 });

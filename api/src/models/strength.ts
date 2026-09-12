@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MUSCLE_GROUPS } from "../services/muscleGroups.js";
 
 // Séries e exercícios de força — extraídos de Activity.ts porque o CrossFit
 // reusa este schema tal e qual, e importar de Activity criaria um ciclo
@@ -34,6 +35,12 @@ export const strengthExerciseSchema = z.object({
   name: z.string().min(1).max(120),
   order: z.number().int().min(0).optional(),
   sets: z.array(strengthSetSchema).min(1),
+  // De onde o exercício veio e o que ele treina. Os dois são opcionais porque o
+  // app instalado não manda nenhum dos dois — e porque o nome sozinho quase
+  // sempre resolve (`services/muscleGroups.ts`). Quando vêm, ganham do nome:
+  // `exerciseId` é a escolha do catálogo, `muscle` é o que a pessoa marcou.
+  exerciseId: z.string().max(60).nullish(),
+  muscle: z.enum(MUSCLE_GROUPS).nullish(),
 });
 
 export const strengthPayloadSchema = z.object({

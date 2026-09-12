@@ -100,10 +100,19 @@ function daForca(exercicios: StrengthPayload["exercises"]): string[] {
     .map((e) => {
       // Só séries válidas: aquecimento e drop não são o treino que a pessoa
       // está contando — a mesma regra do volume em activityMetrics.
-      const validas = e.sets.filter((s) => s.type === "valida" && s.done);
-      const usadas = validas.length ? validas : e.sets;
-      const reps = usadas.find((s) => s.reps != null)?.reps;
-      const peso = Math.max(0, ...usadas.map((s) => s.weightKg ?? 0));
+      //
+      // `?? []` pelo mesmo motivo do bloco de CrossFit acima: o payload vem CRU
+      // do Mongo. Agora que isto serve o feed de força inteiro, um exercício
+      // torto derrubaria a listagem de todo mundo, não uma imagem.
+      const todas = Array.isArray(e.sets) ? e.sets : [];
+      const validas = todas.filter((s) => s?.type === "valida" && s.done);
+      const usadas = validas.length ? validas : todas;
+      const reps = usadas.find((s) => s?.reps != null)?.reps;
+      // `Math.max(...array)` empilha um argumento por série. Enquanto isto
+      // desenhava uma imagem sob demanda, o pior caso era uma imagem falhar;
+      // agora serve o feed inteiro, e uma série a mais do que a pilha aguenta
+      // derrubaria a listagem de todo mundo que segue a pessoa.
+      const peso = usadas.reduce((maior, s) => Math.max(maior, s?.weightKg ?? 0), 0);
 
       return [
         reps != null ? `${usadas.length}×${reps}` : `${usadas.length} séries`,

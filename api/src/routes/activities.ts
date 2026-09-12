@@ -17,12 +17,28 @@ import { Post } from "../models/Post.js";
 import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
 import { createActivity } from "../services/activities.js";
-import { computeStrengthMetrics } from "../services/activityMetrics.js";
+import { computeStrengthMetrics, musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
 
 export const activitiesRouter = Router();
 activitiesRouter.use(requireAuth);
+
+/** `metrics` com os músculos garantidos — a mesma regra do feed e do perfil. */
+function comMusculosDeForca(a: {
+  kind: string;
+  metrics?: Record<string, unknown> | null;
+  payload?: unknown;
+}): Record<string, unknown> {
+  const metrics = { ...(a.metrics ?? {}) };
+  if (a.kind !== "strength") return metrics;
+  const musculos = musculosDoTreinoSalvo({
+    metrics: metrics as { musculos?: unknown },
+    payload: a.payload,
+  });
+  if (musculos.length) metrics.musculos = musculos;
+  return metrics;
+}
 
 export function serializeActivity(a: InstanceType<typeof Activity>) {
   return {
@@ -46,7 +62,10 @@ export function serializeActivity(a: InstanceType<typeof Activity>) {
     payload: a.payload,
     // Forma normalizada em blocos, AO LADO do payload cru — não no lugar dele.
     ...(a.kind === "wod" ? { crossfit: normalizarWod(a.payload) } : {}),
-    metrics: a.metrics,
+    // `metrics` mais os músculos garantidos, como no feed e no perfil: um
+    // treino gravado antes do campo existir também abre o compositor, e a
+    // prévia de lá não pode dizer "Musculação" e o card publicado "Peito".
+    metrics: comMusculosDeForca(a),
     createdAt: a.get("createdAt") as Date,
   };
 }
