@@ -174,4 +174,12 @@ export type ActivityDoc = HydratedDocument<{
   migratedFrom?: mongoose.Types.ObjectId;
 }>;
 
+// A evolução lê sempre "os treinos DESTA pessoa, nesta janela, em ordem".
+// Sem este índice, montar o gráfico de um exercício significa percorrer a
+// coleção inteira — e ela cresce com o app todo, não com o usuário.
+activitySchema.index({ user: 1, startedAt: -1 });
+// O mesmo, quando a pergunta é só sobre um formato (força para carga e grupos
+// musculares, endurance para ritmo). Poupa varrer os outros esportes.
+activitySchema.index({ user: 1, kind: 1, startedAt: -1 });
+
 export const Activity = mongoose.model("Activity", activitySchema);
