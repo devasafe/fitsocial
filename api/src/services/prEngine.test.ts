@@ -21,6 +21,21 @@ beforeEach(async () => {
   await Activity.deleteMany({});
 });
 
+async function logExercicio(name: string, weightKg: number, reps: number) {
+  const activity = await Activity.create({
+    user: userId,
+    sportId: "musculacao",
+    kind: "strength",
+    startedAt: new Date(),
+    payload: {
+      variant: "musculacao",
+      exercises: [{ name, sets: [{ type: "valida", weightKg, reps, done: true }] }],
+    },
+    metrics: {},
+  });
+  return detectStrengthPRs(userId, activity);
+}
+
 async function logSupino(weightKg: number, reps: number) {
   const activity = await Activity.create({
     user: userId,
@@ -188,5 +203,108 @@ describe("marcos de aula (class)", () => {
     expect(aulas?.value).toBe(3);
     const horas = await PersonalRecord.findOne({ exerciseName: "jiu_jitsu", type: "horas" });
     expect(horas?.value).toBe(3); // 3 x 3600s = 3h
+  });
+});
+
+describe("identidade do exercício (slug)", () => {
+  // O bug que isto conserta: o recorde era chaveado pelo nome cru, então cada
+  // jeito de escrever "supino reto" criava um recorde próprio — e a evolução da
+  // pessoa aparecia picada em vários históricos do mesmo exercício.
+  it("junta o mesmo exercício escrito de jeitos diferentes num recorde só", async () => {
+    await logExercicio("Supino reto", 80, 5);
+    const news = await logExercicio("supino  reto", 90, 5);
+
+    const prs = await PersonalRecord.find({ user: userId, type: "carga_max" });
+    expect(prs).toHaveLength(1);
+    expect(prs[0].exerciseSlug).toBe("supino_reto");
+    expect(prs[0].value).toBe(90);
+    expect(prs[0].previousValue).toBe(80);
+    expect(news.some((p) => p.type === "carga_max")).toBe(true);
+  });
+
+  it("o rótulo acompanha a grafia mais recente, a identidade não muda", async () => {
+    await logExercicio("supino reto", 80, 5);
+    await logExercicio("Supino Reto", 90, 5);
+
+    const pr = await PersonalRecord.findOne({ user: userId, type: "carga_max" });
+    expect(pr?.exerciseName).toBe("Supino Reto");
+    expect(pr?.exerciseSlug).toBe("supino_reto");
+  });
+
+  it("exercícios diferentes continuam com recordes separados", async () => {
+    await logExercicio("Supino reto", 80, 5);
+    await logExercicio("Agachamento livre", 100, 5);
+
+    const prs = await PersonalRecord.find({ user: userId, type: "carga_max" });
+    expect(prs).toHaveLength(2);
+    expect(prs.map((p) => p.exerciseSlug).sort()).toEqual(["agachamento_livre", "supino_reto"]);
+  });
+
+  it("quem escolheu do catálogo e quem digitou o nome caem no mesmo recorde", async () => {
+    // "Flexão de braço" tem id `flexao` no catálogo: sem o mapa de nomes, o
+    // digitado viraria `flexao_de_braco` e seriam dois recordes.
+    const activity = await Activity.create({
+      user: userId,
+      sportId: "musculacao",
+      kind: "strength",
+      startedAt: new Date(),
+      payload: {
+        variant: "musculacao",
+        exercises: [
+          { name: "Flexão", exerciseId: "flexao", sets: [{ type: "valida", weightKg: 10, reps: 5, done: true }] },
+        ],
+      },
+      metrics: {},
+    });
+    await detectStrengthPRs(userId, activity);
+    await logExercicio("Flexão de braço", 20, 5);
+
+    const prs = await PersonalRecord.find({ user: userId, type: "carga_max" });
+    expect(prs).toHaveLength(1);
+    expect(prs[0].exerciseSlug).toBe("flexao");
+    expect(prs[0].value).toBe(20);
+  });
+});
+
+describe("identidade vazia e o que a atividade guarda", () => {
+  // O indice unico e (user, slug, tipo, faixa): com slug vazio, dois
+  // exercicios diferentes disputariam o MESMO recorde, e o ultimo passaria por
+  // cima do outro como se fossem a mesma coisa.
+  it("exercício sem nome utilizável não vira recorde", async () => {
+    const activity = await Activity.create({
+      user: userId,
+      sportId: "musculacao",
+      kind: "strength",
+      startedAt: new Date(),
+      payload: {
+        variant: "musculacao",
+        exercises: [{ name: "🔥", sets: [{ type: "valida", weightKg: 80, reps: 5, done: true }] }],
+      },
+      metrics: {},
+    });
+
+    const news = await detectStrengthPRs(userId, activity);
+
+    expect(news).toEqual([]);
+    expect(await PersonalRecord.countDocuments({ user: userId })).toBe(0);
+  });
+
+  it("dois exercícios sem nome utilizável não viram um recorde só", async () => {
+    for (const [nome, peso] of [["🔥", 20], ["💪", 100]] as const) {
+      const a = await Activity.create({
+        user: userId,
+        sportId: "musculacao",
+        kind: "strength",
+        startedAt: new Date(),
+        payload: {
+          variant: "musculacao",
+          exercises: [{ name: nome, sets: [{ type: "valida", weightKg: peso, reps: 5, done: true }] }],
+        },
+        metrics: {},
+      });
+      await detectStrengthPRs(userId, a);
+    }
+
+    expect(await PersonalRecord.countDocuments({ user: userId })).toBe(0);
   });
 });

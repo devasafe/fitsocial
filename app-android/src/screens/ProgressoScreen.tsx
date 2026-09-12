@@ -10,20 +10,21 @@ import { SegmentedControl, type Segment } from "../components/SegmentedControl";
 import { HistoryScreen } from "./HistoryScreen";
 import { MeusPRsScreen } from "./MeusPRsScreen";
 import { MinhasAtividadesScreen } from "./MinhasAtividadesScreen";
-import { getCheckInStats, getProgress, type CheckInStats, type ExerciseProgress } from "../api/checkins";
+import { getCheckInStats, type CheckInStats } from "../api/checkins";
+import { listarExercicios, type ExercicioNaLista } from "../api/evolucao";
 import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
 import { coachLine } from "../lib/coachContext";
 import { colors, spacing } from "../theme";
 
-// Maior ganho de carga entre exercícios (última − primeira medição).
-function biggestGain(exercises: ExerciseProgress[]): { name: string; delta: number } | null {
-  let best: { name: string; delta: number } | null = null;
-  for (const e of exercises) {
-    if (e.points.length < 2) continue;
-    const delta = e.points[e.points.length - 1].weightKg - e.points[0].weightKg;
-    if (delta > 0 && (!best || delta > best.delta)) best = { name: e.name, delta };
+// O exercício que mais subiu na janela. O servidor já calcula o delta de cada
+// um — o resumo só escolhe o maior, e assim diz o mesmo que a aba Evolução.
+function maiorEvolucao(exercicios: ExercicioNaLista[]): { name: string; delta: number } | null {
+  let melhor: { name: string; delta: number } | null = null;
+  for (const e of exercicios) {
+    if (e.delta == null || e.delta <= 0) continue;
+    if (!melhor || e.delta > melhor.delta) melhor = { name: e.nome, delta: e.delta };
   }
-  return best;
+  return melhor;
 }
 
 type Seg = "resumo" | "evolucao" | "recordes" | "atividades";
@@ -47,10 +48,14 @@ function Resumo() {
 
   const load = useCallback(async () => {
     try {
-      const [s, prsRes, prog] = await Promise.all([getCheckInStats(token!), listPRs(token!), getProgress(token!)]);
+      const [s, prsRes, lista] = await Promise.all([
+        getCheckInStats(token!),
+        listPRs(token!),
+        listarExercicios(token!, 90),
+      ]);
       setStats(s.stats);
       setPrs([...prsRes].sort((a, b) => b.achievedAt.localeCompare(a.achievedAt)));
-      setGain(biggestGain(prog.exercises));
+      setGain(maiorEvolucao(lista));
       setError(false);
     } catch {
       setError(true);

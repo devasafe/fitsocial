@@ -162,7 +162,7 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
       limparRascunho();
       celebratePR(res.meta.newPRs ?? []);
       perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data });
+      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {

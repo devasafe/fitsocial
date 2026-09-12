@@ -27,3 +27,22 @@ export function musculosDe(metrics: unknown): MuscleGroup[] {
   if (!Array.isArray(m.musculos)) return [];
   return m.musculos.filter((x): x is MuscleGroup => typeof x === "string");
 }
+
+/**
+ * O nome curto do grupo, para caber ao redor do radar.
+ *
+ * Doze rotulos em volta de um circulo de 320px nao cabem por extenso:
+ * "Posterior de coxa" sozinho atravessaria a figura. Abreviar so os longos
+ * mantem os demais legiveis por inteiro, que e melhor que encurtar todos.
+ */
+const CURTOS: Record<string, string> = {
+  "Posterior de coxa": "Posterior",
+  "Quadríceps": "Quadríceps",
+  Panturrilha: "Panturrilha",
+  "Corpo todo": "Corpo",
+  "Trapézio": "Trapézio",
+};
+
+export function abreviarMusculo(grupo: string): string {
+  return CURTOS[grupo] ?? grupo;
+}

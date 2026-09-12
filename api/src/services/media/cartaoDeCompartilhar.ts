@@ -63,6 +63,14 @@ export interface DadosDoCartao {
   /** Traçado do percurso, quando houver GPS. */
   percurso?: { lat: number; lng: number }[] | null;
   autor: string;
+  /**
+   * "NOVO RECORDE · SUPINO RETO", quando o treino bateu um.
+   *
+   * Vem pronto do servidor, como os stats: o cartão desenha, não decide. É a
+   * única coisa aqui que não descreve o treino e sim o que ele significou —
+   * por isso ganha destaque proprio, acima do titulo.
+   */
+  selo?: string | null;
 }
 
 /** Escapa o que vai para dentro do SVG. O título vem do usuário. */
@@ -347,6 +355,45 @@ function fio(x: number, largura: number, gap: number): Peca {
 }
 
 /** A marca, sempre do mesmo jeito e sempre discreta. */
+/**
+ * A pílula de recorde. Fundo cheio na cor da marca, texto escuro em cima.
+ *
+ * Sólida, e não contornada, de propósito: é o único elemento do cartão que
+ * anuncia uma conquista, e ele precisa ganhar da foto por baixo em qualquer
+ * foto. O texto escuro sobre o verde dá 8,78:1 — o verde sobre escuro daria
+ * 1,38:1 e sumiria (`app-android/src/theme.ts`).
+ */
+function selo(opts: {
+  texto: string;
+  x: number;
+  gap: number;
+  tamanho: number;
+  /** Quanto o selo pode ocupar. O nome do exercicio vai ate 120 caracteres. */
+  util: number;
+}): Peca {
+  const altura = opts.tamanho * 2.1;
+  const respiro = opts.tamanho * 0.9;
+  // Encurta como todo o resto do cartao ja faz. Sem teto, um exercicio de nome
+  // longo estica a pilula para alem da largura do cartao e vaza pela direita.
+  const texto = escapar(encurtar(opts.texto, "corpoForte", opts.tamanho, opts.util - respiro * 2));
+  const largura = larguraDoTexto(texto, "corpoForte", opts.tamanho) + respiro * 2;
+  return {
+    altura: altura + opts.gap,
+    desenhar(topo) {
+      return (
+        `<rect x="${opts.x}" y="${topo}" width="${largura}" height="${altura}" rx="${altura / 2}" fill="${CORES.lime}"/>` +
+        textoEmVetor(texto, {
+          x: opts.x + respiro,
+          y: topo + altura * 0.68,
+          fonte: "corpoForte",
+          tamanho: opts.tamanho,
+          cor: CORES.fundo,
+        })
+      );
+    },
+  };
+}
+
 function marca(x: number, base: number, tamanho: number, cor = CORES.lime): string {
   return textoEmVetor(escapar(env.appName), {
     x,
@@ -438,6 +485,8 @@ function sobreAFoto(dados: DadosDoCartao, largura: number, altura: number): stri
   const tTitulo = tamanhoQueCabe(dados.titulo, "display", 60, util - 42, 34);
 
   const pecas: Peca[] = [
+    // O recorde vem antes do titulo: e a noticia do cartao.
+    ...(dados.selo ? [selo({ texto: dados.selo, x: margem, gap: 22, tamanho: 28, util })] : []),
     linha({
       texto: encurtar(escapar(dados.autor), "corpo", 30, util),
       fonte: "corpo",
@@ -525,6 +574,8 @@ function ficha(dados: DadosDoCartao, largura: number, altura: number, corte: num
   const tTitulo = tamanhoQueCabe(dados.titulo, "display", 58, util, 34);
 
   const pecas: Peca[] = [
+    // O recorde vem antes do titulo: e a noticia do cartao.
+    ...(dados.selo ? [selo({ texto: dados.selo, x: margem, gap: 20, tamanho: 26, util })] : []),
     linha({
       texto: encurtar(escapar(dados.autor), "corpo", 30, util),
       fonte: "corpo",
@@ -587,6 +638,8 @@ function cartao(dados: DadosDoCartao, largura: number, altura: number): string {
   const tTitulo = tamanhoQueCabe(dados.titulo, "display", 52, util, 32);
 
   const pecas: Peca[] = [
+    // O recorde vem antes do titulo: e a noticia do cartao.
+    ...(dados.selo ? [selo({ texto: dados.selo, x: margem + pad, gap: 18, tamanho: 24, util })] : []),
     linha({
       texto: encurtar(escapar(dados.autor), "corpo", 28, util),
       fonte: "corpo",
@@ -661,6 +714,8 @@ function numeros(dados: DadosDoCartao, largura: number, altura: number): string 
   const tTitulo = tamanhoQueCabe(dados.titulo, "display", 68, util - 34, 38);
 
   const pecas: Peca[] = [
+    // O recorde vem antes do titulo: e a noticia do cartao.
+    ...(dados.selo ? [selo({ texto: dados.selo, x: margem, gap: 24, tamanho: 30, util })] : []),
     linha({
       texto: encurtar(escapar(dados.autor), "corpo", 32, util),
       fonte: "corpo",

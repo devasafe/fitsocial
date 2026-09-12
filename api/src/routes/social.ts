@@ -182,7 +182,36 @@ const MAX_MUSCULOS_NO_TITULO = 3;
  * Os PNGs da versão anterior ficam órfãos no storage: é o preço de não servir
  * imagem desatualizada, e é uma limpeza de ops, não de código.
  */
-const VERSAO_DO_CARTAO = 2;
+// 3: o selo de recorde. Subir este numero e o que aposenta os PNGs ja
+// montados — sem isso, quem ja compartilhou continuaria recebendo o desenho
+// velho para sempre, do cache em `post.cartoes`.
+const VERSAO_DO_CARTAO = 3;
+
+/**
+ * "NOVO RECORDE · SUPINO RETO", quando o treino bateu um.
+ *
+ * Um so, mesmo quando o treino bateu varios: o cartao e lido de passagem, e
+ * uma lista de conquistas nao e mais comemoracao que a primeira delas — e a
+ * primeira e a que o motor considera principal (`prEngine`).
+ *
+ * So tipos de FORCA entram, e a lista e fechada por um motivo concreto: em wod
+ * e endurance o `exerciseName` do candidato nao e um nome, e sim a chave —
+ * `chaveDoMovimento(nome)` no wod e o `sportId` no endurance. O cartao
+ * anunciaria "NOVO RECORDE · TREINO_A", com underscore, ou "· CORRIDA" jogando
+ * fora a distancia, que mora no `repRange`. Marco de aula tambem fica fora:
+ * e conquista, mas nao e recorde.
+ */
+const TIPOS_COM_NOME = new Set(["carga_max", "rm_estimado", "carga_faixa"]);
+
+function seloDoRecorde(metrics: unknown): string | null {
+  const prs = (metrics as { prs?: { type?: string; exerciseName?: string }[] } | undefined)?.prs;
+  if (!Array.isArray(prs) || prs.length === 0) return null;
+
+  const pr = prs.find((p) => p.type && TIPOS_COM_NOME.has(p.type));
+  if (!pr?.exerciseName?.trim()) return null;
+
+  return `NOVO RECORDE · ${pr.exerciseName.toUpperCase()}`;
+}
 
 function tituloPorMusculos(musculos: string[]): string {
   if (!musculos.length) return "";
@@ -489,6 +518,7 @@ socialRouter.post(
         cor: (resumo && getSport(resumo.sportId)?.color) || "#3BCC06",
         percurso,
         autor: autor.name,
+        selo: seloDoRecorde(atividade?.metrics),
       },
       formato,
       layout

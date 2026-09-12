@@ -80,7 +80,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
       celebratePR(res.meta.newPRs ?? []);
       // Só aparece para quem ainda não escolheu; o treino já está salvo.
       perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data });
+      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {

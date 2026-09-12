@@ -5,6 +5,8 @@ export interface PersonalRecord {
   id: string;
   sportId: string;
   exerciseName: string;
+  /** A identidade do exercicio. Vazio em recorde antigo, antes do backfill. */
+  exerciseSlug?: string;
   type: "carga_max" | "rm_estimado" | "carga_faixa" | "best_dist" | "best_time" | "aulas" | "horas";
   repRange: string | null;
   value: number;
@@ -89,4 +91,27 @@ export function newPRMessage(prs: NewPR[]): { title: string; body: string } | nu
     return `${label}: ${now}${prev}`;
   });
   return { title: prs.length > 1 ? "Novos recordes" : "Novo recorde", body: lines.join("\n") };
+}
+
+/**
+ * A legenda sugerida quando o treino bateu recorde.
+ *
+ * Editavel, como a do CrossFit: o app oferece o texto que ele tem dados para
+ * escrever, e quem publica decide. O recorde e o motivo de postar — deixar a
+ * pessoa procurar as palavras logo depois de treinar e' o que faz a conquista
+ * virar mais um post generico.
+ *
+ * Marco de aula/hora fica de fora: e conquista, mas nao e recorde, e a frase
+ * seria "bati meu recorde em Aulas". `carga_faixa` tambem: ele e um recorde
+ * DENTRO de uma faixa de repeticoes, e a legenda descartaria o `repRange` —
+ * "meu recorde no Supino: 100 kg" se leria como recorde absoluto no feed.
+ */
+const TIPOS_DA_LEGENDA = new Set(["carga_max", "rm_estimado"]);
+
+export function legendaDeRecorde(prs: NewPR[]): string {
+  const pr = prs.find((p) => !p.milestone && TIPOS_DA_LEGENDA.has(p.type));
+  if (!pr) return "";
+
+  const valor = prValueLabel(pr.type, pr.value, pr.unit);
+  return `Hoje bati meu recorde no ${capitalize(pr.exerciseName)}: ${valor} 🔥`;
 }

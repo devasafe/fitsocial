@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from "react";
-import { View, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, TouchableOpacity, ActivityIndicator, useWindowDimensions } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { listActivities, type Activity } from "../api/activities";
+import { calendario, type DiaDoCalendario } from "../api/evolucao";
+import { Heatmap } from "../components/Heatmap";
 import { colors, spacing } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
 import { sportLabel } from "../lib/sportLabel";
@@ -40,13 +42,23 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [dias, setDias] = useState<DiaDoCalendario[]>([]);
+  const { width } = useWindowDimensions();
 
   const loadFirst = useCallback(async () => {
     try {
+      // O calendário é enfeite; a lista é a tela. Buscar os dois com
+      // `Promise.all` fazia o endpoint novo poder derrubar uma tela que já
+      // funcionava em produção — o `temTreino` abaixo já esconde o calendário
+      // quando não há dado, então o caminho degradado é só ligar este catch.
       const res = await listActivities(token!);
       setItems(res.data);
       setCursor(res.meta.nextCursor);
       setError(false);
+
+      calendario(token!, 365)
+        .then(setDias)
+        .catch(() => setDias([]));
     } catch {
       setError(true);
     } finally {
@@ -80,8 +92,22 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
     );
   }
 
+  // O ano inteiro em casinhas, acima da lista. A lista conta cada treino; o
+  // calendario conta a constancia, que e o que some primeiro quando alguem esta
+  // desistindo — e que nao da para ver rolando uma lista.
+  const temTreino = dias.some((d) => d.treinos > 0);
+
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+      {temTreino && (
+        <Card level={1}>
+          <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
+            Seu ano
+          </Txt>
+          <Heatmap dias={dias} width={width - spacing.gutter * 2 - spacing.md * 2} />
+        </Card>
+      )}
+
       {error && items.length === 0 ? (
         <ErrorState
           message="Não foi possível carregar suas atividades."

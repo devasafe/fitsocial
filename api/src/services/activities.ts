@@ -7,6 +7,7 @@ import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
 import { getSport } from "./sports.js";
 import { interpretarBlocos, normalizarWod } from "./crossfit.js";
 import { computeMetrics } from "./activityMetrics.js";
+import { preencherSlugs } from "./slug.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
 
@@ -45,6 +46,13 @@ export async function createActivity(
   // interpretador melhorar.
   if (input.kind === "wod") {
     storedPayload = interpretarBlocos(normalizarWod(input.payload));
+  }
+
+  // A identidade de cada exercicio tambem e resolvida no salvamento, pelo mesmo
+  // motivo: e o servidor que tem o catalogo, e o nome digitado sozinho fazia
+  // "Supino reto" e "supino reto" virarem dois historicos do mesmo exercicio.
+  if (input.kind === "strength") {
+    storedPayload = preencherSlugs(input.payload);
   }
 
   let metrics = computeMetrics({ ...input, payload: storedPayload } as ActivityCreateInput);
@@ -89,14 +97,43 @@ export async function createActivity(
   });
 
   // Detecção de PR (Fase 2c) — força, endurance e aulas, síncrona.
-  const newPRs = await detectPRs(userId, {
-    _id: activity._id,
-    sportId: activity.sportId,
-    kind: activity.kind,
-    startedAt: activity.startedAt,
-    durationSec: activity.durationSec,
-    payload: activity.payload,
-  });
+  //
+  // Em try/catch porque o treino JÁ foi gravado acima: se o motor de recorde
+  // falhar, a pessoa não pode receber "não foi possível salvar" por um treino
+  // que está salvo — ela tentaria de novo e duplicaria o histórico. Recorde é
+  // consequência do treino, não condição dele; e `recomputeUserPRs` reconstrói
+  // o que se perder aqui.
+  let newPRs: NewPR[] = [];
+  try {
+    newPRs = await detectPRs(userId, {
+      _id: activity._id,
+      sportId: activity.sportId,
+      kind: activity.kind,
+      startedAt: activity.startedAt,
+      durationSec: activity.durationSec,
+      payload: activity.payload,
+    });
+  } catch (err) {
+    console.error(`[prs] atividade ${String(activity._id)} salva, recorde falhou:`, (err as Error).message);
+  }
+
+  // Guarda na propria atividade o que ela conquistou.
+  //
+  // E denormalizado de proposito: o cartao de compartilhar precisa saber "este
+  // treino bateu recorde?" e, sem isto, teria de consultar PersonalRecord a
+  // cada montagem. Fica junto das metricas, que ja sao derivadas e gravadas
+  // aqui pelo mesmo motivo.
+  if (newPRs.length > 0) {
+    const resumo = newPRs.map((p) => ({
+      type: p.type,
+      exerciseName: p.exerciseName,
+      value: p.value,
+      previousValue: p.previousValue,
+      unit: p.unit,
+    }));
+    activity.set("metrics", { ...activity.metrics, prs: resumo });
+    await activity.save();
+  }
 
   let post: InstanceType<typeof Post> | null = null;
   if (input.shareToFeed) {

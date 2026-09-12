@@ -41,6 +41,10 @@ export const strengthExerciseSchema = z.object({
   // `exerciseId` é a escolha do catálogo, `muscle` é o que a pessoa marcou.
   exerciseId: z.string().max(60).nullish(),
   muscle: z.enum(MUSCLE_GROUPS).nullish(),
+  // A identidade do exercicio, para o historico dele ser um so. Quem preenche e
+  // o servidor no salvamento (`services/slug.ts`), nunca o app: o cliente manda
+  // o nome como a pessoa escreveu, e o APK instalado nem sabe deste campo.
+  slug: z.string().max(80).nullish(),
 });
 
 export const strengthPayloadSchema = z.object({

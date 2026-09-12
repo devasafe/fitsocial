@@ -222,3 +222,108 @@ describe("Regras de recorde que ja quebraram", () => {
     expect(feed.status).toBe(200);
   });
 });
+
+// A janela entre o deploy e o backfill dos slugs (12/09/2026).
+//
+// O motor passou a procurar o recorde por `exerciseSlug`. Quem já tinha
+// recorde gravado não tinha esse campo: o motor não achava, concluía que era a
+// primeira vez, e tentava CRIAR um segundo documento — que batia no índice
+// único ANTIGO, ainda vivo na coleção (autoIndex cria índice, nunca derruba).
+//
+// O resultado era o pior tipo de erro: a atividade já estava gravada e a
+// resposta era 500. A pessoa via "não foi possível salvar", tentava de novo, e
+// duplicava o treino a cada tentativa.
+describe("Recorde antigo, sem slug, no intervalo até o backfill", () => {
+  /** Deixa a coleção exatamente como está em produção hoje. */
+  async function comoEstaEmProducao(userId: string) {
+    await PersonalRecord.collection
+      .dropIndex("user_1_exerciseSlug_1_type_1_repRange_1")
+      .catch(() => undefined);
+    await PersonalRecord.collection.createIndex(
+      { user: 1, exerciseName: 1, type: 1, repRange: 1 },
+      { unique: true, name: "user_1_exerciseName_1_type_1_repRange_1" }
+    );
+    // Gravado pelo driver: o schema de hoje poria `exerciseSlug: ""`.
+    await PersonalRecord.collection.insertOne({
+      user: new mongoose.Types.ObjectId(userId),
+      sportId: "musculacao",
+      exerciseName: "Supino reto",
+      type: "carga_max",
+      repRange: null,
+      value: 80,
+      unit: "kg",
+      achievedAt: new Date("2026-09-01"),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  async function registrarSupino(token: string, weightKg: number) {
+    return request(app)
+      .post("/activities")
+      .set(auth(token))
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        startedAt: new Date().toISOString(),
+        payload: {
+          variant: "musculacao",
+          exercises: [
+            { name: "Supino reto", sets: [{ type: "valida", weightKg, reps: 5, done: true }] },
+          ],
+        },
+      });
+  }
+
+  it("registrar treino continua funcionando, e o recorde é superado, não duplicado", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Danilo", email: "danilo@teste.com", password: "senha-bem-longa" });
+    await comoEstaEmProducao(reg.body.user.id);
+
+    const r = await registrarSupino(reg.body.token, 90);
+
+    expect(r.status).toBe(201);
+    const prs = await PersonalRecord.find({ user: reg.body.user.id, type: "carga_max" });
+    expect(prs).toHaveLength(1);
+    expect(prs[0].value).toBe(90);
+    expect(prs[0].previousValue).toBe(80);
+    // E o documento antigo ganhou a identidade: cada pessoa migra ao treinar.
+    expect(prs[0].exerciseSlug).toBe("supino_reto");
+  });
+
+  it("e o recorde superado é celebrado, como sempre foi", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Viana", email: "viana@teste.com", password: "senha-bem-longa" });
+    await comoEstaEmProducao(reg.body.user.id);
+
+    const r = await registrarSupino(reg.body.token, 95);
+
+    expect(r.body.meta.newPRs.some((p: { type: string }) => p.type === "carga_max")).toBe(true);
+  });
+
+  // O treino é gravado ANTES de o recorde ser calculado. Se o motor falhar, a
+  // pessoa não pode receber "não salvou" por um treino que está salvo — ela
+  // tentaria de novo e duplicaria o histórico.
+  it("uma falha no motor de recorde não derruba o salvamento do treino", async () => {
+    const reg = await request(app)
+      .post("/auth/register")
+      .send({ name: "Fabio", email: "fabio@teste.com", password: "senha-bem-longa" });
+
+    // Substitui o método para simular o banco caindo no meio do salvamento.
+    const original = PersonalRecord.findOne;
+    PersonalRecord.findOne = (() => {
+      throw new Error("banco fora do ar no meio do salvamento");
+    }) as typeof PersonalRecord.findOne;
+
+    try {
+      const r = await registrarSupino(reg.body.token, 100);
+      expect(r.status).toBe(201);
+      expect(r.body.meta.newPRs).toEqual([]);
+      expect(await Activity.countDocuments({ user: reg.body.user.id })).toBe(1);
+    } finally {
+      PersonalRecord.findOne = original;
+    }
+  });
+});

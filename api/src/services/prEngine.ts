@@ -1,8 +1,10 @@
 import type mongoose from "mongoose";
 import { PersonalRecord } from "../models/PersonalRecord.js";
+import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { Activity } from "../models/Activity.js";
 import { normalizarWod, fecharScore, chaveDoMovimento } from "./crossfit.js";
 import { resolverBenchmark } from "./benchmarks.js";
+import { slugify, slugDoExercicio } from "./slug.js";
 
 // Motor de detecção de PR (Fase 2c). Ver docs/ESPORTES.md §4.4, §5.3, §7.3, §12.
 // Força e distância: "maior é melhor". Tempo: "menor é melhor". Aulas/horas:
@@ -67,6 +69,8 @@ export interface NewPR {
 
 interface Candidate {
   exerciseName: string;
+  /** A identidade do exercicio. Sem ela, vale o slug do proprio nome. */
+  exerciseSlug?: string;
   type: PrType;
   repRange: string | null;
   value: number;
@@ -92,6 +96,9 @@ interface ReadSet {
 interface ReadExercise {
   name: string;
   sets?: ReadSet[];
+  /** Gravado no salvamento por `preencherSlugs`. Falta nos treinos antigos. */
+  slug?: string | null;
+  exerciseId?: string | null;
 }
 
 function strengthCandidates(payload: unknown): Candidate[] {
@@ -101,8 +108,12 @@ function strengthCandidates(payload: unknown): Candidate[] {
     const valid = (ex.sets ?? []).filter((s) => s.type === "valida" && (s.weightKg ?? 0) > 0);
     if (valid.length === 0) continue;
 
+    // Uma vez por exercicio: o treino antigo nao tem `slug` gravado, e resolver
+    // aqui e o que faz o historico dele se juntar ao dos novos.
+    const exerciseSlug = ex.slug || slugDoExercicio(ex.name, ex.exerciseId);
+
     const maxWeight = Math.max(...valid.map((s) => s.weightKg ?? 0));
-    out.push({ exerciseName: ex.name, type: "carga_max", repRange: null, value: maxWeight, unit: "kg" });
+    out.push({ exerciseName: ex.name, exerciseSlug, type: "carga_max", repRange: null, value: maxWeight, unit: "kg" });
 
     let best1rm = 0;
     for (const s of valid) {
@@ -110,7 +121,7 @@ function strengthCandidates(payload: unknown): Candidate[] {
       if (e && e > best1rm) best1rm = e;
     }
     if (best1rm > 0) {
-      out.push({ exerciseName: ex.name, type: "rm_estimado", repRange: null, value: Math.round(best1rm * 10) / 10, unit: "kg" });
+      out.push({ exerciseName: ex.name, exerciseSlug, type: "rm_estimado", repRange: null, value: Math.round(best1rm * 10) / 10, unit: "kg" });
     }
 
     const byRange = new Map<string, number>();
@@ -121,7 +132,7 @@ function strengthCandidates(payload: unknown): Candidate[] {
       if (w > (byRange.get(r) ?? 0)) byRange.set(r, w);
     }
     for (const [r, w] of byRange) {
-      out.push({ exerciseName: ex.name, type: "carga_faixa", repRange: r, value: w, unit: "kg" });
+      out.push({ exerciseName: ex.name, exerciseSlug, type: "carga_faixa", repRange: r, value: w, unit: "kg" });
     }
   }
   return out;
@@ -301,18 +312,52 @@ async function applyCandidate(
   c: Candidate,
   celebrateEnabled: boolean
 ): Promise<NewPR | null> {
-  const existing = await PersonalRecord.findOne({
-    user: userId,
-    exerciseName: c.exerciseName,
-    type: c.type,
-    repRange: c.repRange,
-  });
+  // A chave e o slug. Os geradores que nao passam um (endurance, aulas, wod)
+  // ja mandam nome canonico, entao o slug do proprio nome serve.
+  const exerciseSlug = c.exerciseSlug || slugify(c.exerciseName);
+
+  // Sem identidade nao ha recorde. Um nome so de emoji ou pontuacao ("🔥",
+  // "---") produz slug vazio, e gravar "" juntaria todos eles num balaio: o
+  // indice unico e (user, slug, tipo, faixa), entao o "💪" de 100 kg passaria
+  // por cima do "🔥" de 20 kg como se fossem o mesmo exercicio. `wodCandidates`
+  // ja descarta a chave vazia; a forca nao tinha essa porta.
+  if (!exerciseSlug) return null;
+
+  // Procura pela chave nova e, se nao achar, pela antiga.
+  //
+  // O recorde ja gravado nao tem `exerciseSlug` ate o backfill rodar. Sem este
+  // segundo passo, o motor nao o encontrava, achava que era a primeira vez e
+  // tentava CRIAR outro documento — que batia no indice unico antigo (ainda
+  // vivo na colecao, porque autoIndex so cria, nunca derruba) e derrubava o
+  // salvamento do treino inteiro com E11000.
+  //
+  // Achando pelo nome, o documento antigo ganha o slug aqui mesmo: cada pessoa
+  // migra sozinha ao treinar, e o backfill vira otimizacao em vez de
+  // pre-requisito do deploy.
+  const existing =
+    (await PersonalRecord.findOne({
+      user: userId,
+      exerciseSlug,
+      type: c.type,
+      repRange: c.repRange,
+    })) ??
+    (await PersonalRecord.findOne({
+      user: userId,
+      exerciseName: c.exerciseName,
+      type: c.type,
+      repRange: c.repRange,
+      $or: [{ exerciseSlug: { $exists: false } }, { exerciseSlug: "" }],
+    }));
+
+  // Documento antigo encontrado pelo nome: grava a identidade que faltava.
+  if (existing && !existing.exerciseSlug) existing.exerciseSlug = exerciseSlug;
 
   if (!existing) {
     await PersonalRecord.create({
       user: userId,
       sportId: activity.sportId,
       exerciseName: c.exerciseName,
+      exerciseSlug,
       type: c.type,
       repRange: c.repRange,
       value: c.value,
@@ -328,12 +373,32 @@ async function applyCandidate(
   if (!improved) return null;
 
   const prevVal = existing.value;
+  // O rotulo acompanha a grafia mais recente; a identidade (slug) nao muda.
+  existing.exerciseName = c.exerciseName;
   existing.previousValue = prevVal;
   existing.previousAchievedAt = existing.achievedAt;
   existing.value = c.value;
   existing.achievedAt = activity.startedAt;
   existing.activity = activity._id;
   await existing.save();
+
+  // A linha do tempo e gravada aqui, ANTES do corte de celebracao: o recompute
+  // roda com `celebrate: false` e mesmo assim precisa reconstruir o historico.
+  // So chega aqui quem SUPEROU um recorde — a linha de base sai antes, la em
+  // cima, e continua nao sendo conquista.
+  await PersonalRecordEvent.create({
+    user: userId,
+    sportId: activity.sportId,
+    exerciseSlug,
+    exerciseName: c.exerciseName,
+    type: c.type,
+    repRange: c.repRange,
+    value: c.value,
+    previousValue: prevVal,
+    unit: c.unit,
+    activity: activity._id,
+    achievedAt: activity.startedAt,
+  });
 
   if (!celebrateEnabled) return null;
 
@@ -400,6 +465,9 @@ export async function detectStrengthPRs(
 /** Reconstrói os PRs de um usuário a partir do histórico (linha de base, sem celebrar). */
 export async function recomputeUserPRs(userId: mongoose.Types.ObjectId): Promise<void> {
   await PersonalRecord.deleteMany({ user: userId });
+  // Tambem a linha do tempo: ela e derivada do historico, e reconstruir sem
+  // limpar antes duplicaria cada conquista a cada recompute.
+  await PersonalRecordEvent.deleteMany({ user: userId });
   const activities = await Activity.find({
     user: userId,
     kind: { $in: ["strength", "endurance", "class", "wod"] },
