@@ -18,14 +18,21 @@ import {
   gerarConvite,
   quantosAlunos,
   verConvite,
-  vinculoAtivo,
+  vinculosAtivos,
 } from "../services/vinculos.js";
-import { METRICAS, calendarioDoUsuario, exerciciosDoUsuario, serieDoExercicio } from "../services/evolucao.js";
+import {
+  METRICAS,
+  calendarioDoUsuario,
+  exerciciosDoUsuario,
+  gruposDoUsuario,
+  serieDoExercicio,
+} from "../services/evolucao.js";
+import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema } from "../models/Plan.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
-import { decodeCursorCriacao, encodeCursorCriacao } from "../utils/cursor.js";
+import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } from "../utils/cursor.js";
 
 /**
  * O aviso que acompanha um treino escrito por gente, e não pela IA.
@@ -228,6 +235,63 @@ proRouter.get(
 );
 
 /**
+ * O freio das telas do aluno.
+ *
+ * São as MESMAS quatro agregações com `$unwind` duplo que o `evolucaoRouter`
+ * protege (`routes/evolucao.ts`), e com a janela em "tudo" elas varrem o
+ * histórico inteiro sem corte de data. A diferença é que ali a pessoa varre o
+ * próprio passado, e aqui um profissional varre o de N alunos — o painel
+ * nivelou a superfície de consulta, então precisa nivelar o freio também.
+ *
+ * O teto é o dobro do lado do aluno porque o uso real é outro: abrir um aluno
+ * dispara quatro requisições, e pular entre cinco alunos numa conversa de
+ * WhatsApp é uso normal. Sessenta derrubaria o coach fazendo o trabalho dele.
+ * Uma tela em laço de recarga, que é o que isto existe para cortar, estoura
+ * cento e vinte em segundos do mesmo jeito.
+ */
+const leituraDoAluno = rateLimit({ windowMs: 60_000, max: 120, name: "pro-aluno" });
+
+/** Janela em dias para as telas do aluno. Zero é "tudo". */
+const janelaDoAluno = z.preprocess(
+  (v) => (v === "" || v == null ? undefined : v),
+  z.coerce.number().int().min(0).max(3650).default(90)
+);
+
+/**
+ * O aluno é meu, e ele abriu os treinos?
+ *
+ * Estava repetido em cada rota do perfil; com quatro cópias, é questão de tempo
+ * até uma delas esquecer a checagem de escopo — e aí um profissional veria o
+ * que o aluno fechou.
+ */
+async function alunoComTreinosAbertos(
+  req: { user?: { _id: mongoose.Types.ObjectId }; params: Record<string, string> },
+  id: string,
+  /** Papel PREFERIDO, não filtro: se não houver vínculo dele, devolve o que
+   *  houver, para o erro continuar dizendo a verdade a quem é nutri do aluno. */
+  preferido?: PapelPro
+) {
+  if (!mongoose.isValidObjectId(id)) throw new HttpError(404, "Aluno não encontrado.");
+
+  const clientId = new mongoose.Types.ObjectId(id);
+  // Uma consulta só, e a escolha feita aqui: quem acompanha a mesma pessoa como
+  // treinador E como nutricionista tem dois vínculos ativos, com escopos
+  // diferentes. Pegar "um deles" negava acesso a quem tinha, de forma
+  // intermitente — o pior jeito de um bug de permissão aparecer.
+  const links = await vinculosAtivos(clientId, req.user!._id);
+  const abre = (l: (typeof links)[number]) => l.escopo?.treinos === true;
+  const link =
+    links.find((l) => l.papel === preferido && abre(l)) ??
+    links.find(abre) ??
+    links.find((l) => l.papel === preferido) ??
+    links[0];
+
+  if (!link) throw new HttpError(404, "Este não é seu aluno.");
+  if (!abre(link)) throw new HttpError(403, "Este aluno não abriu os treinos para você.");
+  return { link, clientId };
+}
+
+/**
  * O aluno por dentro: o que ele autorizou, e nada além.
  *
  * A rota devolve 403 quando o escopo de treinos está fechado, em vez de
@@ -237,25 +301,23 @@ proRouter.get(
 proRouter.get(
   "/alunos/:id",
   requirePro("coach", "nutri"),
+  leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const alunoId = z.string().parse(req.params.id);
-    if (!mongoose.isValidObjectId(alunoId)) throw new HttpError(404, "Aluno não encontrado.");
-
-    const clientId = new mongoose.Types.ObjectId(alunoId);
-    const link = await vinculoAtivo(clientId, req.user!._id);
-    if (!link) throw new HttpError(404, "Este não é seu aluno.");
-    if (link.escopo?.treinos !== true) {
-      throw new HttpError(403, "Este aluno não abriu os treinos para você.");
-    }
+    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
 
     const aluno = await User.findById(clientId).select("name username avatarUrl bio");
     if (!aluno) throw new HttpError(404, "Aluno não encontrado.");
 
-    const dias = z.coerce.number().int().min(7).max(365).default(90).parse(req.query.dias);
+    const dias = janelaDoAluno.parse(req.query.dias);
 
+    // O calendário é sempre de um ano, e não da janela escolhida: é o mesmo
+    // 365 fixo que o aluno pede em `MinhasAtividadesScreen`, e nivelar é isso.
+    // Seguir a janela dava ao coach uma tira de 13 semanas contra o ano inteiro
+    // que o aluno vê — e, com a janela em "tudo", um `Math.min(0, 365)` que
+    // pedia ZERO dias: calendário vazio justo em quem tem mais histórico.
     const [exercicios, calendario, datas] = await Promise.all([
       exerciciosDoUsuario(clientId, dias),
-      calendarioDoUsuario(clientId, Math.min(dias, 365)),
+      calendarioDoUsuario(clientId, 365),
       Activity.find({ user: clientId }).select("startedAt").sort({ startedAt: -1 }).limit(400),
     ]);
 
@@ -290,27 +352,103 @@ proRouter.get(
 proRouter.get(
   "/alunos/:id/exercicios/:slug",
   requirePro("coach", "nutri"),
+  leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const alunoId = String(req.params.id);
-    if (!mongoose.isValidObjectId(alunoId)) throw new HttpError(404, "Aluno não encontrado.");
+    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
 
-    const clientId = new mongoose.Types.ObjectId(alunoId);
-    const link = await vinculoAtivo(clientId, req.user!._id);
-    if (!link) throw new HttpError(404, "Este não é seu aluno.");
-    if (link.escopo?.treinos !== true) {
-      throw new HttpError(403, "Este aluno não abriu os treinos para você.");
-    }
-
-    const { dias, metrica } = z
-      .object({
-        dias: z.coerce.number().int().min(0).max(3650).default(90),
-        metrica: z.enum(METRICAS).default("carga_max"),
-      })
-      .parse(req.query);
+    const dias = janelaDoAluno.parse(req.query.dias);
+    const metrica = z.enum(METRICAS).default("carga_max").parse(req.query.metrica);
 
     const slug = z.string().min(1).max(80).parse(req.params.slug);
     const pontos = await serieDoExercicio(clientId, slug, dias, metrica);
     res.json({ data: pontos, meta: { dias, metrica, slug } });
+  })
+);
+
+/**
+ * Séries por grupo muscular do aluno — os eixos do radar.
+ *
+ * Mesma função que responde ao próprio dono em `/evolucao/grupos`: o coach vê
+ * o mesmo número que o aluno vê, e não uma segunda versão do cálculo que
+ * poderia discordar dele na frente dos dois.
+ */
+proRouter.get(
+  "/alunos/:id/grupos",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    void link;
+
+    const dias = janelaDoAluno.parse(req.query.dias);
+    res.json({ data: await gruposDoUsuario(clientId, dias), meta: { dias } });
+  })
+);
+
+const conquistasDoAlunoSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  cursor: z.string().optional(),
+});
+
+/**
+ * O histórico de recordes do aluno.
+ *
+ * É o que transforma "ele está evoluindo" em uma data e um número: o coach vê
+ * quando cada marca caiu, e o que ela superou.
+ *
+ * Pagina por cursor, igual a `GET /prs/historico`, que é a mesma lista do lado
+ * do aluno: é lista que só cresce, e parar nas 100 mais recentes sem ter como
+ * pedir a próxima página deixaria o coach sem o começo da história — justo no
+ * aluno antigo, que é onde há mais o que ler.
+ */
+proRouter.get(
+  "/alunos/:id/conquistas",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+
+    const { limit, cursor: bruto } = conquistasDoAlunoSchema.parse(req.query);
+    const cursor = bruto ? decodeCursor(bruto) : null;
+
+    const filtro: mongoose.FilterQuery<unknown> = { user: clientId };
+    if (cursor) {
+      // Keyset por (achievedAt desc, _id desc), o mesmo de `/prs/historico`: o
+      // `_id` desempata as conquistas do mesmo instante, que acontecem sempre
+      // — um treino bate carga máxima e 1RM estimado na mesma hora.
+      filtro.$or = [
+        { achievedAt: { $lt: cursor.startedAt } },
+        { achievedAt: cursor.startedAt, _id: { $lt: new mongoose.Types.ObjectId(cursor.id) } },
+      ];
+    }
+
+    const docs = await PersonalRecordEvent.find(filtro)
+      .sort({ achievedAt: -1, _id: -1 })
+      .limit(limit + 1);
+
+    const temMais = docs.length > limit;
+    const eventos = temMais ? docs.slice(0, limit) : docs;
+    const ultimo = eventos[eventos.length - 1];
+    const nextCursor =
+      temMais && ultimo
+        ? encodeCursor({ startedAt: ultimo.achievedAt as Date, id: ultimo._id.toString() })
+        : null;
+
+    res.json({
+      data: eventos.map((e) => ({
+        id: e._id.toString(),
+        sportId: e.sportId,
+        exerciseName: e.exerciseName,
+        exerciseSlug: e.exerciseSlug,
+        type: e.type,
+        repRange: e.repRange ?? null,
+        value: e.value,
+        previousValue: e.previousValue,
+        unit: e.unit,
+        achievedAt: e.achievedAt,
+      })),
+      meta: { nextCursor },
+    });
   })
 );
 
@@ -562,15 +700,12 @@ proRouter.put(
   "/alunos/:id/treino",
   requirePro("coach"),
   asyncHandler(async (req, res) => {
-    const alunoId = String(req.params.id);
-    if (!mongoose.isValidObjectId(alunoId)) throw new HttpError(404, "Aluno não encontrado.");
-
-    const clientId = new mongoose.Types.ObjectId(alunoId);
-    const link = await vinculoAtivo(clientId, req.user!._id);
-    if (!link || link.papel !== "coach") throw new HttpError(404, "Este não é seu aluno.");
-    if (link.escopo?.treinos !== true) {
-      throw new HttpError(403, "Este aluno não abriu os treinos para você.");
-    }
+    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id), "coach");
+    // Quem prescreve treino é o coach: o papel diz o que a pessoa faz, e não
+    // só em quem ela toca. O `"coach"` acima é o que garante que quem acompanha
+    // o mesmo aluno nos dois papéis caia no vínculo certo — e não leve um 403
+    // dizendo que ele não é o treinador de quem ele treina.
+    if (link.papel !== "coach") throw new HttpError(403, "Só o treinador prescreve treino.");
 
     const { summary, workout } = prescricaoSchema.parse(req.body);
 
