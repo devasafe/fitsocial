@@ -150,10 +150,14 @@ export async function buscarMensagens(
   return { itens: r.data, nextCursor: r.meta.nextCursor, encerrado: r.meta.encerrado };
 }
 
-export async function enviarMensagem(token: string, linkId: string, texto: string): Promise<Mensagem> {
+export async function enviarMensagem(
+  token: string,
+  linkId: string,
+  corpo: { texto?: string; imageUrl?: string; imageWidth?: number; imageHeight?: number }
+): Promise<Mensagem> {
   const r = await apiFetch<{ data: Mensagem }>(`/pro/acompanhamentos/${linkId}/mensagens`, {
     method: "POST",
-    body: { texto },
+    body: corpo,
     token,
   });
   return r.data;

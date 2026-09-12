@@ -24,6 +24,7 @@ import { METRICAS, calendarioDoUsuario, exerciciosDoUsuario, serieDoExercicio } 
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema } from "../models/Plan.js";
 import { ProMessage } from "../models/ProMessage.js";
+import { enviarPush } from "../services/push/index.js";
 import { decodeCursorCriacao, encodeCursorCriacao } from "../utils/cursor.js";
 
 /**
@@ -617,6 +618,16 @@ proRouter.post(
       imageUrl: body.imageUrl ?? "",
       imageWidth: body.imageWidth ?? null,
       imageHeight: body.imageHeight ?? null,
+    });
+
+    // Avisa o outro lado. Depois da resposta e sem `await` no caminho quente:
+    // push é best-effort, e uma falha da Expo não pode fazer uma mensagem já
+    // gravada parecer que não foi enviada.
+    const destinatario = link.client.equals(req.user!._id) ? link.professional : link.client;
+    void enviarPush(destinatario, "mensagem_pro", {
+      title: req.user!.name,
+      body: body.texto?.trim() || "Mandou uma foto",
+      data: { tipo: "mensagem_pro", link: link._id.toString() },
     });
 
     res.status(201).json({

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { buscarCapacidades, sessao, type Capacidade, type Eu } from "./api";
+import { buscarCapacidades, buscarEu, sessao, type Capacidade, type Eu } from "./api";
 import { Entrar } from "./pages/Entrar";
 import { Alunos } from "./pages/Alunos";
 import { Aluno } from "./pages/Aluno";
@@ -45,11 +45,15 @@ export function App() {
       return;
     }
     let ativo = true;
-    buscarCapacidades(token)
-      .then((r) => {
+    // Busca as duas coisas: quem sou eu e o que posso fazer. A sessão sobrevive
+    // ao F5, o estado da aba não — e sem recuperar o usuário, a conversa não
+    // saberia quem falou o quê.
+    Promise.all([buscarCapacidades(token), buscarEu(token)])
+      .then(([caps, quem]) => {
         if (!ativo) return;
-        setCapacidades(r.data.capacidades);
-        setSemAcesso(r.data.capacidades.length === 0);
+        setEu(quem);
+        setCapacidades(caps.data.capacidades);
+        setSemAcesso(caps.data.capacidades.length === 0);
       })
       .catch(() => {
         if (!ativo) return;

@@ -240,7 +240,12 @@ export function Aluno({
 
       {aba === "conversa" && (
         <div className="painel">
-          <Conversa token={token} linkId={perfil.vinculo.id} euId={euId} />
+          <Conversa
+            token={token}
+            linkId={perfil.vinculo.id}
+            euId={euId}
+            nomeDoAluno={perfil.aluno.nome}
+          />
         </div>
       )}
 

@@ -362,29 +362,63 @@ label {
 .conversa {
   display: flex;
   flex-direction: column;
-  gap: var(--esp-8);
-  max-height: 420px;
+  gap: var(--esp-4);
+  max-height: 440px;
   overflow-y: auto;
   padding-right: var(--esp-8);
 }
 
-.balao {
-  max-width: 76%;
-  padding: var(--esp-8) var(--esp-12);
-  border-radius: var(--raio-card);
-  background: var(--surface-2);
+/* Cada fala é uma coluna própria: é ela que decide o lado, e o balão só se
+   estica dentro dela. Antes o alinhamento vivia no balão e o nome de quem
+   falou não tinha onde morar — sem nome e sem lado, a conversa virava uma
+   lista de frases soltas. */
+.fala {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  margin-bottom: var(--esp-8);
+}
+.fala.minha {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.fala.dele {
   align-self: flex-start;
+  align-items: flex-start;
+}
+
+.fala .quem {
+  font-size: 11px;
+  color: var(--texto-3);
+  margin-bottom: 3px;
+  padding: 0 var(--esp-4);
+}
+
+.balao {
+  padding: var(--esp-8) var(--esp-12);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  /* O canto "mordido" do lado de quem falou é o sinal que se lê sem pensar,
+     antes mesmo da cor — e funciona para quem não distingue verde de cinza. */
+  border-radius: var(--raio-card);
 }
-.balao.meu {
-  align-self: flex-end;
+.fala.dele .balao {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: var(--esp-4);
+}
+.fala.minha .balao {
   background: var(--verde-fundo);
+  border: 1px solid var(--verde-fraco);
+  border-bottom-right-radius: var(--esp-4);
 }
+
 .balao img {
   max-width: 100%;
+  max-height: 320px;
   border-radius: var(--raio-chip);
   display: block;
+  margin-bottom: var(--esp-4);
 }
 .balao .quando {
   display: block;
@@ -392,11 +426,19 @@ label {
   color: var(--texto-3);
   margin-top: 4px;
 }
+.fala.minha .quando {
+  text-align: right;
+}
 
 .escrever {
   display: flex;
   gap: var(--esp-8);
-  margin-top: var(--esp-12);
+  margin-top: var(--esp-16);
+  align-items: center;
+}
+.escrever input[type="text"],
+.escrever input:not([type]) {
+  flex: 1;
 }
 
 /* ------------------------------------------------------------------ estados */

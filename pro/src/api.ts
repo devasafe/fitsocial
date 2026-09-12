@@ -115,6 +115,23 @@ export interface Capacidade {
 export const buscarCapacidades = (token: string) =>
   api<{ capacidades: Capacidade[] }>("/pro/me", { token });
 
+/**
+ * Quem sou eu, a partir do token guardado.
+ *
+ * Precisa existir separado do login porque a sessão sobrevive ao recarregar a
+ * página, e o usuário não: sem isto, depois de um F5 o painel não sabia quem
+ * era o dono da sessão — e a conversa deixava de distinguir quem falou o quê,
+ * porque a comparação era com um id vazio.
+ */
+export async function buscarEu(token: string): Promise<Eu> {
+  const r = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) throw new ErroApi(r.status, "Sessão inválida.");
+  const d = (await r.json()) as { user: Eu };
+  return d.user;
+}
+
 /* ---------- alunos ---------- */
 
 export interface Escopo {
@@ -284,3 +301,39 @@ export const enviarMensagem = (token: string, linkId: string, texto: string) =>
 
 export const buscarNaoLidas = (token: string) =>
   api<{ link: string; naoLidas: number }[]>("/pro/nao-lidas", { token });
+
+/**
+ * Manda uma foto na conversa.
+ *
+ * Dois passos, e é assim no app também: sobe pelo `POST /uploads`, que
+ * reencoda e descarta o EXIF — inclusive a coordenada de GPS —, e só então a
+ * mensagem carrega a URL. Nada de imagem em base64 dentro do corpo da
+ * mensagem, que incharia o banco e a resposta de toda a conversa.
+ */
+export async function enviarFoto(token: string, linkId: string, file: File): Promise<Mensagem> {
+  const form = new FormData();
+  form.append("image", file);
+
+  // Sem `Content-Type`: o navegador precisa montar o boundary do multipart.
+  const up = await fetch(`${API_BASE_URL}/uploads`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!up.ok) {
+    const d = (await up.json().catch(() => ({}))) as { error?: string };
+    throw new ErroApi(up.status, d.error ?? "Não foi possível enviar a foto.");
+  }
+  const { url, width, height } = (await up.json()) as {
+    url: string;
+    width?: number;
+    height?: number;
+  };
+
+  const r = await api<Mensagem>(`/pro/acompanhamentos/${linkId}/mensagens`, {
+    method: "POST",
+    body: { imageUrl: url, imageWidth: width, imageHeight: height },
+    token,
+  });
+  return r.data;
+}

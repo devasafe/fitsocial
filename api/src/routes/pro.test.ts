@@ -709,3 +709,39 @@ describe("convite por nome de usuário", () => {
     expect(ok.status).toBe(201);
   });
 });
+
+describe("foto na conversa", () => {
+  it("mensagem só com foto é válida, e volta com a URL", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token))
+      .send({ imageUrl: "https://fitcdn.satriz.club/agachamento.jpg", imageWidth: 1080, imageHeight: 1350 });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.imageUrl).toBe("https://fitcdn.satriz.club/agachamento.jpg");
+    expect(r.body.data.texto).toBe("");
+
+    const lido = await request(app)
+      .get(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(coach.token));
+    expect(lido.body.data[0].imageWidth).toBe(1080);
+  });
+
+  it("foto com legenda continua valendo", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    const linkId = await vincular(coach.token, aluno.token);
+
+    const r = await request(app)
+      .post(`/pro/acompanhamentos/${linkId}/mensagens`)
+      .set(auth(aluno.token))
+      .send({ imageUrl: "https://fitcdn.satriz.club/x.jpg", texto: "tá certo assim?" });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.texto).toBe("tá certo assim?");
+  });
+});
