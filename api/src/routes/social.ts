@@ -194,15 +194,21 @@ const VERSAO_DO_CARTAO = 3;
  * uma lista de conquistas nao e mais comemoracao que a primeira delas — e a
  * primeira e a que o motor considera principal (`prEngine`).
  *
- * Marco de aula/hora nao entra: "100 aulas" e conquista, mas nao e recorde, e
- * o cartao esta anunciando forca.
+ * So tipos de FORCA entram, e a lista e fechada por um motivo concreto: em wod
+ * e endurance o `exerciseName` do candidato nao e um nome, e sim a chave —
+ * `chaveDoMovimento(nome)` no wod e o `sportId` no endurance. O cartao
+ * anunciaria "NOVO RECORDE · TREINO_A", com underscore, ou "· CORRIDA" jogando
+ * fora a distancia, que mora no `repRange`. Marco de aula tambem fica fora:
+ * e conquista, mas nao e recorde.
  */
+const TIPOS_COM_NOME = new Set(["carga_max", "rm_estimado", "carga_faixa"]);
+
 function seloDoRecorde(metrics: unknown): string | null {
   const prs = (metrics as { prs?: { type?: string; exerciseName?: string }[] } | undefined)?.prs;
   if (!Array.isArray(prs) || prs.length === 0) return null;
 
-  const pr = prs.find((p) => p.type !== "aulas" && p.type !== "horas");
-  if (!pr?.exerciseName) return null;
+  const pr = prs.find((p) => p.type && TIPOS_COM_NOME.has(p.type));
+  if (!pr?.exerciseName?.trim()) return null;
 
   return `NOVO RECORDE · ${pr.exerciseName.toUpperCase()}`;
 }

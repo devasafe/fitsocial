@@ -141,6 +141,17 @@ describe("Evolução", () => {
       const r = await request(app).get("/evolucao/exercicios");
       expect(r.status).toBe(401);
     });
+
+    // `Number("")` é 0, e 0 aqui significa "tudo": sem tratar, um parâmetro
+    // vazio viraria uma varredura do histórico inteiro, em silêncio.
+    it("dias vazio cai no padrão, não em 'tudo'", async () => {
+      const r = await request(app)
+        .get("/evolucao/exercicios?dias=")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(r.status).toBe(200);
+      expect(r.body.meta.dias).toBe(90);
+    });
   });
 
   describe("GET /evolucao/exercicios/:slug", () => {

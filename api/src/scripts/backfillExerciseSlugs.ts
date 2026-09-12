@@ -32,6 +32,7 @@ export interface ResultadoForward {
   semSlug: number;
   falharam: number;
   usuariosComPrRefeito: number;
+  pessoasComFalha: number;
 }
 
 /** Preenche o slug de cada exercício dos treinos de força. Idempotente. */
@@ -79,8 +80,10 @@ export async function backfillForward(): Promise<ResultadoForward> {
 
       if (Object.keys(set).length === 0) continue;
 
-      await Activity.updateOne({ _id: treino._id }, { $set: set });
-      atualizadas++;
+      // Conta o que GRAVOU. `updateOne` pode voltar sem ter gravado e sem
+      // lancar, e um relatorio de migracao que mente e pior que nenhum.
+      const r = await Activity.updateOne({ _id: treino._id }, { $set: set });
+      if (r.modifiedCount) atualizadas++;
     } catch (err) {
       // Um treino torto não pode custar a migração dos outros: o payload é
       // `Mixed` e o que está gravado nunca passou pelo zod de hoje.
@@ -89,36 +92,79 @@ export async function backfillForward(): Promise<ResultadoForward> {
     }
   }
 
+  // O índice ANTIGO sai antes do recompute, não depois.
+  //
+  // Ele é único por `exerciseName`, e o recompute regrava os recordes com a
+  // grafia mais recente: dois exercícios que convergem para o mesmo slug podem
+  // colidir nele no meio do caminho e abortar a migração — deixando parte das
+  // pessoas com os recordes já refeitos e parte não.
+  await PersonalRecord.collection
+    .dropIndex("user_1_exerciseName_1_type_1_repRange_1")
+    .catch(() => undefined);
+
   // Segunda metade: refaz os recordes, agora chaveados por slug. Precisa rodar
   // para TODO mundo que tem recorde, não só para quem teve treino atualizado —
   // um recorde antigo sem slug continuaria invisível para a chave nova.
   const usuarios = await PersonalRecord.distinct("user");
+  let pessoasComFalha = 0;
   for (const user of usuarios) {
-    await recomputeUserPRs(user as mongoose.Types.ObjectId);
+    try {
+      await recomputeUserPRs(user as mongoose.Types.ObjectId);
+    } catch (err) {
+      // Uma pessoa não pode custar a migração das outras. E o estado dela é
+      // recuperável: `npm run pr:recompute` refaz só ela depois.
+      pessoasComFalha++;
+      console.error(`[slugs] recordes de ${String(user)} falharam:`, (err as Error).message);
+    }
   }
 
-  // Agora que não há duplicata, o índice único pode passar a ser o do slug.
-  await PersonalRecord.syncIndexes();
+  // O indice novo, e so ele. `syncIndexes()` derrubaria qualquer indice que
+  // nao esteja no schema — inclusive algum criado a mao em producao para
+  // resolver um problema pontual. A intencao aqui e estreita: trocar um indice
+  // por outro, e e isso que o codigo deve dizer.
+  await PersonalRecord.createIndexes();
 
-  return { total, atualizadas, semSlug, falharam, usuariosComPrRefeito: usuarios.length };
+  return {
+    total,
+    atualizadas,
+    semSlug,
+    falharam,
+    usuariosComPrRefeito: usuarios.length - pessoasComFalha,
+    pessoasComFalha,
+  };
 }
 
 /**
- * Tira o slug de todo treino de força e refaz os recordes sem ele.
+ * Tira o slug de todo treino de força, derruba o índice novo e refaz os
+ * recordes sem ele.
  *
- * Não restaura o índice antigo: o schema é quem o declara, então voltar o
- * índice é voltar o código. O que este rollback garante é que os dados não
- * ficam num meio-termo — sem slug em lugar nenhum, como antes.
+ * Derrubar o índice é parte do rollback, e não detalhe: `autoIndex` só CRIA
+ * índice, nunca remove. Voltar o código para a versão anterior deixaria o
+ * índice único por slug vivo na coleção, e o código antigo — que não escreve
+ * `exerciseSlug` — colidiria em (user, null, tipo, faixa) no segundo recorde
+ * de qualquer pessoa. O rollback precisa desfazer o que o forward fez.
  */
 export async function backfillRollback(): Promise<{ limpas: number }> {
+  // O filtro so pega quem tem o campo, por dois motivos: o operador `$[]` erra
+  // no primeiro documento cujo `payload.exercises` nao seja array — e existe
+  // payload torto, tanto que o forward envolve cada treino em try/catch — e
+  // assim `modifiedCount` passa a significar alguma coisa.
   const r = await Activity.updateMany(
-    { kind: "strength" },
+    { kind: "strength", "payload.exercises.slug": { $exists: true } },
     { $unset: { "payload.exercises.$[].slug": "" } }
   );
 
+  await PersonalRecord.collection
+    .dropIndex("user_1_exerciseSlug_1_type_1_repRange_1")
+    .catch(() => undefined);
+
   const usuarios = await PersonalRecord.distinct("user");
   for (const user of usuarios) {
-    await recomputeUserPRs(user as mongoose.Types.ObjectId);
+    try {
+      await recomputeUserPRs(user as mongoose.Types.ObjectId);
+    } catch (err) {
+      console.error(`[slugs] rollback dos recordes de ${String(user)} falhou:`, (err as Error).message);
+    }
   }
 
   return { limpas: r.modifiedCount ?? 0 };
@@ -135,7 +181,10 @@ if (process.argv[1]?.includes("backfillExerciseSlugs")) {
       } else {
         const r = await backfillForward();
         console.log(
-          `[slugs] ${r.atualizadas} treinos atualizados, ${r.semSlug} sem exercício identificável, ${r.falharam} com payload torto (de ${r.total}); recordes refeitos para ${r.usuariosComPrRefeito} pessoas`
+          `[slugs] ${r.atualizadas} treinos atualizados, ${r.semSlug} sem exercício identificável, ${r.falharam} com payload torto (de ${r.total}); recordes refeitos para ${r.usuariosComPrRefeito} pessoas` +
+            (r.pessoasComFalha > 0
+              ? `; ${r.pessoasComFalha} pessoa(s) falharam — rode 'npm run pr:recompute' depois`
+              : "")
         );
       }
       await mongoose.disconnect();

@@ -15,6 +15,7 @@
     "migrate:activities": "tsx src/scripts/migrateWorkoutLogsToActivities.ts",
     "migrate:activities:rollback": "tsx src/scripts/migrateWorkoutLogsToActivities.ts --rollback",
     "pr:recompute": "tsx src/scripts/recomputePRs.ts",
+    "exercicios:diagnostico": "tsx src/scripts/diagnosticarSlugs.ts",
     "exercicios:backfill": "tsx src/scripts/backfillExerciseSlugs.ts",
     "exercicios:backfill:rollback": "tsx src/scripts/backfillExerciseSlugs.ts --rollback",
     "musculos:backfill": "tsx src/scripts/backfillMuscleMetrics.ts",

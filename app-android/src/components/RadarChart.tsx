@@ -32,17 +32,33 @@ export function RadarChart({
 
   const cx = size / 2;
   const cy = size / 2;
-  // Espaço para o rótulo do lado de fora da teia.
-  const raio = size / 2 - 34;
+
+  // A margem sai do rótulo mais longo, e não de um número fixo.
+  //
+  // Antes eram 34px reservados e um raio de rótulo multiplicativo (1,19×), que
+  // comia a própria margem: num radar de 288px sobravam 13px para um texto de
+  // até 53px, e "Posterior" virava "Poste", "Tríceps" virava "ceps". Com 12
+  // grupos sempre desenhados, isso acontecia em todos os casos, não num canto.
+  const maiorRotulo = Math.max(...eixos.map((e) => e.rotulo.length));
+  const margem = Math.min(maiorRotulo * 5.4 + 12, size / 3);
+  const raio = Math.max(size / 2 - margem, 40);
   const maior = Math.max(...eixos.map((e) => e.valor), 1);
+
+  const angulo = (i: number) => (Math.PI * 2 * i) / eixos.length - Math.PI / 2;
 
   const ponto = (i: number, fracao: number) => {
     // Começa no topo e anda no sentido horário.
-    const ang = (Math.PI * 2 * i) / eixos.length - Math.PI / 2;
+    const ang = angulo(i);
     return {
       x: cx + Math.cos(ang) * raio * fracao,
       y: cy + Math.sin(ang) * raio * fracao,
     };
+  };
+
+  /** O rótulo fica a uma distância FIXA da teia, não a uma fração dela. */
+  const ondeFicaORotulo = (i: number) => {
+    const ang = angulo(i);
+    return { x: cx + Math.cos(ang) * (raio + 12), y: cy + Math.sin(ang) * (raio + 12) };
   };
 
   const area = eixos
@@ -78,7 +94,7 @@ export function RadarChart({
 
         {/* Rótulos, fora da teia */}
         {eixos.map((e, i) => {
-          const p = ponto(i, 1.19);
+          const p = ondeFicaORotulo(i);
           const ancora = p.x < cx - 4 ? "end" : p.x > cx + 4 ? "start" : "middle";
           return (
             <SvgText

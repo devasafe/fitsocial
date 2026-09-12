@@ -97,14 +97,25 @@ export async function createActivity(
   });
 
   // Detecção de PR (Fase 2c) — força, endurance e aulas, síncrona.
-  const newPRs = await detectPRs(userId, {
-    _id: activity._id,
-    sportId: activity.sportId,
-    kind: activity.kind,
-    startedAt: activity.startedAt,
-    durationSec: activity.durationSec,
-    payload: activity.payload,
-  });
+  //
+  // Em try/catch porque o treino JÁ foi gravado acima: se o motor de recorde
+  // falhar, a pessoa não pode receber "não foi possível salvar" por um treino
+  // que está salvo — ela tentaria de novo e duplicaria o histórico. Recorde é
+  // consequência do treino, não condição dele; e `recomputeUserPRs` reconstrói
+  // o que se perder aqui.
+  let newPRs: NewPR[] = [];
+  try {
+    newPRs = await detectPRs(userId, {
+      _id: activity._id,
+      sportId: activity.sportId,
+      kind: activity.kind,
+      startedAt: activity.startedAt,
+      durationSec: activity.durationSec,
+      payload: activity.payload,
+    });
+  } catch (err) {
+    console.error(`[prs] atividade ${String(activity._id)} salva, recorde falhou:`, (err as Error).message);
+  }
 
   // Guarda na propria atividade o que ela conquistou.
   //

@@ -265,3 +265,46 @@ describe("identidade do exercício (slug)", () => {
     expect(prs[0].value).toBe(20);
   });
 });
+
+describe("identidade vazia e o que a atividade guarda", () => {
+  // O indice unico e (user, slug, tipo, faixa): com slug vazio, dois
+  // exercicios diferentes disputariam o MESMO recorde, e o ultimo passaria por
+  // cima do outro como se fossem a mesma coisa.
+  it("exercício sem nome utilizável não vira recorde", async () => {
+    const activity = await Activity.create({
+      user: userId,
+      sportId: "musculacao",
+      kind: "strength",
+      startedAt: new Date(),
+      payload: {
+        variant: "musculacao",
+        exercises: [{ name: "🔥", sets: [{ type: "valida", weightKg: 80, reps: 5, done: true }] }],
+      },
+      metrics: {},
+    });
+
+    const news = await detectStrengthPRs(userId, activity);
+
+    expect(news).toEqual([]);
+    expect(await PersonalRecord.countDocuments({ user: userId })).toBe(0);
+  });
+
+  it("dois exercícios sem nome utilizável não viram um recorde só", async () => {
+    for (const [nome, peso] of [["🔥", 20], ["💪", 100]] as const) {
+      const a = await Activity.create({
+        user: userId,
+        sportId: "musculacao",
+        kind: "strength",
+        startedAt: new Date(),
+        payload: {
+          variant: "musculacao",
+          exercises: [{ name: nome, sets: [{ type: "valida", weightKg: peso, reps: 5, done: true }] }],
+        },
+        metrics: {},
+      });
+      await detectStrengthPRs(userId, a);
+    }
+
+    expect(await PersonalRecord.countDocuments({ user: userId })).toBe(0);
+  });
+});

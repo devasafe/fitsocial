@@ -47,11 +47,18 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
 
   const loadFirst = useCallback(async () => {
     try {
-      const [res, ano] = await Promise.all([listActivities(token!), calendario(token!, 365)]);
+      // O calendário é enfeite; a lista é a tela. Buscar os dois com
+      // `Promise.all` fazia o endpoint novo poder derrubar uma tela que já
+      // funcionava em produção — o `temTreino` abaixo já esconde o calendário
+      // quando não há dado, então o caminho degradado é só ligar este catch.
+      const res = await listActivities(token!);
       setItems(res.data);
       setCursor(res.meta.nextCursor);
-      setDias(ano);
       setError(false);
+
+      calendario(token!, 365)
+        .then(setDias)
+        .catch(() => setDias([]));
     } catch {
       setError(true);
     } finally {

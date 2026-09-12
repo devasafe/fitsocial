@@ -4,6 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { Post } from "../models/Post.js";
+import { Activity } from "../models/Activity.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -314,6 +315,41 @@ describe("Recordes de força (PR)", () => {
     expect(cargaMax).toBeTruthy();
     expect(cargaMax.value).toBe(110);
     expect(cargaMax.previousValue).toBe(100);
+  });
+
+  // `metrics` é Mixed, e é daí que vem o risco: a gravação é uma reatribuição
+  // do path inteiro (`activity.set("metrics", {...})`), não uma mutação interna
+  // (`activity.metrics.prs = ...`), que o mongoose NÃO marcaria como
+  // modificada e sumiria sem erro. Este teste existe para a troca de uma pela
+  // outra falhar aqui, e não no cartão de alguém.
+  it("o recorde fica gravado na própria atividade, para o cartão", async () => {
+    // Exercício exclusivo deste teste: o `tokenB` já acumulou recorde de
+    // agachamento nos testes acima, e aí o primeiro treino não seria linha de
+    // base.
+    const remada = (weightKg: number) => ({
+      sportId: "musculacao",
+      kind: "strength",
+      payload: { exercises: [{ name: "Remada curvada", sets: [{ type: "valida", weightKg, reps: 5 }] }] },
+    });
+
+    const primeiro = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send(remada(60));
+    const semPR = await Activity.findById(primeiro.body.data.id);
+    expect((semPR!.metrics as { prs?: unknown[] }).prs).toBeUndefined();
+
+    const superou = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send(remada(70));
+
+    const comPR = await Activity.findById(superou.body.data.id);
+    const prs = (comPR!.metrics as { prs?: { type: string; exerciseName: string; value: number }[] }).prs;
+    expect(prs?.some((p) => p.type === "carga_max" && p.value === 70)).toBe(true);
+    expect(prs?.[0].exerciseName).toBe("Remada curvada");
+    // E as métricas que já existiam continuam lá.
+    expect((comPR!.metrics as { volumeTotalKg?: number }).volumeTotalKg).toBeGreaterThan(0);
   });
 
   it("GET /prs lista os recordes do usuário", async () => {

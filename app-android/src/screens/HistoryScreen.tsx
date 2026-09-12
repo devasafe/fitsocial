@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
@@ -89,26 +89,44 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  // O slug numa ref para o `load` poder compará-lo sem virar dependência —
+  // entrar na lista de deps recriaria o `load` a cada troca de exercício e
+  // recarregaria a tela inteira por nada.
+  const slugAtual = useRef<string | null>(null);
+  slugAtual.current = slug;
+
   const load = useCallback(async () => {
-    try {
-      const [lista, gruposDaJanela, card] = await Promise.all([
-        listarExercicios(token!, janela),
-        listarGrupos(token!, janela),
-        getCardioProgress(token!),
-      ]);
+    // Separados: uma aba não pode apagar a outra. Buscar musculação e cardio
+    // com `Promise.all` fazia o cardio falhando esvaziar a musculação inteira.
+    const [forca, cardioRes] = await Promise.allSettled([
+      Promise.all([listarExercicios(token!, janela), listarGrupos(token!, janela)]),
+      getCardioProgress(token!),
+    ]);
+
+    if (forca.status === "fulfilled") {
+      const [lista, gruposDaJanela] = forca.value;
       setExercicios(lista);
       setGrupos(gruposDaJanela);
-      setCardio(card.exercises);
       // Mantém o exercício escolhido quando ele continua existindo na janela
       // nova — trocar de janela não deveria trocar o assunto da tela.
-      setSlug((cur) => (cur && lista.some((e) => e.slug === cur) ? cur : (lista[0]?.slug ?? null)));
-      setCardioSel((cur) => cur ?? card.exercises[0]?.name ?? null);
-      setError(false);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
+      const escolhido =
+        slugAtual.current && lista.some((e) => e.slug === slugAtual.current)
+          ? slugAtual.current
+          : (lista[0]?.slug ?? null);
+      // Se o exercício vai mudar, o gráfico já entra em carregamento aqui:
+      // senão o cabeçalho mostraria o exercício novo por alguns quadros com a
+      // curva do anterior desenhada embaixo.
+      if (escolhido !== slugAtual.current) setCarregandoSerie(true);
+      setSlug(escolhido);
     }
+
+    if (cardioRes.status === "fulfilled") {
+      setCardio(cardioRes.value.exercises);
+      setCardioSel((cur) => cur ?? cardioRes.value.exercises[0]?.name ?? null);
+    }
+
+    setError(forca.status === "rejected");
+    setLoading(false);
   }, [token, janela]);
 
   useFocusEffect(
@@ -138,6 +156,14 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
   );
 
   const atual = useMemo(() => exercicios.find((e) => e.slug === slug) ?? null, [exercicios, slug]);
+
+  // Estável entre renders: o gráfico recalcula as coordenadas quando `points`
+  // muda de identidade, e um array novo a cada render significava refazer a
+  // conta a cada quadro do arrasto do dedo.
+  const pontosDoGrafico = useMemo(
+    () => serie.map((p) => ({ date: p.data, value: p.valor, ehPR: p.ehPR })),
+    [serie]
+  );
 
   // Máx de 460px de largura para o gráfico (bom no web e no celular).
   const chartWidth = Math.min(width - spacing.gutter * 2 - spacing.md * 2, 460);
@@ -267,7 +293,7 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
                       ) : serie.length > 1 ? (
                         <View style={{ marginTop: spacing.s16 }}>
                           <LineChart
-                            points={serie.map((p) => ({ date: p.data, value: p.valor, ehPR: p.ehPR }))}
+                            points={pontosDoGrafico}
                             width={chartWidth}
                             formatValue={(v) => formatarValor(v, metrica)}
                           />

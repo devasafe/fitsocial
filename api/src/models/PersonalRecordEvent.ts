@@ -36,9 +36,15 @@ const eventoSchema = new Schema(
 );
 
 // A tela é sempre "as minhas conquistas, da mais recente para trás".
-eventoSchema.index({ user: 1, achievedAt: -1 });
+//
+// O `_id` entra como última chave porque é assim que a paginação ordena
+// (`achievedAt: -1, _id: -1`): um treino bate carga máxima e 1RM no mesmo
+// instante, e sem o desempate no índice o planner teria de ordenar em memória —
+// a paginação por cursor deixaria de ser servida por índice justamente na
+// coleção que mais cresce.
+eventoSchema.index({ user: 1, achievedAt: -1, _id: -1 });
 // E o gráfico de um exercício marca os pontos em que houve recorde.
-eventoSchema.index({ user: 1, exerciseSlug: 1, achievedAt: -1 });
+eventoSchema.index({ user: 1, exerciseSlug: 1, achievedAt: -1, _id: -1 });
 
 export type PersonalRecordEventDoc = HydratedDocument<InferSchemaType<typeof eventoSchema>>;
 

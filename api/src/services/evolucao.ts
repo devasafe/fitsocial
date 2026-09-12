@@ -198,7 +198,12 @@ export async function serieDoExercicio(
   metrica: Metrica
 ): Promise<PontoDoExercicio[]> {
   const linhas = await Activity.aggregate<{ _id: mongoose.Types.ObjectId; data: Date; valor: number | null }>([
-    { $match: naJanela(userId, dias, "strength") },
+    // O filtro de slug aparece duas vezes de propósito. Antes do `$unwind` ele
+    // significa "algum exercício deste treino é esse" — superconjunto exato do
+    // que sobreviveria depois, e portanto seguro — e derruba os treinos que não
+    // têm o exercício antes de explodir cada um em oito documentos. O Mongo não
+    // faz essa subida sozinho.
+    { $match: { ...naJanela(userId, dias, "strength"), "payload.exercises.slug": slug } },
     { $unwind: "$payload.exercises" },
     { $match: { "payload.exercises.slug": slug } },
     { $unwind: "$payload.exercises.sets" },
@@ -211,17 +216,18 @@ export async function serieDoExercicio(
   // Aí o ponto não existe, em vez de virar zero e cavar um buraco no gráfico.
   const pontos = linhas.filter((l) => l.valor != null);
 
-  // Quais desses treinos foram recorde — uma consulta só, pelo índice
-  // {user, exerciseSlug, achievedAt}, e não uma por ponto.
+  // Quais desses treinos foram recorde — uma consulta só, e pela MESMA janela
+  // da série, não por um `$in` com o id de cada ponto: com `dias=0` aquele `$in`
+  // teria um elemento por treino da vida inteira da pessoa, e nenhum índice
+  // ajuda a casar uma lista assim. Por janela, o índice
+  // {user, exerciseSlug, achievedAt} serve a consulta inteira.
   const tipo = PR_DA_METRICA[metrica];
   const comPR = new Set<string>();
   if (tipo && pontos.length > 0) {
-    const eventos = await PersonalRecordEvent.find({
-      user: userId,
-      exerciseSlug: slug,
-      type: tipo,
-      activity: { $in: pontos.map((p) => p._id) },
-    }).select("activity");
+    const filtro: Record<string, unknown> = { user: userId, exerciseSlug: slug, type: tipo };
+    if (dias > 0) filtro.achievedAt = { $gte: inicioDaJanela(dias) };
+
+    const eventos = await PersonalRecordEvent.find(filtro).select("activity");
     for (const e of eventos) comPR.add(String(e.activity));
   }
 

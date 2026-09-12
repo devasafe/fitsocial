@@ -91,10 +91,12 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   }, [prs]);
 
   if (loading) {
+    // Alinhado ao topo, como o conteúdo que vai substituí-lo: centralizado, ele
+    // aparecia no meio da tela e saltava para cima quando os dados chegavam.
     return (
-      <View style={{ flex: 1, backgroundColor: colors.bg, alignItems: "center", justifyContent: "center" }}>
+      <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
         <SkeletonLista itens={5} altura={72} />
-      </View>
+      </Screen>
     );
   }
 

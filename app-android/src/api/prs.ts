@@ -102,10 +102,14 @@ export function newPRMessage(prs: NewPR[]): { title: string; body: string } | nu
  * virar mais um post generico.
  *
  * Marco de aula/hora fica de fora: e conquista, mas nao e recorde, e a frase
- * seria "bati meu recorde em Aulas".
+ * seria "bati meu recorde em Aulas". `carga_faixa` tambem: ele e um recorde
+ * DENTRO de uma faixa de repeticoes, e a legenda descartaria o `repRange` —
+ * "meu recorde no Supino: 100 kg" se leria como recorde absoluto no feed.
  */
+const TIPOS_DA_LEGENDA = new Set(["carga_max", "rm_estimado"]);
+
 export function legendaDeRecorde(prs: NewPR[]): string {
-  const pr = prs.find((p) => !p.milestone && NAMED_TYPES.has(p.type));
+  const pr = prs.find((p) => !p.milestone && TIPOS_DA_LEGENDA.has(p.type));
   if (!pr) return "";
 
   const valor = prValueLabel(pr.type, pr.value, pr.unit);

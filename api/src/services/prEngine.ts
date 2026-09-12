@@ -316,12 +316,41 @@ async function applyCandidate(
   // ja mandam nome canonico, entao o slug do proprio nome serve.
   const exerciseSlug = c.exerciseSlug || slugify(c.exerciseName);
 
-  const existing = await PersonalRecord.findOne({
-    user: userId,
-    exerciseSlug,
-    type: c.type,
-    repRange: c.repRange,
-  });
+  // Sem identidade nao ha recorde. Um nome so de emoji ou pontuacao ("🔥",
+  // "---") produz slug vazio, e gravar "" juntaria todos eles num balaio: o
+  // indice unico e (user, slug, tipo, faixa), entao o "💪" de 100 kg passaria
+  // por cima do "🔥" de 20 kg como se fossem o mesmo exercicio. `wodCandidates`
+  // ja descarta a chave vazia; a forca nao tinha essa porta.
+  if (!exerciseSlug) return null;
+
+  // Procura pela chave nova e, se nao achar, pela antiga.
+  //
+  // O recorde ja gravado nao tem `exerciseSlug` ate o backfill rodar. Sem este
+  // segundo passo, o motor nao o encontrava, achava que era a primeira vez e
+  // tentava CRIAR outro documento — que batia no indice unico antigo (ainda
+  // vivo na colecao, porque autoIndex so cria, nunca derruba) e derrubava o
+  // salvamento do treino inteiro com E11000.
+  //
+  // Achando pelo nome, o documento antigo ganha o slug aqui mesmo: cada pessoa
+  // migra sozinha ao treinar, e o backfill vira otimizacao em vez de
+  // pre-requisito do deploy.
+  const existing =
+    (await PersonalRecord.findOne({
+      user: userId,
+      exerciseSlug,
+      type: c.type,
+      repRange: c.repRange,
+    })) ??
+    (await PersonalRecord.findOne({
+      user: userId,
+      exerciseName: c.exerciseName,
+      type: c.type,
+      repRange: c.repRange,
+      $or: [{ exerciseSlug: { $exists: false } }, { exerciseSlug: "" }],
+    }));
+
+  // Documento antigo encontrado pelo nome: grava a identidade que faltava.
+  if (existing && !existing.exerciseSlug) existing.exerciseSlug = exerciseSlug;
 
   if (!existing) {
     await PersonalRecord.create({
