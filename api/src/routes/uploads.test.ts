@@ -63,6 +63,37 @@ describe("Upload de imagens", () => {
     created.push(res.body.url.split("/uploads/")[1]);
   });
 
+  it("uma foto de celular comum passa — 5 MB era pouco", async () => {
+    // Câmera de celular de hoje produz 4 a 12 MB sem esforço, e o teto antigo
+    // rejeitava isso com "File too large", em inglês, na cara de quem só queria
+    // postar. O arquivo guardado é pequeno de qualquer jeito: o `processImage`
+    // reduz para 1600px e reencoda antes de salvar.
+    const oitoMegas = Buffer.concat([imagemValida, Buffer.alloc(8 * 1024 * 1024)]);
+
+    const res = await request(app)
+      .post("/uploads")
+      .set("Authorization", `Bearer ${token}`)
+      .attach("image", oitoMegas, { filename: "foto.png", contentType: "image/png" });
+
+    // Passa do multer. O sharp pode recusar o buffer remendado do teste, mas o
+    // que importa aqui é NÃO ser mais o erro de tamanho.
+    expect(res.body.error ?? "").not.toContain("MB");
+  });
+
+  it("arquivo grande demais é recusado em português, dizendo o limite", async () => {
+    const gigante = Buffer.alloc(21 * 1024 * 1024);
+
+    const res = await request(app)
+      .post("/uploads")
+      .set("Authorization", `Bearer ${token}`)
+      .attach("image", gigante, { filename: "enorme.png", contentType: "image/png" });
+
+    expect(res.status).toBe(400);
+    // Nada de "File too large": um erro que não diz o que fazer vira chamado.
+    expect(res.body.error).toContain("20 MB");
+    expect(res.body.error).toContain("menor");
+  });
+
   it("recusa arquivo que não é imagem (400)", async () => {
     const res = await request(app)
       .post("/uploads")
