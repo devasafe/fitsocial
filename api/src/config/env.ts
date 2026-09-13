@@ -82,6 +82,22 @@ export const env = {
   mediaPublicBaseUrl: process.env.MEDIA_PUBLIC_BASE_URL ?? "",
   // Segredo esperado no header Authorization do webhook do RevenueCat (opcional).
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
+
+  // --- Cobrança ---
+  paymentProvider: process.env.PAYMENT_PROVIDER ?? "asaas",
+  // Sandbox por padrão, de propósito: cobrar de verdade tem de ser uma decisão
+  // explícita de quem configura o servidor, nunca o que acontece por esquecer
+  // de setar uma variável.
+  asaasApiUrl: process.env.ASAAS_API_URL ?? "https://api-sandbox.asaas.com/v3",
+  asaasApiKey: process.env.ASAAS_API_KEY ?? "",
+  /**
+   * Token que o Asaas manda no cabeçalho de todo webhook.
+   *
+   * Sem ele o webhook RECUSA tudo, e isso é a escolha certa: o webhook antigo
+   * deste projeto ficava público quando a env estava vazia, o que permitia a
+   * qualquer um liberar acesso pago mandando um POST.
+   */
+  asaasWebhookToken: process.env.ASAAS_WEBHOOK_TOKEN ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
   // O painel é uma segunda origem, então CORS_ORIGIN passou a aceitar lista
   // separada por vírgula. Uma origem só continua funcionando igual.
