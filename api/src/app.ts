@@ -22,7 +22,7 @@ import { pushRouter } from "./routes/push.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
 import { coachRouter } from "./routes/coach.js";
-import { billingRouter } from "./routes/billing.js";
+import { billingRouter, webhookRouter } from "./routes/billing.js";
 import { exerciseVideosRouter } from "./routes/exerciseVideos.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { errorHandler } from "./middleware/error.js";
@@ -38,6 +38,16 @@ export function createApp() {
   app.set("trust proxy", 1);
 
   app.use(cors({ origin: env.corsOrigins.includes("*") ? "*" : env.corsOrigins }));
+
+  // ANTES do parser global, e isto não é estilo — é obrigatório.
+  //
+  // A verificação de webhook é calculada sobre os BYTES EXATOS que o gateway
+  // mandou. `express.json()` consome o corpo e o devolve como objeto; parsear e
+  // re-serializar muda espaçamento e ordem de chave, e a assinatura deixa de
+  // bater. Montado aqui, este router pega o corpo cru antes de qualquer um
+  // tocar nele.
+  app.use(webhookRouter);
+
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => res.json({ ok: true }));

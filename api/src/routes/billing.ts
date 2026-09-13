@@ -1,13 +1,59 @@
 import { Router } from "express";
+import express from "express";
 import mongoose from "mongoose";
+import { z } from "zod";
 import { env } from "../config/env.js";
 import { requireAuth } from "../middleware/auth.js";
+import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User, publicUser } from "../models/User.js";
+import { Assinatura, PROVEDORES, type Provedor } from "../models/Assinatura.js";
 import { aplicarEventoDeCompra, recomputeTier } from "../services/entitlement.js";
+import { CATALOGO, CICLOS, PRODUTOS, emReais } from "../services/pagamentos/catalogo.js";
+import { iniciarAssinatura, processarWebhook } from "../services/pagamentos/assinaturas.js";
 
 export const billingRouter = Router();
+
+/**
+ * O webhook dos provedores novos, com o corpo CRU.
+ *
+ * Montado num router à parte e com `express.raw` porque `app.ts` aplica
+ * `express.json()` globalmente: verificação de assinatura é calculada sobre os
+ * bytes exatos, e `JSON.parse` seguido de re-serialização muda espaçamento e
+ * ordem de chave. Se isso for descoberto depois, TODO evento assinado falha na
+ * verificação e ninguém entende por quê.
+ *
+ * Por isso ele é exportado separado e montado ANTES do parser global.
+ */
+export const webhookRouter = Router();
+
+webhookRouter.post(
+  "/billing/webhook/:provedor",
+  express.raw({ type: "*/*", limit: "1mb" }),
+  asyncHandler(async (req, res) => {
+    const nome = String(req.params.provedor);
+    if (!(PROVEDORES as readonly string[]).includes(nome)) {
+      // 404 e não 400: um provedor que não existe não deve nem confirmar que a
+      // rota existe para quem estiver varrendo.
+      throw new HttpError(404, "Provedor desconhecido.");
+    }
+
+    const corpo = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body ?? ""));
+    const r = await processarWebhook(nome as Provedor, req.headers as Record<string, unknown>, corpo);
+
+    if (!r.aceito) {
+      // 401 para quem não provou ser o gateway. O provedor reenvia, e é isso
+      // que a gente quer quando o segredo estiver errado — melhor reenviar do
+      // que perder o evento em silêncio.
+      throw new HttpError(401, "Webhook não autenticado.");
+    }
+
+    // 200 sempre que o evento foi aceito, mesmo quando ignorado: o gateway lê
+    // qualquer outra coisa como falha e reenvia em laço.
+    res.json({ received: true });
+  })
+);
 
 // Tipos de evento do RevenueCat que indicam assinatura ATIVA vs perdida.
 const ACTIVE_EVENTS = new Set([
@@ -79,5 +125,92 @@ billingRouter.post(
     await recomputeTier(user);
 
     res.json({ user: publicUser(user) });
+  })
+);
+
+// ----------------------------------------------------------------- catálogo
+
+/** O que está à venda. Preço vem do servidor, nunca escrito na tela. */
+billingRouter.get("/produtos", (_req, res) => {
+  res.json({
+    data: PRODUTOS.map((p) => {
+      const item = CATALOGO[p];
+      return {
+        produto: item.produto,
+        nome: item.nome,
+        resumo: item.resumo,
+        precoCentavos: item.precoCentavos,
+        precoFormatado: {
+          mensal: emReais(item.precoCentavos.mensal),
+          anual: emReais(item.precoCentavos.anual),
+        },
+        limiteDeAlunos: item.limiteDeAlunos,
+      };
+    }),
+    meta: {},
+  });
+});
+
+// ---------------------------------------------------------------- checkout
+
+const checkoutSchema = z.object({
+  produto: z.enum(PRODUTOS),
+  ciclo: z.enum(CICLOS),
+});
+
+/**
+ * Abre o pagamento e devolve para onde mandar a pessoa.
+ *
+ * Rate limit baixo: cada chamada cria um cliente e uma assinatura no gateway.
+ * Sem teto, um laço na tela enche a conta do Asaas de lixo.
+ */
+billingRouter.post(
+  "/checkout",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 5, name: "checkout" }),
+  asyncHandler(async (req, res) => {
+    const { produto, ciclo } = checkoutSchema.parse(req.body);
+    const { assinatura, urlDeCheckout } = await iniciarAssinatura(req.user!, produto, ciclo);
+
+    res.status(201).json({
+      data: {
+        assinatura: assinatura._id.toString(),
+        produto,
+        ciclo,
+        valorCentavos: assinatura.precoCentavos,
+        urlDeCheckout,
+      },
+      meta: {},
+    });
+  })
+);
+
+/** A assinatura corrente desta pessoa, se houver. */
+billingRouter.get(
+  "/assinatura",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const a = await Assinatura.findOne({
+      user: req.user!._id,
+      status: { $in: ["ativa", "inadimplente", "cancelada"] },
+    }).sort({ createdAt: -1 });
+
+    if (!a) return res.json({ data: null, meta: {} });
+
+    res.json({
+      data: {
+        id: a._id.toString(),
+        produto: a.produto,
+        ciclo: a.ciclo,
+        status: a.status,
+        valorCentavos: a.precoCentavos,
+        validoAte: a.validoAte,
+        renovaEm: a.renovaEm,
+        // Cancelar não tira o acesso na hora: quem cancelou comprou aquele
+        // ciclo, e ele vale até o fim.
+        cancelaNoFimDoCiclo: a.cancelaNoFimDoCiclo,
+      },
+      meta: {},
+    });
   })
 );

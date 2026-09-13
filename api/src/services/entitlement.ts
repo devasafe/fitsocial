@@ -227,18 +227,28 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
   //
   // A pergunta certa é: **por que esta conta é paga SEM contar o patrocínio?**
   if (!user.premiumSource) {
-    const semPatrocinio = calcularPlan({
+    // O plano que esta conta teria SEM a assinatura e SEM o patrocínio — ou
+    // seja, só pelo que já estava no documento antes de qualquer um dos dois.
+    // É essa a pergunta que separa "legado de verdade" de "está paga agora por
+    // um motivo que tem prazo próprio".
+    const soPeloDocumento = calcularPlan({
       ...(user.toObject() as object),
       vinculosPatrocinados: 0,
+      assinaturaStatus: null,
+      assinaturaAte: null,
+      produtoAssinado: null,
     } as UserDoc);
 
     if (isFounder(user.email)) {
       mudanca.premiumSource = "founder";
-    } else if (semPatrocinio !== "free") {
-      // Ela se sustenta sozinha: é o legado, e vira compra de uma vez por
-      // todas — sai do ramo de legado e passa a ser julgada como qualquer
-      // outra compra.
+    } else if (soPeloDocumento !== "free") {
+      // Se sustenta sozinha: é o legado, e vira compra de uma vez por todas.
       mudanca.premiumSource = "purchase";
+    } else if (user.assinaturaStatus) {
+      // NÃO carimba. A assinatura já tem ramo próprio, com `assinaturaAte`
+      // para expirar. Carimbar "purchase" aqui criaria uma SEGUNDA fonte, essa
+      // sem prazo nenhum — e a conta ficaria paga para sempre depois de o
+      // estorno ou o vencimento derrubarem a assinatura.
     } else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0) {
       // Só é paga PORQUE alguém a banca. Origem própria, para não ser
       // confundida com legado no dia em que o vínculo acabar.
