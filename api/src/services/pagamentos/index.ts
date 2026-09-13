@@ -32,6 +32,10 @@ export function getProvedorDePagamento(): IProvedorDePagamento {
  * gateway. É o mesmo motivo de a `Assinatura` carimbar o provedor.
  */
 export function provedorPeloNome(nome: Provedor): IProvedorDePagamento | null {
+  // O provedor injetado vale quando o nome bate — senão o webhook construiria
+  // um provedor novo e ignoraria a injeção, e nenhum teste de webhook estaria
+  // testando o que acha que testa.
+  if (cached && cached.nome === nome) return cached;
   if (nome === "asaas") return new AsaasProvider();
   return null;
 }

@@ -24,7 +24,8 @@ const cobrancaSchema = new Schema(
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     provedor: { type: String, enum: PROVEDORES, required: true },
-    provedorCobrancaId: { type: String, default: null },
+    /** Nem toda cobrança tem id do provedor (a nossa, pendente, ainda não). */
+    provedorCobrancaId: { type: String },
 
     /** Tudo em centavos. `liquido` é o que sobrou depois da taxa do gateway. */
     valorCentavos: { type: Number, required: true, min: 0 },
@@ -53,7 +54,18 @@ const cobrancaSchema = new Schema(
 );
 
 // O par que o webhook usa para achar a fatura que o evento menciona.
-cobrancaSchema.index({ provedor: 1, provedorCobrancaId: 1 }, { unique: true, sparse: true });
+//
+// PARCIAL, e não `sparse`. Num índice COMPOSTO, `sparse` só ignora o documento
+// que não tem NENHUM dos campos indexados — com `provedor` presente e
+// `provedorCobrancaId` ausente, o documento entra no índice mesmo assim, com
+// `null` no lugar do que falta. Duas cobranças sem id do provedor colidiam, e
+// o erro subia de dentro do webhook: o evento era registrado como "erro" no
+// livro-razão e NADA era aplicado. Na prática, uma cobrança recusada não
+// marcava a conta como inadimplente, e ninguém ficava sabendo.
+cobrancaSchema.index(
+  { provedor: 1, provedorCobrancaId: 1 },
+  { unique: true, partialFilterExpression: { provedorCobrancaId: { $type: "string" } } }
+);
 // "O que entrou no período", que é a consulta de todo relatório de receita.
 cobrancaSchema.index({ status: 1, pagoEm: -1 });
 // E o mesmo recorte por cupom, para o painel de parceria.

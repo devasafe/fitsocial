@@ -38,7 +38,8 @@ const assinaturaSchema = new Schema(
      * histórico — e histórico de cobrança não se migra.
      */
     provedor: { type: String, enum: PROVEDORES, required: true },
-    provedorAssinaturaId: { type: String, default: null },
+    /** Só existe depois que o gateway responde: a assinatura nasce pendente. */
+    provedorAssinaturaId: { type: String },
     provedorClienteId: { type: String, default: null },
 
     /** Em centavos, sempre. O desconto é o que o cupom tirou. */
@@ -80,9 +81,13 @@ const assinaturaSchema = new Schema(
 // "As assinaturas desta pessoa, a ativa primeiro" — a consulta do app.
 assinaturaSchema.index({ user: 1, status: 1, createdAt: -1 });
 // O webhook chega com o id do provedor e precisa achar a assinatura por ele.
+//
+// PARCIAL, e não `sparse`: em índice composto, `sparse` só ignora o documento
+// sem NENHUM dos campos, e toda assinatura tem `provedor`. Com `sparse`, duas
+// assinaturas ainda pendentes (sem id do gateway) colidiriam.
 assinaturaSchema.index(
   { provedor: 1, provedorAssinaturaId: 1 },
-  { unique: true, sparse: true }
+  { unique: true, partialFilterExpression: { provedorAssinaturaId: { $type: "string" } } }
 );
 // A varredura de reconciliação: quem venceu e ainda está marcada como ativa.
 assinaturaSchema.index({ status: 1, validoAte: 1 });
