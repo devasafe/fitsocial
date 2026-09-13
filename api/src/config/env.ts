@@ -84,6 +84,13 @@ export const env = {
   revenuecatWebhookAuth: process.env.REVENUECAT_WEBHOOK_AUTH ?? "",
 
   // --- Cobrança ---
+  /**
+   * Para onde o gateway devolve a pessoa depois de pagar.
+   *
+   * O checkout hospedado é uma página DELES: sem isto, quem paga fica parado
+   * numa tela do Asaas sem caminho de volta para o app.
+   */
+  appPublicUrl: (process.env.APP_PUBLIC_URL ?? "https://fit.satriz.club").replace(/\/+$/, ""),
   paymentProvider: process.env.PAYMENT_PROVIDER ?? "asaas",
   // Sandbox por padrão, de propósito: cobrar de verdade tem de ser uma decisão
   // explícita de quem configura o servidor, nunca o que acontece por esquecer

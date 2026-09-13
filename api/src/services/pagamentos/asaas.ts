@@ -16,10 +16,21 @@ import type { Provedor } from "../../models/Assinatura.js";
 // pequena, e um SDK a mais é uma dependência a mais para atualizar, auditar e
 // carregar na imagem.
 //
-// Por que Asaas: recebe com CPF, faz recorrência de verdade (gera e cobra
-// sozinho todo ciclo, e avisa quem não pagou), e cobra R$ 1,99 fixo no PIX,
-// 0% — contra 8,3% da alternativa mais próxima num ticket de R$ 29,90. Num
-// produto barato, taxa fixa é o que decide.
+// Por que Asaas: recebe com CPF (sem exigir CNPJ), faz recorrência de verdade
+// — gera e cobra sozinho todo ciclo, e avisa quem não pagou — e não tem
+// mensalidade nem adesão: só se paga quando se recebe.
+//
+// POR QUE CARTÃO, e não PIX. A recorrência do Asaas é de cartão e só de
+// cartão: o próprio gateway recusa `chargeTypes: RECURRENT` com qualquer outro
+// método ("O método de pagamento CREDIT_CARD é o único método de pagamento
+// permitido para operações RECURRENT"). PIX ali é sempre avulso, o que
+// obrigaria a pessoa a pagar de novo, na mão, todo mês — e assinatura que
+// depende de alguém lembrar não é assinatura.
+//
+// E a conta fecha a favor do cartão mesmo assim. Num ticket de R$ 29,90:
+// cartão em assinatura sai por 2,99% + R$ 0,49 = R$ 1,38, contra R$ 1,99
+// fixos do PIX. A taxa fixa do PIX só passa a compensar em ticket alto, que
+// não é o do plano que mais vai vender.
 
 /** De como o Asaas chama as coisas para como a gente chama. */
 const TIPOS: Record<string, TipoDeEvento> = {
@@ -32,6 +43,10 @@ const TIPOS: Record<string, TipoDeEvento> = {
   PAYMENT_CHARGEBACK_REQUESTED: "chargeback",
   PAYMENT_CHARGEBACK_DISPUTE: "chargeback",
   SUBSCRIPTION_DELETED: "assinatura.cancelada",
+  CHECKOUT_PAID: "checkout.pago",
+  CHECKOUT_EXPIRED: "checkout.expirado",
+  CHECKOUT_CANCELED: "checkout.expirado",
+  CHECKOUT_CREATED: "desconhecido",
 };
 
 /** O que o Asaas chama de billingType, no nosso vocabulário. */
@@ -74,46 +89,70 @@ export class AsaasProvider implements IProvedorDePagamento {
     return corpo;
   }
 
+  /**
+   * Abre uma sessão de checkout HOSPEDADA pelo Asaas.
+   *
+   * Foi tentado antes o caminho direto — criar o cliente e a assinatura pela
+   * API — e ele não fecha: o Asaas aceita criar um cliente sem CPF, mas recusa
+   * a cobrança desse cliente ("Para criar esta cobrança é necessário preencher
+   * o CPF ou CNPJ do cliente"). O RUMO não pede CPF em lugar nenhum, então
+   * aquele caminho quebraria no primeiro pagamento de verdade.
+   *
+   * O checkout hospedado resolve por cima: a tela deles coleta CPF, telefone e
+   * endereço do pagador, e nada disso passa por aqui nem é gravado — que é o
+   * desfecho certo para dado que a gente não precisa guardar.
+   *
+   * Por isso `customerData` NÃO é enviado: ele é tudo-ou-nada — mandar o nome
+   * obriga a mandar CPF, telefone e endereço completos, exatamente o que não
+   * se tem.
+   */
   async criarCheckout(pedido: PedidoDeCheckout): Promise<CheckoutCriado> {
-    // O cliente primeiro: o Asaas amarra a assinatura a um cliente dele.
-    const cliente = (await this.chamar("/customers", {
-      method: "POST",
-      body: JSON.stringify({
-        name: pedido.cliente.nome,
-        email: pedido.cliente.email,
-        externalReference: pedido.cliente.id,
-      }),
-    })) as { id: string };
+    void diasDoCiclo;
+    const volta = `${env.appPublicUrl}/assinatura`;
 
-    const dias = diasDoCiclo(pedido.ciclo);
-    const assinatura = (await this.chamar("/subscriptions", {
+    const checkout = (await this.chamar("/checkouts", {
       method: "POST",
       body: JSON.stringify({
-        customer: cliente.id,
-        billingType: "UNDEFINED", // a pessoa escolhe PIX, cartão ou boleto
-        value: pedido.valorCentavos / 100,
-        cycle: pedido.ciclo === "anual" ? "YEARLY" : "MONTHLY",
-        nextDueDate: new Date(Date.now() + 0).toISOString().slice(0, 10),
-        description: pedido.descricao,
-        // Volta em todo evento de webhook. É por ela que o handler acha a
-        // nossa `Assinatura` mesmo quando o resto do payload muda de forma.
+        // Cartão porque é o ÚNICO que o Asaas aceita em recorrência.
+        billingTypes: ["CREDIT_CARD"],
+        chargeTypes: ["RECURRENT"],
+        // O teto do Asaas é 1440 (24h). Link expirado não é problema: a pessoa
+        // clica em assinar de novo e sai um novo.
+        minutesToExpire: 1440,
+        callback: {
+          successUrl: `${volta}?status=ok`,
+          cancelUrl: `${volta}?status=cancelado`,
+          expiredUrl: `${volta}?status=expirado`,
+        },
+        items: [
+          {
+            name: pedido.descricao,
+            description: pedido.descricao,
+            quantity: 1,
+            value: pedido.valorCentavos / 100,
+          },
+        ],
+        subscription: {
+          cycle: pedido.ciclo === "anual" ? "YEARLY" : "MONTHLY",
+          nextDueDate: `${new Date().toISOString().slice(0, 10)} 12:00:00`,
+        },
+        // Volta em todo evento de webhook, e o Asaas a propaga do checkout
+        // para a assinatura e desta para cada cobrança. É por ela que o
+        // handler acha a nossa `Assinatura` sem depender do formato do resto.
         externalReference: pedido.referencia,
       }),
-    })) as { id: string; invoiceUrl?: string };
+    })) as { id?: string; link?: string };
 
-    // A primeira cobrança da assinatura é onde a pessoa paga.
-    const cobrancas = (await this.chamar(
-      `/payments?subscription=${encodeURIComponent(assinatura.id)}&limit=1`
-    )) as { data?: { invoiceUrl?: string }[] };
+    if (!checkout.link) throw new Error("Asaas não devolveu a URL de pagamento.");
 
-    const url = cobrancas.data?.[0]?.invoiceUrl ?? assinatura.invoiceUrl;
-    if (!url) throw new Error("Asaas não devolveu a URL de pagamento.");
-
-    void dias;
+    // Nem a assinatura nem o cliente existem ainda: os dois nascem quando o
+    // cartão passa. Até lá, quem amarra o evento à nossa `Assinatura` é a
+    // sessão de checkout.
     return {
-      urlDeCheckout: url,
-      provedorAssinaturaId: assinatura.id,
-      provedorClienteId: cliente.id,
+      urlDeCheckout: checkout.link,
+      provedorAssinaturaId: null,
+      provedorClienteId: null,
+      provedorCheckoutId: checkout.id ?? null,
     };
   }
 
@@ -140,28 +179,44 @@ export class AsaasProvider implements IProvedorDePagamento {
     return diferenca === 0;
   }
 
+  /**
+   * O Asaas manda DOIS formatos, e é preciso ler os dois.
+   *
+   * Evento de cobrança traz `payment`; evento de checkout traz `checkout`, com
+   * campos diferentes — nele não existe `subscription` como id, e o cliente
+   * vem numa chave própria. Tratar só o primeiro faria todo `CHECKOUT_PAID`
+   * chegar sem referência e ser descartado em silêncio.
+   */
   normalizarEvento(corpo: unknown): EventoNormalizado {
     const c = (corpo ?? {}) as {
       id?: string;
       event?: string;
       dateCreated?: string;
       payment?: Record<string, unknown>;
+      checkout?: Record<string, unknown>;
     };
     const p = (c.payment ?? {}) as Record<string, unknown>;
+    const k = (c.checkout ?? {}) as Record<string, unknown>;
+    const deCheckout = Boolean(c.checkout);
+
+    const texto = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
     return {
       tipo: TIPOS[c.event ?? ""] ?? "desconhecido",
       // O Asaas manda `id` do evento; sem ele não há idempotência possível, e
       // o handler recusa em vez de arriscar processar duas vezes.
       eventoId: String(c.id ?? ""),
-      referencia: typeof p.externalReference === "string" ? p.externalReference : null,
-      provedorAssinaturaId: typeof p.subscription === "string" ? p.subscription : null,
-      provedorCobrancaId: typeof p.id === "string" ? p.id : null,
-      valorCentavos: emCentavos(p.value),
+      referencia: texto(deCheckout ? k.externalReference : p.externalReference),
+      provedorAssinaturaId: deCheckout ? null : texto(p.subscription),
+      provedorCobrancaId: deCheckout ? null : texto(p.id),
+      provedorCheckoutId: deCheckout ? texto(k.id) : null,
+      // No checkout o cliente vem como id solto; na cobrança, na chave própria.
+      provedorClienteId: texto(deCheckout ? k.customer : p.customer),
+      valorCentavos: deCheckout ? null : emCentavos(p.value),
       // `netValue` é o que sobra depois da taxa — é ele que bate com o extrato.
-      liquidoCentavos: emCentavos(p.netValue),
-      metodo: METODOS[String(p.billingType ?? "")] ?? null,
-      pagoEm: comoData(p.paymentDate ?? p.confirmedDate),
+      liquidoCentavos: deCheckout ? null : emCentavos(p.netValue),
+      metodo: deCheckout ? null : (METODOS[String(p.billingType ?? "")] ?? null),
+      pagoEm: deCheckout ? null : comoData(p.paymentDate ?? p.confirmedDate),
       ocorridoEm: comoData(c.dateCreated),
     };
   }
@@ -174,6 +229,35 @@ export class AsaasProvider implements IProvedorDePagamento {
     await this.chamar(`/subscriptions/${encodeURIComponent(provedorAssinaturaId)}`, {
       method: "DELETE",
     });
+  }
+
+  /**
+   * De qual checkout esta assinatura nasceu.
+   *
+   * A assinatura do Asaas guarda `checkoutSession` — o id da sessão que a
+   * originou — e também herda o `externalReference`. Qualquer um dos dois
+   * resolve, e é por isso que os dois voltam: se a herança da referência
+   * falhar, a sessão ainda amarra.
+   *
+   * Uma chamada a mais, e só no caminho em que o evento chegou sem referência.
+   * O caro é o contrário: um pagamento confirmado que não acha dono é dinheiro
+   * recebido sem acesso liberado, e a pessoa reclamando.
+   */
+  async resolverOrigem(
+    provedorAssinaturaId: string
+  ): Promise<{ referencia: string | null; provedorCheckoutId: string | null } | null> {
+    try {
+      const a = (await this.chamar(
+        `/subscriptions/${encodeURIComponent(provedorAssinaturaId)}`
+      )) as { externalReference?: unknown; checkoutSession?: unknown };
+      const texto = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+      return {
+        referencia: texto(a.externalReference),
+        provedorCheckoutId: texto(a.checkoutSession),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async consultarAssinatura(

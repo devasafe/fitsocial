@@ -65,6 +65,7 @@ export async function iniciarAssinatura(
 
     assinatura.provedorAssinaturaId = criado.provedorAssinaturaId;
     assinatura.provedorClienteId = criado.provedorClienteId;
+    assinatura.provedorCheckoutId = criado.provedorCheckoutId;
     await assinatura.save();
 
     return { assinatura, urlDeCheckout: criado.urlDeCheckout };
@@ -148,8 +149,21 @@ export async function aplicarEvento(
 ): Promise<{ resultado: "aplicado" | "ignorado"; assinatura: AssinaturaDoc | null }> {
   if (e.tipo === "desconhecido") return { resultado: "ignorado", assinatura: null };
 
-  const assinatura = await acharAssinatura(e);
+  const assinatura = await acharAssinatura(provedor, e);
   if (!assinatura) return { resultado: "ignorado", assinatura: null };
+
+  // Os ids que só passam a existir depois do pagamento são carimbados no
+  // primeiro evento que os traz, qualquer que seja ele.
+  //
+  // É o que permite cancelar a assinatura no gateway mais tarde: sem o
+  // `provedorAssinaturaId`, o botão de cancelar não teria o que chamar, e o
+  // cartão da pessoa continuaria sendo cobrado todo mês.
+  if (e.provedorAssinaturaId && !assinatura.provedorAssinaturaId) {
+    assinatura.provedorAssinaturaId = e.provedorAssinaturaId;
+  }
+  if (e.provedorClienteId && !assinatura.provedorClienteId) {
+    assinatura.provedorClienteId = e.provedorClienteId;
+  }
 
   // A data vem do adaptador, e o tipo diz `Date` — mas confiar nisso aqui é
   // frágil: um provedor que devolva a string do JSON faria a comparação abaixo
@@ -219,6 +233,25 @@ export async function aplicarEvento(
       await derrubarAcesso(assinatura);
       break;
     }
+
+    case "checkout.pago": {
+      // NÃO libera nada, de propósito.
+      //
+      // "Concluiu o checkout" não é "o dinheiro entrou": quem libera acesso é
+      // `pagamento.aprovado`, e ele vem logo atrás com o valor real. Tratar
+      // este evento como pagamento liberaria acesso por uma tentativa de
+      // cartão que ainda pode ser recusada. O que ele faz de útil é carimbar
+      // os ids, e isso já aconteceu acima.
+      break;
+    }
+
+    case "checkout.expirado": {
+      // O link venceu ou foi abandonado sem pagar. Só faz sentido para quem
+      // nunca chegou a pagar — uma assinatura já ativa não regride porque um
+      // checkout velho expirou.
+      if (assinatura.status === "pendente") assinatura.status = "expirada";
+      break;
+    }
   }
 
   assinatura.ultimoEventoEm = valida ?? new Date();
@@ -226,14 +259,54 @@ export async function aplicarEvento(
   return { resultado: "aplicado", assinatura };
 }
 
-async function acharAssinatura(e: EventoNormalizado): Promise<AssinaturaDoc | null> {
+/**
+ * De quem é este evento.
+ *
+ * A ordem importa e é do mais estável para o mais frágil. A nossa referência
+ * vem primeiro porque é a única que a gente controla; depois os ids do
+ * gateway; e por último a pergunta ao próprio gateway, que custa uma chamada
+ * de rede e só acontece quando todo o resto falhou.
+ *
+ * O último degrau existe por causa do checkout hospedado: entre "clicou em
+ * assinar" e "pagou", a assinatura do Asaas ainda não existe — se o primeiro
+ * evento de cobrança chegar antes do `CHECKOUT_PAID`, ele traz um
+ * `subscription` que a gente nunca viu. Sem perguntar de onde veio, esse
+ * evento seria descartado em silêncio, e alguém teria pago sem liberar nada.
+ */
+async function acharAssinatura(
+  provedor: Provedor,
+  e: EventoNormalizado
+): Promise<AssinaturaDoc | null> {
   // Pela NOSSA referência primeiro: é a que não muda de forma.
   if (e.referencia && mongoose.isValidObjectId(e.referencia)) {
     const porRef = await Assinatura.findById(e.referencia);
     if (porRef) return porRef;
   }
   if (e.provedorAssinaturaId) {
-    return Assinatura.findOne({ provedorAssinaturaId: e.provedorAssinaturaId });
+    const porAssinatura = await Assinatura.findOne({
+      provedorAssinaturaId: e.provedorAssinaturaId,
+    });
+    if (porAssinatura) return porAssinatura;
+  }
+  if (e.provedorCheckoutId) {
+    const porCheckout = await Assinatura.findOne({ provedorCheckoutId: e.provedorCheckoutId });
+    if (porCheckout) return porCheckout;
+  }
+
+  if (!e.provedorAssinaturaId) return null;
+
+  const p = provedorPeloNome(provedor);
+  if (!p?.resolverOrigem) return null;
+
+  const origem = await p.resolverOrigem(e.provedorAssinaturaId);
+  if (!origem) return null;
+
+  if (origem.referencia && mongoose.isValidObjectId(origem.referencia)) {
+    const porRef = await Assinatura.findById(origem.referencia);
+    if (porRef) return porRef;
+  }
+  if (origem.provedorCheckoutId) {
+    return Assinatura.findOne({ provedorCheckoutId: origem.provedorCheckoutId });
   }
   return null;
 }

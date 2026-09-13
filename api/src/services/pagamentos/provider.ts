@@ -28,6 +28,10 @@ export type TipoDeEvento =
   | "assinatura.cancelada"
   | "estorno"
   | "chargeback"
+  // A pessoa concluiu o checkout. NÃO libera acesso — quem libera é o dinheiro
+  // confirmado. Serve para carimbar os ids que só passam a existir agora.
+  | "checkout.pago"
+  | "checkout.expirado"
   | "desconhecido";
 
 export interface EventoNormalizado {
@@ -38,6 +42,9 @@ export interface EventoNormalizado {
   referencia: string | null;
   provedorAssinaturaId: string | null;
   provedorCobrancaId: string | null;
+  /** A sessão de checkout, quando o evento é de checkout e não de cobrança. */
+  provedorCheckoutId: string | null;
+  provedorClienteId: string | null;
   valorCentavos: number | null;
   /** O que de fato caiu na conta, já sem a taxa. Nulo quando não informado. */
   liquidoCentavos: number | null;
@@ -62,6 +69,8 @@ export interface CheckoutCriado {
   urlDeCheckout: string;
   provedorAssinaturaId: string | null;
   provedorClienteId: string | null;
+  /** A sessão de checkout, quando o gateway hospeda a tela de pagamento. */
+  provedorCheckoutId: string | null;
 }
 
 export interface IProvedorDePagamento {
@@ -94,4 +103,19 @@ export interface IProvedorDePagamento {
   consultarAssinatura(
     provedorAssinaturaId: string
   ): Promise<{ status: string; validoAte: Date | null } | null>;
+
+  /**
+   * De quem é esta assinatura do gateway, quando o evento não disse.
+   *
+   * Existe por causa do checkout hospedado: a assinatura do Asaas nasce no
+   * momento do pagamento, e o primeiro evento de cobrança pode chegar sem a
+   * nossa referência — nesse caso a única pista é perguntar ao gateway de qual
+   * sessão de checkout aquela assinatura veio.
+   *
+   * Opcional: um provedor sem checkout hospedado não precisa disto, e o
+   * handler simplesmente não chama.
+   */
+  resolverOrigem?(
+    provedorAssinaturaId: string
+  ): Promise<{ referencia: string | null; provedorCheckoutId: string | null } | null>;
 }

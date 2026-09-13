@@ -38,9 +38,24 @@ const assinaturaSchema = new Schema(
      * histórico — e histórico de cobrança não se migra.
      */
     provedor: { type: String, enum: PROVEDORES, required: true },
-    /** Só existe depois que o gateway responde: a assinatura nasce pendente. */
+    /**
+     * Só existe depois que a pessoa PAGA.
+     *
+     * No checkout hospedado do Asaas a assinatura do gateway não nasce junto
+     * com o link: ela é criada no momento em que o cartão passa. Até lá só
+     * existe a sessão de checkout — daí `provedorCheckoutId` ser o que amarra
+     * o evento à nossa `Assinatura` enquanto isto aqui está vazio.
+     */
     provedorAssinaturaId: { type: String },
     provedorClienteId: { type: String, default: null },
+    /**
+     * A sessão de checkout que abriu esta assinatura.
+     *
+     * É o único identificador que existe entre "clicou em assinar" e "pagou".
+     * Sem ele, um evento que chegue nesse intervalo não tem como ser associado
+     * a ninguém e some — e o cliente pagou.
+     */
+    provedorCheckoutId: { type: String, default: null },
 
     /** Em centavos, sempre. O desconto é o que o cupom tirou. */
     precoCentavos: { type: Number, required: true, min: 0 },
@@ -88,6 +103,13 @@ assinaturaSchema.index({ user: 1, status: 1, createdAt: -1 });
 assinaturaSchema.index(
   { provedor: 1, provedorAssinaturaId: 1 },
   { unique: true, partialFilterExpression: { provedorAssinaturaId: { $type: "string" } } }
+);
+// O mesmo, para o intervalo em que só a sessão de checkout existe. Parcial
+// pelo mesmo motivo do índice acima — toda assinatura tem `provedor`, e sem o
+// filtro as pendentes sem checkout colidiriam entre si.
+assinaturaSchema.index(
+  { provedor: 1, provedorCheckoutId: 1 },
+  { unique: true, partialFilterExpression: { provedorCheckoutId: { $type: "string" } } }
 );
 // A varredura de reconciliação: quem venceu e ainda está marcada como ativa.
 assinaturaSchema.index({ status: 1, validoAte: 1 });

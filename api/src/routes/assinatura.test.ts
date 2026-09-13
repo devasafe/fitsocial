@@ -31,12 +31,18 @@ class ProvedorDeMentira implements IProvedorDePagamento {
   readonly nome = "asaas" as const;
   ultimoPedido: PedidoDeCheckout | null = null;
 
+  /**
+   * Espelha o checkout HOSPEDADO, que é como o Asaas funciona de verdade: na
+   * criação só existe a sessão. A assinatura e o cliente do gateway nascem
+   * quando o cartão passa, e chegam no primeiro evento.
+   */
   async criarCheckout(p: PedidoDeCheckout): Promise<CheckoutCriado> {
     this.ultimoPedido = p;
     return {
       urlDeCheckout: `https://pagamento.exemplo/${p.referencia}`,
-      provedorAssinaturaId: `sub_${p.referencia}`,
-      provedorClienteId: "cus_1",
+      provedorAssinaturaId: null,
+      provedorClienteId: null,
+      provedorCheckoutId: `chk_${p.referencia}`,
     };
   }
   verificarWebhook(cabecalhos: Record<string, unknown>): boolean {
@@ -48,6 +54,15 @@ class ProvedorDeMentira implements IProvedorDePagamento {
   async cancelarAssinatura(): Promise<void> {}
   async consultarAssinatura() {
     return null;
+  }
+
+  /** O que o gateway responde quando se pergunta de onde veio uma assinatura. */
+  origens = new Map<string, { referencia: string | null; provedorCheckoutId: string | null }>();
+  perguntasDeOrigem = 0;
+
+  async resolverOrigem(id: string) {
+    this.perguntasDeOrigem += 1;
+    return this.origens.get(id) ?? null;
   }
 }
 
@@ -343,5 +358,129 @@ describe("comprar o painel", () => {
     const conta = await contaDe(u.id);
     expect(conta.get("pro.coach.origem")).toBe("manual");
     expect(conta.get("pro.coach.limiteDeAlunos")).toBe(500);
+  });
+});
+
+describe("checkout hospedado: a assinatura do gateway só nasce ao pagar", () => {
+  /** Abre o checkout e devolve a nossa `Assinatura`, ainda pendente. */
+  async function abrirCheckout(produto = "pro") {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto, ciclo: "mensal" });
+    return { u, a: (await Assinatura.findOne({ user: u.id }))! };
+  }
+
+  it("guarda a sessão de checkout, que é o único id que existe antes do pagamento", async () => {
+    const { a } = await abrirCheckout();
+
+    expect(a.provedorCheckoutId).toBe(`chk_${a._id.toString()}`);
+    // Nem assinatura nem cliente ainda: os dois nascem quando o cartão passa.
+    expect(a.provedorAssinaturaId).toBeFalsy();
+    expect(a.provedorClienteId).toBeFalsy();
+  });
+
+  it("carimba a assinatura e o cliente do gateway no primeiro evento que os traz", async () => {
+    const { a } = await abrirCheckout();
+
+    await webhook({
+      referencia: a._id.toString(),
+      provedorAssinaturaId: "sub_asaas_1",
+      provedorClienteId: "cus_asaas_1",
+      eventoId: "e-carimbo",
+    });
+
+    const depois = (await Assinatura.findById(a._id))!;
+    // Sem isto o botão de cancelar não teria o que chamar no gateway, e o
+    // cartão da pessoa continuaria sendo cobrado todo mês.
+    expect(depois.provedorAssinaturaId).toBe("sub_asaas_1");
+    expect(depois.provedorClienteId).toBe("cus_asaas_1");
+  });
+
+  it("acha a assinatura pela sessão de checkout quando o evento não traz a referência", async () => {
+    const { u, a } = await abrirCheckout();
+
+    await webhook({
+      referencia: null,
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      eventoId: "e-por-checkout",
+    });
+
+    expect((await Assinatura.findById(a._id))!.status).toBe("ativa");
+    expect((await contaDe(u.id)).plan).toBe("pro");
+  });
+
+  it("pergunta ao gateway de onde veio a assinatura quando nada mais resolve", async () => {
+    const { u, a } = await abrirCheckout();
+    // O caso real: o evento de cobrança chega ANTES do CHECKOUT_PAID, com uma
+    // assinatura do gateway que a gente nunca viu e sem a nossa referência.
+    dublê.origens.set("sub_desconhecida", {
+      referencia: null,
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+    });
+
+    await webhook({
+      referencia: null,
+      provedorAssinaturaId: "sub_desconhecida",
+      eventoId: "e-orfao",
+    });
+
+    expect(dublê.perguntasDeOrigem).toBe(1);
+    // Sem este degrau o evento seria descartado em silêncio: alguém teria
+    // pagado e não receberia acesso nenhum.
+    expect((await Assinatura.findById(a._id))!.status).toBe("ativa");
+    expect((await contaDe(u.id)).plan).toBe("pro");
+  });
+
+  it("não pergunta ao gateway quando a referência já resolveu", async () => {
+    const { a } = await abrirCheckout();
+
+    await webhook({ referencia: a._id.toString(), eventoId: "e-direto" });
+
+    // A pergunta custa uma chamada de rede dentro do webhook: ela só pode
+    // acontecer no caminho em que todo o resto falhou.
+    expect(dublê.perguntasDeOrigem).toBe(0);
+  });
+
+  it("CHECKOUT_PAID sozinho NÃO libera acesso", async () => {
+    const { u, a } = await abrirCheckout();
+
+    await webhook({
+      tipo: "checkout.pago",
+      referencia: a._id.toString(),
+      provedorClienteId: "cus_9",
+      eventoId: "e-chk-pago",
+    });
+
+    // "Concluiu o checkout" não é "o dinheiro entrou" — o cartão ainda pode
+    // ser recusado. Quem libera é o pagamento confirmado.
+    expect((await Assinatura.findById(a._id))!.status).toBe("pendente");
+    expect((await contaDe(u.id)).plan).toBe("free");
+    // Mas o id do cliente foi aproveitado.
+    expect((await Assinatura.findById(a._id))!.provedorClienteId).toBe("cus_9");
+  });
+
+  it("checkout expirado derruba a pendente e não encosta na que já está ativa", async () => {
+    const { a } = await abrirCheckout();
+    await webhook({
+      tipo: "checkout.expirado",
+      referencia: a._id.toString(),
+      eventoId: "e-exp-1",
+    });
+    expect((await Assinatura.findById(a._id))!.status).toBe("expirada");
+
+    const outra = await abrirCheckout();
+    await webhook({ referencia: outra.a._id.toString(), eventoId: "e-pago" });
+    await webhook({
+      tipo: "checkout.expirado",
+      referencia: outra.a._id.toString(),
+      eventoId: "e-exp-2",
+      ocorridoEm: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    // Um link velho expirando não pode rebaixar quem já pagou.
+    expect((await Assinatura.findById(outra.a._id))!.status).toBe("ativa");
+    expect((await contaDe(outra.u.id)).plan).toBe("pro");
   });
 });
