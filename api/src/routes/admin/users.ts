@@ -200,20 +200,25 @@ adminUsersRouter.post(
     const { capacidade, grant, durationDays, limite, reason } = proSchema.parse(req.body);
     const alvo = await carregar(req.params.id);
 
-    if (grant) {
-      await concederPro(req.user!, alvo, capacidade, durationDays, reason, limite);
-    } else {
-      // Tirar a capacidade NÃO encerra vínculo (é decisão de `revogarPro`, e
-      // está certa: os alunos não fizeram nada). Mas eles param de ganhar Pro
-      // de graça — senão um coach revogado continuaria bancando trinta contas.
-      await revogarPro(req.user!, alvo, capacidade, reason);
+    try {
+      if (grant) {
+        await concederPro(req.user!, alvo, capacidade, durationDays, reason, limite);
+      } else {
+        // Tirar a capacidade NÃO encerra vínculo (é decisão de `revogarPro`, e
+        // está certa: os alunos não fizeram nada). Mas eles param de ganhar Pro
+        // de graça — senão um coach revogado continuaria bancando trinta contas.
+        await revogarPro(req.user!, alvo, capacidade, reason);
+      }
+    } finally {
+      // Recontar roda MESMO quando a concessão falha.
+      //
+      // `revogarPro` recusa (400) uma capacidade que já está inativa — inclusive
+      // a que venceu sozinha. Sem o `finally`, revogar um coach vencido
+      // estourava antes da recontagem, e o admin não tinha como desfazer o
+      // patrocínio nem de propósito: a única saída era conceder e revogar de
+      // novo. Recontar é idempotente, então rodar sempre não custa nada.
+      await recontarAlunosDe(alvo._id, capacidade);
     }
-
-    // Uma chamada só, nos dois sentidos: recontar chega no número certo venha
-    // de onde vier, e por isso renovar o prazo de um coach não infla mais o
-    // contador dos alunos dele. Fica aqui, e não dentro de `concederPro`, para
-    // não criar ciclo de import — `patrocinio.ts` precisa de `recomputeTier`.
-    await recontarAlunosDe(alvo._id, capacidade);
     res.json({ data: serializeUser(alvo), meta: {} });
   })
 );

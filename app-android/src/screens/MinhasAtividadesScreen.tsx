@@ -8,7 +8,6 @@ import { TreinoCard } from "../components/TreinoCard";
 import { EmptyState } from "../components/EmptyState";
 import { listActivities, type Activity } from "../api/activities";
 import { calendario, type DiaDoCalendario } from "../api/evolucao";
-import { ApiHttpError } from "../api/client";
 import { Heatmap } from "../components/Heatmap";
 import { colors, spacing } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
@@ -38,16 +37,16 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
       setError(false);
 
       calendario(token!, 365)
-        .then((d) => {
-          setDias(d);
-          setCalendarioTrancado(false);
+        .then((r) => {
+          setDias(r.dias);
+          // O servidor responde 200 e diz que limitou, em vez de recusar: sem
+          // isso o card "Seu ano" sumia da tela sem uma palavra —
+          // indistinguível de "você nunca treinou", e sem caminho para assinar.
+          setCalendarioTrancado(r.janela.limitadoPeloPlano);
         })
-        .catch((err) => {
+        .catch(() => {
           setDias([]);
-          // 402 é "faz parte do Pro", e não falha. Sem separar os dois, o card
-          // "Seu ano" sumia da tela sem uma palavra — indistinguível de "você
-          // nunca treinou", e sem nenhum caminho para assinar.
-          setCalendarioTrancado(err instanceof ApiHttpError && err.status === 402);
+          setCalendarioTrancado(false);
         });
     } catch {
       setError(true);

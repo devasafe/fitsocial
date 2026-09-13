@@ -198,6 +198,72 @@ describe("quando o profissional perde a capacidade", () => {
   });
 });
 
+describe("o patrocínio não pode engolir o Pro de quem já tinha", () => {
+  it("premium legado que aceita um coach NÃO perde o Pro quando o vínculo acaba", async () => {
+    // O documento que a Fase 0 deixou para trás: premium de verdade, de antes
+    // do motor, sem nenhuma origem gravada. Se o carimbo de patrocínio pegar
+    // essa conta, o dia em que o treinador a dispensar apaga a última prova de
+    // que ela pagou — e ninguém liga uma coisa à outra.
+    const coach = await profissional();
+    const aluno = await registrar();
+    await User.updateOne(
+      { _id: aluno.id },
+      { $set: { tier: "premium", plan: "pro" }, $unset: { premiumSource: "" } }
+    );
+
+    const linkId = await vincular(coach.token, aluno.token);
+    // Uma requisição qualquer do aluno: é ela que dispara o carimbo.
+    await request(app).get("/auth/me").set(auth(aluno.token));
+
+    // Carimbada como COMPRA, não como patrocínio: ela se sustenta sozinha.
+    expect((await planoDe(aluno.id)).premiumSource).toBe("purchase");
+
+    await request(app).delete(`/pro/acompanhamentos/${linkId}`).set(auth(aluno.token));
+
+    expect((await planoDe(aluno.id)).tier).toBe("premium");
+  });
+
+  it("fundador não é carimbado como compra", async () => {
+    // Carimbar fundador como compra o tornaria Pro para sempre mesmo saindo da
+    // lista, e `revogarPremium` passaria a recusar mexer nele.
+    const antes = process.env.FOUNDER_EMAILS;
+    const u = await registrar();
+    const doc = await planoDe(u.id);
+    process.env.FOUNDER_EMAILS = doc.email;
+
+    try {
+      await request(app).get("/auth/me").set(auth(u.token));
+      await request(app).get("/auth/me").set(auth(u.token));
+
+      const depois = await planoDe(u.id);
+      expect(depois.tier).toBe("premium");
+      expect(depois.premiumSource).toBe("founder");
+    } finally {
+      process.env.FOUNDER_EMAILS = antes;
+    }
+  });
+
+  it("e sair da lista de fundadores devolve a conta ao grátis", async () => {
+    const antes = process.env.FOUNDER_EMAILS;
+    const u = await registrar();
+    const doc = await planoDe(u.id);
+    process.env.FOUNDER_EMAILS = doc.email;
+
+    try {
+      await request(app).get("/auth/me").set(auth(u.token));
+      expect((await planoDe(u.id)).tier).toBe("premium");
+
+      process.env.FOUNDER_EMAILS = "";
+      await request(app).get("/auth/me").set(auth(u.token));
+
+      // Com o carimbo de "purchase", ela teria ficado premium para sempre.
+      expect((await planoDe(u.id)).tier).toBe("free");
+    } finally {
+      process.env.FOUNDER_EMAILS = antes;
+    }
+  });
+});
+
 describe("o Pro do patrocínio tem origem própria", () => {
   it("não vira premium legado quando o acompanhamento acaba", async () => {
     // Sem origem própria, a conta ficava `tier: "premium"` sem `premiumSource`

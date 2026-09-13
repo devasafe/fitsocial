@@ -126,9 +126,15 @@ export async function listarGrupos(token: string, dias: Janela): Promise<GrupoTr
   return r.data;
 }
 
-export async function calendario(token: string, dias = 365): Promise<DiaDoCalendario[]> {
-  const r = await apiFetch<{ data: DiaDoCalendario[] }>(`/evolucao/calendario?dias=${dias}`, { token });
-  return r.data;
+export async function calendario(
+  token: string,
+  dias = 365
+): Promise<{ dias: DiaDoCalendario[]; janela: JanelaAplicada }> {
+  const r = await apiFetch<{ data: DiaDoCalendario[]; meta?: unknown }>(
+    `/evolucao/calendario?dias=${dias}`,
+    { token }
+  );
+  return { dias: r.data, janela: janelaDoMeta(r.meta, dias as Janela) };
 }
 
 // ------------------------------------------------------------------- cardio
@@ -181,9 +187,15 @@ export interface EsporteNaLista {
   ultimaVez: string;
 }
 
-export async function listarCardio(token: string, dias: Janela): Promise<EsporteNaLista[]> {
-  const r = await apiFetch<{ data: EsporteNaLista[] }>(`/evolucao/cardio?dias=${dias}`, { token });
-  return r.data;
+export async function listarCardio(
+  token: string,
+  dias: Janela
+): Promise<{ itens: EsporteNaLista[]; janela: JanelaAplicada }> {
+  const r = await apiFetch<{ data: EsporteNaLista[]; meta?: unknown }>(
+    `/evolucao/cardio?dias=${dias}`,
+    { token }
+  );
+  return { itens: r.data, janela: janelaDoMeta(r.meta, dias) };
 }
 
 export async function serieDeCardio(
@@ -215,15 +227,19 @@ export interface Conquista {
 export async function listarConquistas(
   token: string,
   opts: { cursor?: string | null; slug?: string; limit?: number } = {}
-): Promise<{ itens: Conquista[]; nextCursor: string | null }> {
+): Promise<{ itens: Conquista[]; nextCursor: string | null; limitadoPeloPlano: boolean }> {
   const q = new URLSearchParams();
   if (opts.cursor) q.set("cursor", opts.cursor);
   if (opts.slug) q.set("slug", opts.slug);
   q.set("limit", String(opts.limit ?? 30));
 
-  const r = await apiFetch<{ data: Conquista[]; meta: { nextCursor: string | null } }>(
-    `/prs/historico?${q.toString()}`,
-    { token }
-  );
-  return { itens: r.data, nextCursor: r.meta.nextCursor };
+  const r = await apiFetch<{
+    data: Conquista[];
+    meta: { nextCursor: string | null; limitadoPor?: string };
+  }>(`/prs/historico?${q.toString()}`, { token });
+  return {
+    itens: r.data,
+    nextCursor: r.meta.nextCursor,
+    limitadoPeloPlano: r.meta.limitadoPor === "plano",
+  };
 }

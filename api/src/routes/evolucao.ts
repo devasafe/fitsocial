@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { requireAuth, requirePremium } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { calcularPlan } from "../services/entitlement.js";
 import type { UserDoc } from "../models/User.js";
@@ -166,15 +166,25 @@ evolucaoRouter.get(
 /**
  * Treinos por dia, para o calendário de constância.
  *
- * Esta é a única rota da aba que é Pro por inteiro, em vez de cortada: o
- * calendário existe para mostrar o ano, e sete casinhas não mostram constância
- * nenhuma. Meio calendário seria pior que calendário nenhum — pareceria
- * defeito, não limite.
+ * É a única parte da aba que o grátis não vê em versão reduzida: o calendário
+ * existe para mostrar o ANO, e sete casinhas não mostram constância nenhuma —
+ * meio calendário pareceria defeito, não limite.
+ *
+ * Mas responde **200 com lista vazia**, e não 402. O aplicativo não tem
+ * interceptor de 402 (só o `handleGenerate` da Home lê esse status), então um
+ * 402 aqui chegaria como erro em toda tela instalada e o card "Seu ano" sumiria
+ * calado — indistinguível de "você nunca treinou", sem caminho para assinar.
+ * Com 200 e `meta.limitadoPor`, o aplicativo novo desenha o cadeado e o antigo
+ * degrada sem nenhuma exceção em voo. É o mesmo princípio do corte de janela:
+ * limitar, nunca recusar.
  */
 evolucaoRouter.get(
   "/calendario",
-  requirePremium,
   asyncHandler(async (req, res) => {
+    if (calcularPlan(req.user!) === "free") {
+      return res.json({ data: [], meta: { dias: 0, limitadoPor: "plano" } });
+    }
+
     // Aqui a janela precisa ser um número de dias de verdade: o calendário
     // desenha uma casinha por dia, e "tudo" não tem quantas casinhas desenhar.
     const dias = z

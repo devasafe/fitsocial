@@ -193,19 +193,25 @@ describe("a evolução do grátis para nos últimos 7 dias", () => {
 });
 
 describe("o que é Pro por inteiro, e o que fica livre", () => {
-  it("o calendário do ano é Pro — meio calendário pareceria defeito", async () => {
+  it("o calendário do ano é Pro, mas responde 200 vazio — nunca 402", async () => {
     const u = await registrar();
 
     const r = await request(app).get("/evolucao/calendario").set(auth(u.token));
 
-    // 402, e não 403: é o que abre a tela de assinatura no aplicativo.
-    expect(r.status).toBe(402);
+    // 402 aqui chegaria como erro em toda tela do aplicativo instalado, e o
+    // card "Seu ano" sumiria calado. 200 com `limitadoPor` deixa o app novo
+    // desenhar o cadeado e o antigo degradar sem exceção em voo.
+    expect(r.status).toBe(200);
+    expect(r.body.data).toEqual([]);
+    expect(r.body.meta.limitadoPor).toBe("plano");
   });
 
-  it("e abre para quem paga", async () => {
+  it("e vem cheio para quem paga", async () => {
     const u = await registrar(true);
     const r = await request(app).get("/evolucao/calendario").set(auth(u.token));
     expect(r.status).toBe(200);
+    expect(r.body.data.length).toBe(365);
+    expect(r.body.meta.limitadoPor).toBeUndefined();
   });
 
   it("os recordes ATUAIS ficam livres — é o laço que traz a pessoa de volta", async () => {

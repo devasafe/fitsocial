@@ -134,7 +134,10 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
     }
 
     if (cardioRes.status === "fulfilled") {
-      const esportes = cardioRes.value;
+      const esportes = cardioRes.value.itens;
+      // Também daqui: se a busca da força falhar, o aviso do corte não pode
+      // sumir junto — o rodapé voltaria a dizer "1 ano" sobre sete dias.
+      setJanelaAplicada(cardioRes.value.janela);
       setCardio(esportes);
       // Mantém o esporte escolhido quando ele continua existindo na janela
       // nova — a mesma regra da musculação, e pelo mesmo motivo.
@@ -309,7 +312,9 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
               activeOpacity={0.85}
             >
               <Card level={1}>
-                <Txt variant="bodyStrong">Você está vendo os últimos 7 dias</Txt>
+                <Txt variant="bodyStrong">
+                  Você está vendo os últimos {janelaAplicada.dias} dias
+                </Txt>
                 <Txt variant="caption" color={colors.text2} style={{ marginTop: 2 }}>
                   As janelas maiores fazem parte do Pro. Seu histórico continua todo aqui.
                 </Txt>
@@ -438,7 +443,7 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
                       />
                       <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
                         Séries por grupo muscular {janelaAplicada?.limitadoPeloPlano
-                          ? "nos últimos 7 dias"
+                          ? `nos últimos ${janelaAplicada.dias} dias`
                           : rotuloDaJanela(janela).toLowerCase() === "tudo"
                             ? "em todo o seu histórico"
                             : `nos últimos ${rotuloDaJanela(janela).toLowerCase()}`}

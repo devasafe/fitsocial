@@ -215,19 +215,42 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
   const novoTier = tierDoPlan(novoPlan);
 
   const mudanca: Record<string, unknown> = { direitosCalculadoEm: new Date() };
-  const mudou = user.plan !== novoPlan || user.tier !== novoTier;
 
-  // Conta premium anterior ao motor: carimba a origem AGORA, para ela sair do
-  // ramo de legado e passar a ser julgada como qualquer compra. Sem isto, ela
-  // dependeria do ramo para sempre — e o ramo é o que a gente quer poder
-  // remover depois que o backfill rodar.
-  if (ehPremiumLegado(user)) mudanca.premiumSource = "purchase";
-  // Premium que vem de um profissional bancar esta pessoa ganha origem própria.
-  // É o que impede a conta de parecer "legado sem origem" no dia em que o
-  // acompanhamento acabar — e o que faz o Pro dela cair junto com o vínculo.
-  else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0 && !user.premiumSource) {
-    mudanca.premiumSource = "patrocinio";
+  // A origem é gravada a partir do que o motor JÁ SABE, e não adivinhada.
+  //
+  // A primeira versão testava predicados soltos e errava em dois casos reais:
+  // um premium legado que aceitasse um convite era carimbado como
+  // "patrocinio" (e perdia o Pro no dia em que o acompanhamento acabasse,
+  // apagando a evidência de que tinha pago), e todo fundador virava "compra"
+  // no segundo request — o que o tornaria Pro para sempre mesmo saindo da
+  // lista, e impediria o painel de mexer nele.
+  //
+  // A pergunta certa é: **por que esta conta é paga SEM contar o patrocínio?**
+  if (!user.premiumSource) {
+    const semPatrocinio = calcularPlan({
+      ...(user.toObject() as object),
+      vinculosPatrocinados: 0,
+    } as UserDoc);
+
+    if (isFounder(user.email)) {
+      mudanca.premiumSource = "founder";
+    } else if (semPatrocinio !== "free") {
+      // Ela se sustenta sozinha: é o legado, e vira compra de uma vez por
+      // todas — sai do ramo de legado e passa a ser julgada como qualquer
+      // outra compra.
+      mudanca.premiumSource = "purchase";
+    } else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0) {
+      // Só é paga PORQUE alguém a banca. Origem própria, para não ser
+      // confundida com legado no dia em que o vínculo acabar.
+      mudanca.premiumSource = "patrocinio";
+    }
   }
+
+  // Carimbar origem também é mudança: sem contar aqui, o atalho de 12h abaixo
+  // engoliria a escrita e a conta ficaria sem origem — foi assim que um
+  // premium legado acompanhado quase perdeu o Pro no fim do acompanhamento.
+  const mudou =
+    user.plan !== novoPlan || user.tier !== novoTier || mudanca.premiumSource !== undefined;
 
   if (mudou) {
     mudanca.plan = novoPlan;
