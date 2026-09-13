@@ -5,6 +5,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
 import { HttpError } from "../utils/httpError.js";
 import { temProfissional } from "../services/vinculos.js";
+import { calcularPlan } from "../services/entitlement.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import { Plan, workoutSchema, dietSchema } from "../models/Plan.js";
 import { Activity } from "../models/Activity.js";
@@ -235,6 +236,18 @@ plansRouter.post(
   asyncHandler(async (req, res) => {
     const user = req.user!;
     await recusarSeTemTreinador(user._id);
+
+    // O mesmo gate do `/generate`: importar é a IA ESCREVENDO um plano novo, a
+    // partir de um texto, e custa uma chamada de modelo igual à geração. Esta
+    // rota estava aberta — era o caminho por onde uma conta grátis criava
+    // plano sem limite nenhum, furando a regra de que a IA só monta o primeiro.
+    const jaTem = await Plan.findOne({ user: user._id }).sort({ version: -1 });
+    if (jaTem && calcularPlan(user) === "free") {
+      throw new HttpError(
+        402,
+        "Importar outro plano é um recurso Pro. Assine para trocar de plano quando quiser."
+      );
+    }
 
     const { text } = importSchema.parse(req.body);
 

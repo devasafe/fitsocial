@@ -4,6 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { Activity } from "../models/Activity.js";
+import { User } from "../models/User.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { recomputeUserPRs } from "../services/prEngine.js";
@@ -24,6 +25,14 @@ describe("Histórico de conquistas", () => {
       .send({ name: "Asafe", email: "asafe@test.com", password: "senha12345" });
     token = reg.body.token;
     userId = reg.body.user.id;
+
+    // Conta paga: aqui se testa a LINHA DO TEMPO das conquistas, não o gate.
+    // O grátis vê só a última semana, e isso tem arquivo próprio
+    // (`gatesDoPlano.test.ts`).
+    await User.updateOne(
+      { _id: userId },
+      { $set: { premiumSource: "admin", premiumUntil: null } }
+    );
   });
 
   afterAll(async () => {

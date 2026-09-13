@@ -6,6 +6,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { decodeCursor, encodeCursor } from "../utils/cursor.js";
+import { calcularPlan } from "../services/entitlement.js";
+import { inicioDaJanela } from "../utils/dia.js";
 
 export const prsRouter = Router();
 prsRouter.use(requireAuth);
@@ -55,6 +57,15 @@ prsRouter.get(
 
     const filtro: mongoose.FilterQuery<unknown> = { user: req.user!._id };
     if (slug) filtro.exerciseSlug = slug;
+
+    // O grátis vê a última semana de conquistas, como no resto da aba.
+    //
+    // `GET /prs` — os recordes ATUAIS — fica livre de propósito: a comemoração
+    // ao bater um recorde é o laço que faz a pessoa voltar amanhã, e cobrar por
+    // ela cortaria o que sustenta o grátis. O que é Pro é rever a linha do
+    // tempo inteira.
+    const cortado = calcularPlan(req.user!) === "free";
+    if (cortado) filtro.achievedAt = { $gte: inicioDaJanela(7) };
     if (cursor) {
       // Keyset por (achievedAt desc, _id desc): o `_id` desempata as conquistas
       // do mesmo instante, que acontecem sempre — um treino bate carga máxima e
@@ -90,7 +101,7 @@ prsRouter.get(
         unit: e.unit,
         achievedAt: e.achievedAt,
       })),
-      meta: { nextCursor },
+      meta: { nextCursor, ...(cortado ? { dias: 7, limitadoPor: "plano" } : {}) },
     });
   })
 );

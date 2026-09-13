@@ -4,6 +4,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import request from "supertest";
 import { createApp } from "../app.js";
 import { Activity } from "../models/Activity.js";
+import { User } from "../models/User.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 
@@ -24,6 +25,15 @@ describe("Evolução", () => {
       .send({ name: "Asafe", email: "asafe@test.com", password: "senha12345" });
     token = reg.body.token;
     userId = reg.body.user.id;
+
+    // Conta paga: o que se testa aqui é a CONTA da evolução, não o gate de
+    // plano. O grátis vê só os últimos 7 dias, e isso tem arquivo próprio
+    // (`gatesDoPlano.test.ts`) — deixar este arquivo esbarrar no corte faria
+    // cada teste de agregação falhar por um motivo que não é o dele.
+    await User.updateOne(
+      { _id: userId },
+      { $set: { premiumSource: "admin", premiumUntil: null } }
+    );
   });
 
   afterAll(async () => {

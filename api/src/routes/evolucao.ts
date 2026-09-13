@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { calcularPlan } from "../services/entitlement.js";
+import type { UserDoc } from "../models/User.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   METRICAS,
@@ -39,6 +41,41 @@ const janelaSchema = z.preprocess(
   z.coerce.number().int().min(0).max(3650).default(90)
 );
 
+/**
+ * Até onde o plano grátis enxerga o próprio passado.
+ *
+ * Uma semana é o bastante para a aba responder "como foi a semana" — que é o
+ * que faz a pessoa voltar amanhã — e curta o bastante para a falta doer
+ * justamente em quem já tem histórico. Quanto mais tempo de app, mais falta faz.
+ */
+const JANELA_DO_GRATIS = 7;
+
+/**
+ * A janela que esta pessoa pode pedir, cortada se for o caso.
+ *
+ * CORTA, e não recusa. Um 402 aqui faria o aplicativo instalado navegar para a
+ * tela de assinatura a partir de uma tela de gráfico que nunca foi ligada a
+ * isso — e a pessoa sairia do gráfico sem entender por quê. Cortado, o cliente
+ * velho simplesmente mostra sete dias, e o novo lê `meta.limitadoPor` e desenha
+ * o cadeado.
+ *
+ * Zero significa "tudo" na borda deste projeto, e por isso é o caso que mais
+ * precisa de corte.
+ */
+function janelaPermitida(user: UserDoc, pedidos: number): number {
+  if (calcularPlan(user) !== "free") return pedidos;
+  if (pedidos === 0) return JANELA_DO_GRATIS;
+  return Math.min(pedidos, JANELA_DO_GRATIS);
+}
+
+/** O `meta` das rotas de janela, dizendo se cortou e por quê. */
+function metaDaJanela(pedidos: number, dias: number) {
+  return {
+    dias,
+    ...(dias !== pedidos ? { diasPedidos: pedidos, limitadoPor: "plano" as const } : {}),
+  };
+}
+
 /** O slug vem da URL, e a borda é onde tudo é validado neste projeto. */
 const slugSchema = z.string().min(1).max(80);
 
@@ -51,9 +88,10 @@ const serieSchema = z.object({
 evolucaoRouter.get(
   "/exercicios",
   asyncHandler(async (req, res) => {
-    const dias = janelaSchema.parse(req.query.dias);
+    const pedidos = janelaSchema.parse(req.query.dias);
+    const dias = janelaPermitida(req.user!, pedidos);
     const exercicios = await exerciciosDoUsuario(req.user!._id, dias);
-    res.json({ data: exercicios, meta: { dias, total: exercicios.length } });
+    res.json({ data: exercicios, meta: { ...metaDaJanela(pedidos, dias), total: exercicios.length } });
   })
 );
 
@@ -61,10 +99,11 @@ evolucaoRouter.get(
 evolucaoRouter.get(
   "/exercicios/:slug",
   asyncHandler(async (req, res) => {
-    const { dias, metrica } = serieSchema.parse(req.query);
+    const { dias: pedidos, metrica } = serieSchema.parse(req.query);
+    const dias = janelaPermitida(req.user!, pedidos);
     const slug = slugSchema.parse(req.params.slug);
     const pontos = await serieDoExercicio(req.user!._id, slug, dias, metrica);
-    res.json({ data: pontos, meta: { dias, metrica, slug } });
+    res.json({ data: pontos, meta: { ...metaDaJanela(pedidos, dias), metrica, slug } });
   })
 );
 
@@ -84,9 +123,10 @@ const serieDeCardioSchema = z.object({
 evolucaoRouter.get(
   "/cardio",
   asyncHandler(async (req, res) => {
-    const dias = janelaSchema.parse(req.query.dias);
+    const pedidos = janelaSchema.parse(req.query.dias);
+    const dias = janelaPermitida(req.user!, pedidos);
     const esportes = await cardioDoUsuario(req.user!._id, dias);
-    res.json({ data: esportes, meta: { dias, total: esportes.length } });
+    res.json({ data: esportes, meta: { ...metaDaJanela(pedidos, dias), total: esportes.length } });
   })
 );
 
@@ -94,14 +134,20 @@ evolucaoRouter.get(
 evolucaoRouter.get(
   "/cardio/:sportId",
   asyncHandler(async (req, res) => {
-    const { dias, metrica } = serieDeCardioSchema.parse(req.query);
+    const { dias: pedidos, metrica } = serieDeCardioSchema.parse(req.query);
+    const dias = janelaPermitida(req.user!, pedidos);
     const sportId = slugSchema.parse(req.params.sportId);
     const pontos = await serieDeCardio(req.user!._id, sportId, dias, metrica);
     res.json({
       data: pontos,
       // `menorEhMelhor` viaja com a resposta para o gráfico não precisar saber
       // que pace é o caso especial: quem desenha recebe a instrução pronta.
-      meta: { dias, metrica, sportId, menorEhMelhor: menorEhMelhor(metrica) },
+      meta: {
+        ...metaDaJanela(pedidos, dias),
+        metrica,
+        sportId,
+        menorEhMelhor: menorEhMelhor(metrica),
+      },
     });
   })
 );
@@ -110,16 +156,35 @@ evolucaoRouter.get(
 evolucaoRouter.get(
   "/grupos",
   asyncHandler(async (req, res) => {
-    const dias = janelaSchema.parse(req.query.dias);
+    const pedidos = janelaSchema.parse(req.query.dias);
+    const dias = janelaPermitida(req.user!, pedidos);
     const grupos = await gruposDoUsuario(req.user!._id, dias);
-    res.json({ data: grupos, meta: { dias } });
+    res.json({ data: grupos, meta: metaDaJanela(pedidos, dias) });
   })
 );
 
-/** Treinos por dia, para o calendário de constância. */
+/**
+ * Treinos por dia, para o calendário de constância.
+ *
+ * É a única parte da aba que o grátis não vê em versão reduzida: o calendário
+ * existe para mostrar o ANO, e sete casinhas não mostram constância nenhuma —
+ * meio calendário pareceria defeito, não limite.
+ *
+ * Mas responde **200 com lista vazia**, e não 402. O aplicativo não tem
+ * interceptor de 402 (só o `handleGenerate` da Home lê esse status), então um
+ * 402 aqui chegaria como erro em toda tela instalada e o card "Seu ano" sumiria
+ * calado — indistinguível de "você nunca treinou", sem caminho para assinar.
+ * Com 200 e `meta.limitadoPor`, o aplicativo novo desenha o cadeado e o antigo
+ * degrada sem nenhuma exceção em voo. É o mesmo princípio do corte de janela:
+ * limitar, nunca recusar.
+ */
 evolucaoRouter.get(
   "/calendario",
   asyncHandler(async (req, res) => {
+    if (calcularPlan(req.user!) === "free") {
+      return res.json({ data: [], meta: { dias: 0, limitadoPor: "plano" } });
+    }
+
     // Aqui a janela precisa ser um número de dias de verdade: o calendário
     // desenha uma casinha por dia, e "tudo" não tem quantas casinhas desenhar.
     const dias = z

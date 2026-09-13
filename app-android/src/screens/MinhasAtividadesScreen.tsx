@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { View, TouchableOpacity, useWindowDimensions } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +22,7 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
   const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [dias, setDias] = useState<DiaDoCalendario[]>([]);
+  const [calendarioTrancado, setCalendarioTrancado] = useState(false);
   const { width } = useWindowDimensions();
 
   const loadFirst = useCallback(async () => {
@@ -36,8 +37,17 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
       setError(false);
 
       calendario(token!, 365)
-        .then(setDias)
-        .catch(() => setDias([]));
+        .then((r) => {
+          setDias(r.dias);
+          // O servidor responde 200 e diz que limitou, em vez de recusar: sem
+          // isso o card "Seu ano" sumia da tela sem uma palavra —
+          // indistinguível de "você nunca treinou", e sem caminho para assinar.
+          setCalendarioTrancado(r.janela.limitadoPeloPlano);
+        })
+        .catch(() => {
+          setDias([]);
+          setCalendarioTrancado(false);
+        });
     } catch {
       setError(true);
     } finally {
@@ -78,14 +88,27 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
 
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
-      {temTreino && (
+      {calendarioTrancado ? (
+        <TouchableOpacity onPress={() => nav.navigate("Subscription")} activeOpacity={0.85}>
+          <Card level={1}>
+            <Txt variant="titleCard">Seu ano</Txt>
+            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+              O calendário do ano inteiro faz parte do Pro. Ele mostra a sua constância —
+              que é o que some primeiro quando alguém está desistindo.
+            </Txt>
+            <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
+              Conhecer o Pro ›
+            </Txt>
+          </Card>
+        </TouchableOpacity>
+      ) : temTreino ? (
         <Card level={1}>
           <Txt variant="titleCard" style={{ marginBottom: spacing.sm }}>
             Seu ano
           </Txt>
           <Heatmap dias={dias} width={width - spacing.gutter * 2 - spacing.md * 2} />
         </Card>
-      )}
+      ) : null}
 
       {error && items.length === 0 ? (
         <ErrorState

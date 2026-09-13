@@ -28,6 +28,9 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   const { token } = useAuth();
   const [prs, setPRs] = useState<PersonalRecord[]>([]);
   const [conquistas, setConquistas] = useState<Conquista[]>([]);
+  /** O grátis vê só a última semana. Sem dizer isso, a seção simplesmente
+   *  desaparecia de uma tela onde ela existia ontem. */
+  const [historicoCortado, setHistoricoCortado] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,6 +43,7 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
         setPRs(lista);
         setConquistas(historico.itens);
         setCursor(historico.nextCursor);
+        setHistoricoCortado(historico.limitadoPeloPlano);
         setError(false);
       })
       .catch(() => setError(true))
@@ -162,6 +166,24 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
               </View>
             ))}
           </Card>
+
+          {historicoCortado && (
+            <TouchableOpacity onPress={() => nav.navigate("Subscription")} activeOpacity={0.85}>
+              <Card level={1}>
+                <Txt variant="bodyStrong">
+                  {conquistas.length > 0
+                    ? "Você está vendo as conquistas da última semana"
+                    : "Nenhuma conquista nos últimos 7 dias"}
+                </Txt>
+                <Txt variant="caption" color={colors.text2} style={{ marginTop: 2 }}>
+                  O histórico completo faz parte do Pro. Suas conquistas continuam todas aqui.
+                </Txt>
+                <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.s8 }}>
+                  Conhecer o Pro ›
+                </Txt>
+              </Card>
+            </TouchableOpacity>
+          )}
 
           {conquistas.length > 0 && (
             <>

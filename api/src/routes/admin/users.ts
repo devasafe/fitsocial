@@ -10,6 +10,7 @@ import { HttpError } from "../../utils/httpError.js";
 import { encodeCursorCriacao, decodeCursorCriacao } from "../../utils/cursor.js";
 import { banir, desbanir, suspender, definirVisibilidade, serializeUser } from "../../services/adminUsers.js";
 import { concederPremium, concederPro, revogarPremium, revogarPro } from "../../services/entitlement.js";
+import { recontarAlunosDe } from "../../services/patrocinio.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
 
 export const adminUsersRouter = Router();
@@ -199,10 +200,24 @@ adminUsersRouter.post(
     const { capacidade, grant, durationDays, limite, reason } = proSchema.parse(req.body);
     const alvo = await carregar(req.params.id);
 
-    if (grant) {
-      await concederPro(req.user!, alvo, capacidade, durationDays, reason, limite);
-    } else {
-      await revogarPro(req.user!, alvo, capacidade, reason);
+    try {
+      if (grant) {
+        await concederPro(req.user!, alvo, capacidade, durationDays, reason, limite);
+      } else {
+        // Tirar a capacidade NÃO encerra vínculo (é decisão de `revogarPro`, e
+        // está certa: os alunos não fizeram nada). Mas eles param de ganhar Pro
+        // de graça — senão um coach revogado continuaria bancando trinta contas.
+        await revogarPro(req.user!, alvo, capacidade, reason);
+      }
+    } finally {
+      // Recontar roda MESMO quando a concessão falha.
+      //
+      // `revogarPro` recusa (400) uma capacidade que já está inativa — inclusive
+      // a que venceu sozinha. Sem o `finally`, revogar um coach vencido
+      // estourava antes da recontagem, e o admin não tinha como desfazer o
+      // patrocínio nem de propósito: a única saída era conceder e revogar de
+      // novo. Recontar é idempotente, então rodar sempre não custa nada.
+      await recontarAlunosDe(alvo._id, capacidade);
     }
     res.json({ data: serializeUser(alvo), meta: {} });
   })

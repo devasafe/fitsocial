@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/token.js";
 import { User, type UserDoc } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
-import { recomputeTier } from "../services/entitlement.js";
+import { calcularPlan, recomputeTier } from "../services/entitlement.js";
 import { assertAccountUsable } from "../services/moderation.js";
 import { marcarPresenca } from "../services/presence.js";
 
@@ -71,10 +71,31 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   }
 }
 
-/** Exige que o usuário autenticado seja premium (gating do freemium — Fatia 5). */
+/**
+ * Exige plano pago.
+ *
+ * Responde **402**, e não 403.
+ *
+ * ATENÇÃO ao que isso significa de verdade: o aplicativo NÃO tem interceptor de
+ * 402. O único lugar que lê esse status é o `handleGenerate` da Home — em
+ * qualquer outra tela, 402 chega como erro comum. Então 402 aqui não abre
+ * paywall sozinho; ele é o status certo pela semântica (pagamento necessário) e
+ * é o que a tela nova sabe reconhecer. Quem põe este middleware numa rota
+ * PRECISA olhar o que a tela correspondente faz com a falha — senão o
+ * resultado é um card que some sem explicação.
+ *
+ * Este middleware existia desde a Fatia 5 devolvendo 403 e nunca foi usado em
+ * rota nenhuma.
+ *
+ * Lê `calcularPlan`, e não `user.tier` cru. O `tier` é cache; a verdade é a
+ * função pura, que compara contra o relógio de agora. Na prática o
+ * `requireAuth` acabou de recalcular os dois — mas depender do campo aqui
+ * seria depender de uma escrita que pode ter falhado.
+ */
 export function requirePremium(req: Request, _res: Response, next: NextFunction) {
-  if (req.user?.tier !== "premium") {
-    return next(new HttpError(403, "Recurso disponível apenas no plano premium"));
+  const user = req.user;
+  if (!user || calcularPlan(user) === "free") {
+    return next(new HttpError(402, "Este recurso faz parte do plano Pro."));
   }
   next();
 }
