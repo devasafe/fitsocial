@@ -9,7 +9,8 @@ import { pedirRedefinicao, redefinirSenha } from "../services/passwordReset.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
-import { isFounder, founderMessage, ensureFounderPremium } from "../services/founders.js";
+import { isFounder, founderMessage } from "../services/founders.js";
+import { recomputeTier } from "../services/entitlement.js";
 import { assertAccountUsable } from "../services/moderation.js";
 
 export const authRouter = Router();
@@ -61,7 +62,11 @@ authRouter.post(
       ...(username ? { username } : {}),
     });
 
-    await ensureFounderPremium(user); // amigo fundador já entra premium
+    // O motor de direitos decide o plano, e ser fundador é um dos ramos dele.
+    // Antes havia uma segunda escrita em `tier` aqui (`ensureFounderPremium`),
+    // concorrendo com o motor — dois escritores no mesmo campo é como ele se
+    // desalinhou da primeira vez.
+    await recomputeTier(user);
     const token = signTokenForUser(user);
     res.status(201).json({ token, user: userPayload(user) });
   })
@@ -82,7 +87,7 @@ authRouter.post(
     // isto, a pessoa entra no app e só descobre o bloqueio quando tudo falha.
     await assertAccountUsable(user);
 
-    await ensureFounderPremium(user);
+    await recomputeTier(user);
     const token = signTokenForUser(user);
     res.json({ token, user: userPayload(user) });
   })
@@ -93,7 +98,7 @@ authRouter.get(
   "/me",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await ensureFounderPremium(req.user!);
+    await recomputeTier(req.user!);
     res.json({ user: userPayload(req.user!) });
   })
 );

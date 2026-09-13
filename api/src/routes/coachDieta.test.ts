@@ -61,7 +61,13 @@ async function registrar(premium = true) {
     .post("/auth/register")
     .send({ name: `Pessoa ${n}`, email: `p${n}@teste.com`, password: "senha-bem-longa" });
   const id = new mongoose.Types.ObjectId(r.body.user.id as string);
-  if (premium) await User.updateOne({ _id: id }, { $set: { tier: "premium" } });
+  // Premium com ORIGEM, e não `tier` cru: desde que `recomputeTier` roda no
+  // `requireAuth`, um `tier` sem fonte que o justifique é recalculado para
+  // free na primeira requisição — que é exatamente o serviço que o motor
+  // presta. Forjar o campo derivado aqui testaria uma premissa falsa.
+  if (premium) {
+    await User.updateOne({ _id: id }, { $set: { tier: "premium", premiumSource: "admin" } });
+  }
   await Profile.create({
     user: id,
     goal: "ganhar_massa",

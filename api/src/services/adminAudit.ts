@@ -12,7 +12,21 @@ export function maskEmail(email: string): string {
 
 /** Campos que podem aparecer no diff. O que não estiver aqui é descartado —
  *  é decisão desta camada, não de quem chama, para nada sensível escapar. */
-const CAMPOS_PERMITIDOS = new Set(["role", "tier", "status", "suspendedUntil", "contentVisible"]);
+const CAMPOS_PERMITIDOS = new Set([
+  "role",
+  "tier",
+  "status",
+  "suspendedUntil",
+  "contentVisible",
+  // Direitos e cobrança. Sem estar nesta lista, `filtrar()` descarta o campo em
+  // SILÊNCIO — o diff da auditoria gravaria vazio e ninguém notaria até
+  // precisar dele para explicar por que alguém perdeu ou ganhou acesso.
+  "plan",
+  "premiumSource",
+  "assinaturaStatus",
+  "produtoAssinado",
+  "vinculosPatrocinados",
+]);
 
 function filtrar(obj: Record<string, unknown> | null | undefined) {
   if (!obj) return null;

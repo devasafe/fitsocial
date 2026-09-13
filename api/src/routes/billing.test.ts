@@ -5,6 +5,7 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { setAIProvider } from "../services/ai/index.js";
 import { Profile } from "../models/Profile.js";
+import { User } from "../models/User.js";
 import type { AIProvider } from "../services/ai/provider.js";
 
 const app = createApp();
@@ -97,7 +98,32 @@ describe("Freemium (gating + billing)", () => {
     expect(res.body.plan.version).toBe(2);
   });
 
-  it("webhook de EXPIRATION rebaixa para free", async () => {
+  it("cortesia do painel NÃO cai com o EXPIRATION da loja", async () => {
+    // Estado montado aqui, e não herdado do `it()` anterior: teste que depende
+    // da ordem quebra no dia em que alguém usa `.only` ou reordena.
+    await User.updateOne(
+      { _id: userId },
+      { $set: { premiumSource: "admin", premiumUntil: null } }
+    );
+
+    // É o ponto desta camada desde o começo: quem o painel liberou não pode ser
+    // derrubado em silêncio pelo próximo evento de expiração vindo da loja.
+    const res = await request(app)
+      .post("/billing/webhook")
+      .send({ event: { type: "EXPIRATION", app_user_id: userId } });
+    expect(res.status).toBe(200);
+
+    const me = await auth(request(app).get("/auth/me"));
+    expect(me.body.user.tier).toBe("premium");
+  });
+
+  it("webhook de EXPIRATION rebaixa para free quem virou premium COMPRANDO", async () => {
+    // Sem cortesia: ela ganharia do webhook, que é a regra testada acima.
+    await User.updateOne({ _id: userId }, { $set: { premiumSource: null } });
+    await request(app)
+      .post("/billing/webhook")
+      .send({ event: { type: "INITIAL_PURCHASE", app_user_id: userId } });
+
     const res = await request(app)
       .post("/billing/webhook")
       .send({ event: { type: "EXPIRATION", app_user_id: userId } });
