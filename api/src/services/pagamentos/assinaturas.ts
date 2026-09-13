@@ -72,7 +72,18 @@ export async function iniciarAssinatura(
     // Assinatura pendente órfã vira lixo que bloqueia a próxima tentativa
     // (pelo `jaTem` acima). Some daqui mesmo.
     await Assinatura.deleteOne({ _id: assinatura._id });
-    throw new HttpError(502, `Não foi possível abrir o pagamento: ${(e as Error).message}`);
+
+    // O detalhe do gateway fica no log, e NÃO na resposta.
+    //
+    // A mensagem de erro do Asaas fala de conta, de cliente e de configuração
+    // da integração — nada disso é da conta de quem clicou em "assinar", e
+    // vazar isso numa tela é entregar de graça o mapa de como a cobrança é
+    // montada aqui. Quem precisa do detalhe é quem lê o log do servidor.
+    console.error(
+      `[pagamentos] checkout falhou para a assinatura ${String(assinatura._id)}:`,
+      (e as Error).message
+    );
+    throw new HttpError(502, "Não foi possível abrir o pagamento agora. Tente de novo.");
   }
 }
 
