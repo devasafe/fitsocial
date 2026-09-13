@@ -5,6 +5,7 @@ import request from "supertest";
 import { createApp } from "../app.js";
 import { Post } from "../models/Post.js";
 import { Activity } from "../models/Activity.js";
+import { User } from "../models/User.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -395,6 +396,14 @@ describe("Recordes de força (PR)", () => {
   });
 
   it("GET /prs lista os recordes do usuário", async () => {
+    // Consultar recordes faz parte do Pro — o que se testa aqui é a LISTA, não
+    // o gate, que tem arquivo próprio (`gatesDoPlano.test.ts`). Cortesia sem
+    // prazo é uma fonte legítima; `tier` cru seria recalculado para free.
+    await User.updateOne(
+      { email: "b@test.com" },
+      { $set: { premiumSource: "admin", premiumUntil: null } }
+    );
+
     const res = await request(app).get("/prs").set("Authorization", `Bearer ${tokenB}`);
     expect(res.status).toBe(200);
     expect(res.body.data.some((p: { exerciseName: string }) => p.exerciseName === "Agachamento")).toBe(true);

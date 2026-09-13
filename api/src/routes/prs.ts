@@ -12,10 +12,27 @@ import { inicioDaJanela } from "../utils/dia.js";
 export const prsRouter = Router();
 prsRouter.use(requireAuth);
 
-// Lista os recordes pessoais do usuário (o app agrupa por exercício).
+/**
+ * Os recordes pessoais (o app agrupa por exercício).
+ *
+ * Faz parte do Pro. Responde **200 com lista vazia**, e não 402, pelo mesmo
+ * motivo do calendário: o aplicativo não intercepta 402 fora da Home, e aqui
+ * um erro derrubaria a aba Recordes inteira num `ErrorState` — a pessoa veria
+ * "não foi possível carregar", que é mentira. Com `meta.limitadoPor`, o app
+ * novo desenha o cadeado e o antigo mostra a lista vazia.
+ *
+ * A COMEMORAÇÃO ao bater um recorde continua livre, e é de propósito: ela não
+ * vem daqui, vem do `newPRs` da resposta de salvar o treino. Quem treina
+ * continua sendo celebrado na hora; o que é pago é voltar depois para
+ * consultar a marca.
+ */
 prsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
+    if (calcularPlan(req.user!) === "free") {
+      return res.json({ data: [], meta: { limitadoPor: "plano" } });
+    }
+
     const prs = await PersonalRecord.find({ user: req.user!._id }).sort({ exerciseName: 1, type: 1 });
     res.json({
       data: prs.map((p) => ({
