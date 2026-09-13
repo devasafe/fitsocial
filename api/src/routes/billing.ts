@@ -5,7 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User, publicUser } from "../models/User.js";
-import { aplicarEventoDeCompra } from "../services/entitlement.js";
+import { aplicarEventoDeCompra, recomputeTier } from "../services/entitlement.js";
 
 export const billingRouter = Router();
 
@@ -67,8 +67,17 @@ billingRouter.post(
       throw new HttpError(403, "Indisponível em produção");
     }
     const user = req.user!;
-    user.tier = user.tier === "premium" ? "free" : "premium"; // alterna (facilita testes)
+
+    // Passa pelo MESMO caminho da cortesia do admin, e não escreve `tier`
+    // direto. Desde que `recomputeTier` roda no `requireAuth`, um `tier`
+    // escrito à mão é recalculado e desfeito na requisição seguinte — o botão
+    // pareceria não funcionar, e levaria meia hora para alguém entender por quê.
+    const jaTem = user.premiumSource === "admin";
+    user.set("premiumSource", jaTem ? null : "admin");
+    user.set("premiumUntil", null);
     await user.save();
+    await recomputeTier(user);
+
     res.json({ user: publicUser(user) });
   })
 );

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyToken } from "../utils/token.js";
 import { User, type UserDoc } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
+import { recomputeTier } from "../services/entitlement.js";
 import { assertAccountUsable } from "../services/moderation.js";
 import { marcarPresenca } from "../services/presence.js";
 
@@ -44,6 +45,16 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     // Banimento e suspensão valem para tokens JÁ emitidos: o usuário é lido do
     // banco a cada requisição, então o corte é imediato.
     await assertAccountUsable(user);
+
+    // O plano é recalculado aqui, e é isto que faz vencimento acontecer sem
+    // cron: `calcularPlan` é função pura sobre o documento que acabamos de
+    // carregar, então não custa consulta nenhuma, e compara sempre contra o
+    // relógio de agora. Sem isto, uma cortesia (ou uma assinatura) vencida
+    // continuava valendo para sempre, porque nada recalculava.
+    //
+    // Aguardado de propósito: é regra de negócio, não métrica. A requisição
+    // que vem a seguir vai decidir permissão com este número.
+    await recomputeTier(user);
 
     // Registra o acesso sem bloquear: é métrica, não regra de negócio. A
     // pessoa está esperando a resposta dela, não a nossa estatística.

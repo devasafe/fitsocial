@@ -7,7 +7,7 @@ import { env } from "../config/env.js";
 
 const DEFAULT_MESSAGE = `Você é fundador do ${env.appName} 🖤 Obrigado por estar aqui desde o começo.`;
 
-function founderEmails(): string[] {
+export function founderEmails(): string[] {
   return (process.env.FOUNDER_EMAILS ?? "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -22,11 +22,9 @@ export function founderMessage(): string {
   return process.env.FOUNDER_MESSAGE?.trim() || DEFAULT_MESSAGE;
 }
 
-/** Garante premium para um fundador (persiste). Chamado no login/registro/me,
- *  então amigos já cadastrados viram premium no próximo acesso — sem migração. */
-export async function ensureFounderPremium(user: UserDoc): Promise<void> {
-  if (isFounder(user.email) && user.tier !== "premium") {
-    user.tier = "premium";
-    await user.save();
-  }
-}
+// `ensureFounderPremium` morava aqui e foi removida em 12/09/2026.
+//
+// Ela gravava `tier: "premium"` direto no documento, em paralelo ao motor de
+// `services/entitlement.ts` — dois escritores no mesmo campo, sem nenhum saber
+// do outro. Ser fundador agora é o RAMO 2 de `calcularPlan`, e quem grava é
+// `recomputeTier`, um só.

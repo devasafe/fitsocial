@@ -141,6 +141,61 @@ const userSchema = new Schema(
      */
     plan: { type: String, enum: ["free", "pro", "pro_plus"] },
 
+    // --- Assinatura paga (gateway) ---
+    //
+    // Campos PRÓPRIOS, e não `premiumUntil` reaproveitado. `revogarPremium`
+    // zera `premiumSource`/`premiumUntil` incondicionalmente: se o gateway
+    // escrevesse ali, tirar uma cortesia do painel apagaria uma assinatura
+    // paga — e ninguém descobriria até a pessoa reclamar que perdeu o que
+    // comprou.
+    //
+    // Sem `default` que possa ser lido como rebaixamento, pela mesma razão que
+    // `plan` não tem: `null` aqui significa "não tem assinatura", e é verdade.
+    /** Fim do ciclo pago corrente. */
+    assinaturaAte: { type: Date, default: null },
+    assinaturaStatus: {
+      type: String,
+      enum: ["ativa", "inadimplente", "cancelada", "expirada", null],
+      default: null,
+    },
+    /** O SKU comprado. Mora aqui como cache para o gate não consultar a
+     *  `Assinatura`; a verdade da cobrança continua sendo ela. */
+    produtoAssinado: {
+      type: String,
+      enum: ["pro", "pro_coach", "pro_nutri", "pro_plus", null],
+      default: null,
+    },
+
+    /**
+     * Fim dos meses grátis de CUPOM.
+     *
+     * Separado de `premiumUntil` porque são coisas diferentes que o painel
+     * precisa distinguir: "ganhou 3 meses pelo cupom de um parceiro" não é "o
+     * suporte deu uma cortesia" — e revogar um não pode apagar o outro.
+     */
+    cortesiaAte: { type: Date, default: null },
+
+    /**
+     * Quantos profissionais bancam o Pro desta pessoa agora.
+     *
+     * CONTADOR, e não booleano: alguém pode ter treinador E nutricionista, e
+     * com um booleano encerrar um dos dois derrubaria o Pro que o outro ainda
+     * sustenta.
+     *
+     * É a única fonte de direito que não cabe no documento — vínculo é
+     * relacional. Desnormalizar só ela é o que mantém `calcularPlan` uma
+     * função pura, sem consulta, dentro do `requireAuth`.
+     *
+     * AINDA NÃO É ESCRITO por ninguém: quem passa a mexer nele é o
+     * `aceitarConvite`/`encerrarVinculo` da fase do patrocínio. Até lá o campo
+     * existe, vale zero, e o ramo correspondente de `calcularPlan` fica inerte.
+     */
+    vinculosPatrocinados: { type: Number, default: 0, min: 0 },
+
+    /** Quando o cache derivado (`plan`/`tier`) foi recalculado pela última
+     *  vez. Evita reescrever o mesmo valor a cada requisição. */
+    direitosCalculadoEm: { type: Date, default: null },
+
     // --- Capacidade profissional (RUMO Pro) ---
     //
     // Fica FORA de `role` de propósito. `role` é enum único e, neste projeto, é

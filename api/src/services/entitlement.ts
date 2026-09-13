@@ -25,27 +25,126 @@ export function tierDoPlan(plan: Plano): "free" | "premium" {
 }
 
 /**
+ * Quantos dias de folga uma cobrança recusada ganha antes de o acesso cair.
+ *
+ * Cartão vencido é a causa número um de falha de cobrança, e ela acontece com
+ * quem quer continuar pagando. Derrubar na hora significaria, no caso de um
+ * treinador, tirar o acesso de trinta alunos por causa de uma recusa que se
+ * resolve trocando um cartão. A carência mora aqui, num lugar só, e vale para
+ * todo mundo que lê o motor.
+ */
+export const CARENCIA_DE_INADIMPLENCIA_DIAS = 7;
+
+/** De quanto em quanto tempo vale reescrever o carimbo quando nada mudou. */
+const INTERVALO_DO_CARIMBO_MS = 12 * 60 * 60 * 1000;
+
+/** A data ainda não passou? `null` conta como "sem prazo", que é para sempre. */
+function valeAinda(ate: Date | null | undefined, agora: Date): boolean {
+  return !ate || ate.getTime() > agora.getTime();
+}
+
+/**
+ * O SKU comprado, traduzido no que ele concede ao CONSUMIDOR.
+ *
+ * O enum de `plan` não cresce com os produtos de propósito. Pro Coach e Pro
+ * Nutri não são planos de consumidor — são o mesmo `pro` mais uma capacidade
+ * profissional, que vive noutro eixo (`user.pro`). É isso que faz a regra "quem
+ * compra Pro Coach não paga o Pro separado" cair sozinha, sem nenhuma linha
+ * escrita para ela.
+ */
+function planoDoProduto(produto: string | null | undefined): Plano | null {
+  switch (produto) {
+    case "pro":
+    case "pro_coach":
+    case "pro_nutri":
+      return "pro";
+    case "pro_plus":
+      return "pro_plus";
+    default:
+      return null;
+  }
+}
+
+/**
  * Diz em que plano a pessoa está AGORA e por quê.
  *
- * Existe para resolver um conflito real: `tier` era um campo solto, então uma
- * cortesia dada pelo painel seria derrubada em silêncio pelo próximo evento de
- * expiração vindo da loja. Agora a origem manda na precedência.
+ * FUNÇÃO PURA sobre o documento: nenhuma consulta, nenhum efeito. É o que
+ * permite chamá-la dentro do `requireAuth`, que já carregou o usuário, sem
+ * custo nenhum de banco — e é o que faz vencimento acontecer sem cron, porque
+ * a comparação é sempre contra o relógio de agora.
+ *
+ * São cinco fontes de acesso pago e elas têm ordem. A ordem não é arbitrária:
+ *
+ * 1. CORTESIA DO ADMIN ganha de tudo. É o ponto desta camada desde o começo —
+ *    uma cortesia dada pelo painel não pode ser derrubada em silêncio pelo
+ *    próximo evento de expiração vindo do gateway.
+ * 2. FUNDADOR vem de uma lista em env, lida ao vivo.
+ * 3. CORTESIA DE CUPOM — meses grátis que nós concedemos, sem gateway.
+ * 4. COMPRA, com a carência de inadimplência embutida.
+ * 5. PATROCÍNIO — o aluno cujo profissional paga. Vem por ÚLTIMO de propósito:
+ *    quem paga E é acompanhado deve aparecer como pagante nos relatórios, não
+ *    como patrocinado, e não pode perder o que comprou se o vínculo encerrar.
  */
 export function calcularPlan(user: UserDoc, agora = new Date()): Plano {
   const noDocumento = planDoUsuario(user);
-  const dentroDoPrazo = !user.premiumUntil || user.premiumUntil.getTime() > agora.getTime();
 
-  // 1. Cortesia do admin ganha do webhook — é o ponto todo desta camada.
-  //    Cortesia vale como "pro"; "pro_plus" de cortesia só se estiver gravado.
-  if (user.premiumSource === "admin" && dentroDoPrazo) {
+  // 1. Cortesia do admin.
+  if (user.premiumSource === "admin" && valeAinda(user.premiumUntil, agora)) {
     return noDocumento === "pro_plus" ? "pro_plus" : "pro";
   }
-  // 2. Fundador: a lista vive em env e é lida ao vivo.
+  // 2. Fundador.
   if (isFounder(user.email)) return noDocumento === "free" ? "pro" : noDocumento;
-  // 3. Compra de verdade.
-  if (user.premiumSource === "purchase" && noDocumento !== "free" && dentroDoPrazo) {
+  // 3. Meses grátis de cupom.
+  if (user.cortesiaAte && valeAinda(user.cortesiaAte, agora)) {
+    return planoDoProduto(user.produtoAssinado) ?? "pro";
+  }
+  // 4. Compra. Inadimplente ganha alguns dias antes de cair.
+  if (user.assinaturaStatus && user.assinaturaStatus !== "expirada") {
+    const folga =
+      user.assinaturaStatus === "inadimplente"
+        ? CARENCIA_DE_INADIMPLENCIA_DIAS * 24 * 60 * 60 * 1000
+        : 0;
+    const limite = user.assinaturaAte ? new Date(user.assinaturaAte.getTime() + folga) : null;
+    if (valeAinda(limite, agora)) {
+      const doProduto = planoDoProduto(user.produtoAssinado);
+      if (doProduto) return doProduto;
+    }
+  }
+  // 4b. Compra pelo caminho antigo (RevenueCat), que não tem `produtoAssinado`.
+  if (
+    user.premiumSource === "purchase" &&
+    noDocumento !== "free" &&
+    valeAinda(user.premiumUntil, agora)
+  ) {
     return noDocumento;
   }
+  // 5. Patrocínio: alguém paga para acompanhar esta pessoa.
+  if ((user.vinculosPatrocinados ?? 0) > 0) return "pro";
+
+  // 6. LEGADO: premium sem nenhuma fonte que o explique.
+  //
+  // O primeiro webhook do RevenueCat que foi para produção fazia
+  // `User.updateOne({_id}, { tier })` e mais nada — sem `premiumSource`, sem
+  // `plan`. Quem comprou naquela época tem `tier: "premium"` e nenhum campo que
+  // prove por quê. Sem este ramo, essas contas cairiam para free no primeiro
+  // request, e o `recomputeTier` gravaria `tier: "free"` por cima — apagando a
+  // ÚNICA evidência de que aquela pessoa pagou. Não haveria como reconstruir.
+  //
+  // Na dúvida entre cobrar de novo de quem já pagou e liberar para alguém que
+  // não deveria, este projeto erra para o lado de quem pagou.
+  //
+  // Temporário: `npm run direitos:backfill` carimba `premiumSource: "purchase"`
+  // nessas contas. Depois de ele rodar em produção e o diagnóstico acusar zero,
+  // este ramo pode sair.
+  // Só quando NÃO HÁ evidência nenhuma. Se a conta tem `assinaturaStatus` ou
+  // `cortesiaAte`, a origem é conhecida e o prazo dela já foi julgado acima —
+  // um `tier` velho no documento não pode ressuscitar o que expirou.
+  const semEvidencia =
+    !user.premiumSource && !user.assinaturaStatus && !user.cortesiaAte && !user.produtoAssinado;
+  if (user.tier === "premium" && semEvidencia) {
+    return noDocumento === "free" ? "pro" : noDocumento;
+  }
+
   return "free";
 }
 
@@ -54,21 +153,105 @@ export function calcularTier(user: UserDoc, agora = new Date()): "free" | "premi
   return tierDoPlan(calcularPlan(user, agora));
 }
 
-/** Recalcula e grava plano e tier só quando mudam. Expira cortesia sem cron. */
-export async function recomputeTier(user: UserDoc): Promise<void> {
-  const novoPlan = calcularPlan(user);
-  const novoTier = tierDoPlan(novoPlan);
-  if (user.plan === novoPlan && user.tier === novoTier) return;
+/**
+ * O plano efetivo, já com o rótulo de quem tem os dois painéis.
+ *
+ * `pro_plus` não desbloqueava nada e não havia caminho para alguém virar
+ * `pro_plus` — ele existia só no enum. Agora ele é o que sempre deveria ter
+ * sido: o RÓTULO DERIVADO de ter as duas capacidades ativas, venham elas de
+ * compra ou da mão do admin. Nada além disso depende dele.
+ */
+export function planEfetivo(user: UserDoc, agora = new Date()): Plano {
+  const base = calcularPlan(user, agora);
+  if (base === "free") return "free";
+  const dois = temCapacidade(user, "coach", agora) && temCapacidade(user, "nutri", agora);
+  return dois ? "pro_plus" : base;
+}
 
-  user.plan = novoPlan;
-  user.tier = novoTier;
-  // Cortesia vencida: apaga a origem, senão continuaria "premium por cortesia"
-  // num usuário free e a próxima leitura ficaria confusa.
-  if (novoPlan === "free" && user.premiumSource === "admin") {
-    user.premiumSource = null;
-    user.premiumUntil = null;
+/**
+ * Recalcula e grava plano e tier só quando mudam. Expira cortesia sem cron.
+ *
+ * Grava com `updateOne`, e NÃO com `user.save()`.
+ *
+ * Esta função passou a ser chamada dentro do `requireAuth`, antes de a rota
+ * rodar. Um `save()` grava o documento inteiro: se a rota carregar o mesmo
+ * usuário, mexer noutro campo e salvar depois, o documento dela — montado
+ * antes desta escrita — sobrescreveria o plano recém-calculado. É o mesmo
+ * motivo pelo qual `marcarPresenca` usa `updateOne`, e a mesma classe de bug.
+ *
+ * A mutação em memória vem junto porque `req.user` já está na mão de quem
+ * chamou: sem ela, a requisição atual decidiria pelo valor velho.
+ */
+export async function recomputeTier(user: UserDoc): Promise<void> {
+  // Guardados antes de qualquer mutação: são a precondição da escrita.
+  const planoAntes = user.plan;
+  const tierAntes = user.tier;
+
+  const novoPlan = planEfetivo(user);
+  const novoTier = tierDoPlan(novoPlan);
+
+  const mudanca: Record<string, unknown> = { direitosCalculadoEm: new Date() };
+  const mudou = user.plan !== novoPlan || user.tier !== novoTier;
+
+  if (mudou) {
+    mudanca.plan = novoPlan;
+    mudanca.tier = novoTier;
+    // Cortesia vencida: apaga a origem, senão continuaria "premium por cortesia"
+    // num usuário free e a próxima leitura ficaria confusa.
+    if (novoPlan === "free" && user.premiumSource === "admin") {
+      mudanca.premiumSource = null;
+      mudanca.premiumUntil = null;
+    }
+  } else if (
+    // Nada mudou e o carimbo é recente: não vale uma escrita por requisição.
+    //
+    // Isto NÃO atrasa vencimento: `calcularPlan` roda todo request contra o
+    // relógio de agora, então uma cortesia que venceu faz o plano divergir e
+    // cai no ramo de cima, que grava na hora. Este ramo só evita reescrever o
+    // mesmo valor.
+    user.direitosCalculadoEm &&
+    Date.now() - user.direitosCalculadoEm.getTime() < INTERVALO_DO_CARIMBO_MS
+  ) {
+    return;
   }
-  await user.save();
+
+  // O documento em memória vem PRIMEIRO, e de propósito.
+  //
+  // O cálculo é puro e não pode falhar; só a gravação pode. A permissão desta
+  // requisição tem de sair certa mesmo que o banco recuse a escrita — senão
+  // uma indisponibilidade momentânea viraria "você não é mais premium".
+  for (const [campo, valor] of Object.entries(mudanca)) {
+    user.set(campo, valor);
+  }
+  user.unmarkModified("plan");
+  user.unmarkModified("tier");
+
+  try {
+    // O filtro carrega o estado OBSERVADO, e não só o `_id`.
+    //
+    // Isto aqui roda a partir de um documento carregado no começo da
+    // requisição. Se o webhook de compra gravar no meio do caminho, um `$set`
+    // por `_id` desfaria a compra: o cálculo foi feito sobre o documento de
+    // antes. Com o estado no filtro, a escrita simplesmente não se aplica, e a
+    // requisição seguinte recalcula já com o valor novo.
+    const r = await User.updateOne(
+      {
+        _id: user._id,
+        plan: planoAntes === undefined ? { $exists: false } : planoAntes,
+        tier: tierAntes,
+      },
+      { $set: mudanca }
+    );
+    if (r.matchedCount === 0) return;
+  } catch {
+    // Falhar em gravar NÃO pode derrubar a sessão.
+    //
+    // `requireAuth` transforma qualquer exceção em 401, e o app apaga o token
+    // do aparelho quando toma 401 no boot (`AuthContext`). Ou seja: um timeout
+    // de escrita no Mongo, no segundo em que a pessoa abre o app, faria ela
+    // ser deslogada de verdade e ter de lembrar a senha. O valor em memória já
+    // está certo; a próxima requisição tenta gravar de novo.
+  }
 }
 
 /**
