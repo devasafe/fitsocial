@@ -16,9 +16,15 @@ export interface PersonalRecord {
   previousAchievedAt: string | null;
 }
 
-export async function listPRs(token: string): Promise<PersonalRecord[]> {
-  const res = await apiFetch<{ data: PersonalRecord[] }>("/prs", { token });
-  return res.data;
+export async function listPRs(
+  token: string
+): Promise<{ itens: PersonalRecord[]; limitadoPeloPlano: boolean }> {
+  const res = await apiFetch<{ data: PersonalRecord[]; meta?: { limitadoPor?: string } }>("/prs", {
+    token,
+  });
+  // O servidor devolve lista vazia e diz que limitou, em vez de recusar: sem
+  // ler isto, a tela mostraria "nenhum recorde ainda" para quem tem recordes.
+  return { itens: res.data, limitadoPeloPlano: res.meta?.limitadoPor === "plano" };
 }
 
 /** Rótulo do tipo de recorde. */

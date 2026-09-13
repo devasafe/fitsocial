@@ -31,6 +31,8 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   /** O grátis vê só a última semana. Sem dizer isso, a seção simplesmente
    *  desaparecia de uma tela onde ela existia ontem. */
   const [historicoCortado, setHistoricoCortado] = useState(false);
+  /** Os recordes atuais também fazem parte do Pro. */
+  const [recordesTrancados, setRecordesTrancados] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [carregandoMais, setCarregandoMais] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,8 +41,9 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([listPRs(token!), listarConquistas(token!, { limit: 20 })])
-      .then(([lista, historico]) => {
-        setPRs(lista);
+      .then(([recordes, historico]) => {
+        setPRs(recordes.itens);
+        setRecordesTrancados(recordes.limitadoPeloPlano);
         setConquistas(historico.itens);
         setCursor(historico.nextCursor);
         setHistoricoCortado(historico.limitadoPeloPlano);
@@ -125,6 +128,21 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
 
       {error && agrupados.length === 0 ? (
         <ErrorState message="Não foi possível carregar seus recordes." onRetry={load} />
+      ) : recordesTrancados ? (
+        // Sem isto a tela diria "Nenhum recorde ainda" para quem TEM recordes —
+        // a pessoa concluiria que o aplicativo perdeu as marcas dela.
+        <TouchableOpacity onPress={() => nav.navigate("Subscription")} activeOpacity={0.85}>
+          <Card level={1}>
+            <Txt variant="titleCard">Seus recordes fazem parte do Pro</Txt>
+            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+              Eles continuam todos guardados, e você segue sendo avisado na hora em que bater
+              um. O que o Pro abre é voltar aqui para consultar.
+            </Txt>
+            <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
+              Conhecer o Pro ›
+            </Txt>
+          </Card>
+        </TouchableOpacity>
       ) : agrupados.length === 0 ? (
         <EmptyState
           icon="🏆"

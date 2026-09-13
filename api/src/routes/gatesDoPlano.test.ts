@@ -214,13 +214,50 @@ describe("o que é Pro por inteiro, e o que fica livre", () => {
     expect(r.body.meta.limitadoPor).toBeUndefined();
   });
 
-  it("os recordes ATUAIS ficam livres — é o laço que traz a pessoa de volta", async () => {
+  it("os recordes atuais são Pro, mas respondem 200 vazio — nunca 402", async () => {
     const u = await registrar();
     await treino(u.token, 80, 1);
 
     const r = await request(app).get("/prs").set(auth(u.token));
 
+    // Um erro aqui derrubaria a aba Recordes inteira num ErrorState — a pessoa
+    // leria "não foi possível carregar", que é mentira.
     expect(r.status).toBe(200);
+    expect(r.body.data).toEqual([]);
+    expect(r.body.meta.limitadoPor).toBe("plano");
+  });
+
+  it("e vêm cheios para quem paga", async () => {
+    const u = await registrar(true);
+    await treino(u.token, 80, 1);
+
+    const r = await request(app).get("/prs").set(auth(u.token));
+
+    expect(r.body.data.length).toBeGreaterThan(0);
+    expect(r.body.meta?.limitadoPor).toBeUndefined();
+  });
+
+  it("a COMEMORAÇÃO do recorde continua livre — é o laço que traz de volta", async () => {
+    const u = await registrar();
+
+    const r = await request(app)
+      .post("/activities")
+      .set(auth(u.token))
+      .send({
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 3600,
+        payload: {
+          variant: "musculacao",
+          exercises: [{ name: "Supino reto", sets: [{ type: "valida", weightKg: 100, reps: 5 }] }],
+        },
+      });
+
+    // Ela não vem de `GET /prs`: vem do `newPRs` de salvar o treino. Quem
+    // treina continua sendo celebrado na hora; o que é pago é voltar depois
+    // para consultar a marca.
+    expect(r.status).toBe(201);
+    expect(Array.isArray(r.body.meta.newPRs)).toBe(true);
   });
 
   it("mas a linha do tempo das conquistas para na semana", async () => {

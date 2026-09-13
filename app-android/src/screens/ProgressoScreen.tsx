@@ -45,6 +45,7 @@ function Resumo() {
   const [gain, setGain] = useState<{ name: string; delta: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [recordesTrancados, setRecordesTrancados] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -54,7 +55,8 @@ function Resumo() {
         listarExercicios(token!, 90).then((r) => r.itens),
       ]);
       setStats(s.stats);
-      setPrs([...prsRes].sort((a, b) => b.achievedAt.localeCompare(a.achievedAt)));
+      setPrs([...prsRes.itens].sort((a, b) => b.achievedAt.localeCompare(a.achievedAt)));
+      setRecordesTrancados(prsRes.limitadoPeloPlano);
       setGain(maiorEvolucao(lista));
       setError(false);
     } catch {
@@ -116,7 +118,12 @@ function Resumo() {
       <View style={{ flexDirection: "row", gap: spacing.card }}>
         <MetricTile value={String(stats.week)} label="na semana" style={{ flex: 1 }} />
         <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />
-        <MetricTile value={String(prs.length)} label="recordes" style={{ flex: 1 }} />
+        {/* Zero aqui seria mentira para quem tem recordes e está no grátis. */}
+        <MetricTile
+          value={recordesTrancados ? "🔒" : String(prs.length)}
+          label="recordes"
+          style={{ flex: 1 }}
+        />
       </View>
 
       {/* Maior evolução — Δ real de carga */}
