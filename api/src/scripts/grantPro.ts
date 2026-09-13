@@ -3,6 +3,7 @@ import { connectDB } from "../config/db.js";
 import { User } from "../models/User.js";
 import { recordAudit, maskEmail } from "../services/adminAudit.js";
 import { temCapacidade, type Capacidade } from "../services/entitlement.js";
+import { recontarAlunosDe } from "../services/patrocinio.js";
 
 // Libera (ou tira) o acesso profissional: coach ou nutri.
 //
@@ -40,6 +41,10 @@ export async function grantPro(
     });
   }
   await alvo.save();
+
+  // Os alunos dele acompanham a capacidade. Recontar serve aos dois sentidos e
+  // é idempotente — rodar o script duas vezes não muda nada na segunda.
+  await recontarAlunosDe(alvo._id, qual);
 
   await recordAudit({
     actor: null,

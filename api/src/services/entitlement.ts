@@ -136,16 +136,40 @@ export function calcularPlan(user: UserDoc, agora = new Date()): Plano {
   // Temporário: `npm run direitos:backfill` carimba `premiumSource: "purchase"`
   // nessas contas. Depois de ele rodar em produção e o diagnóstico acusar zero,
   // este ramo pode sair.
-  // Só quando NÃO HÁ evidência nenhuma. Se a conta tem `assinaturaStatus` ou
-  // `cortesiaAte`, a origem é conhecida e o prazo dela já foi julgado acima —
-  // um `tier` velho no documento não pode ressuscitar o que expirou.
-  const semEvidencia =
-    !user.premiumSource && !user.assinaturaStatus && !user.cortesiaAte && !user.produtoAssinado;
-  if (user.tier === "premium" && semEvidencia) {
-    return noDocumento === "free" ? "pro" : noDocumento;
-  }
+  if (ehPremiumLegado(user)) return "pro";
 
   return "free";
+}
+
+/**
+ * Esta conta é premium de ANTES de o motor existir?
+ *
+ * O primeiro webhook do RevenueCat gravava `tier: "premium"` e mais nada. Essas
+ * contas não têm como provar que pagaram, e rebaixá-las apagaria a única
+ * evidência — por isso o motor as segura.
+ *
+ * A condição é SEM ORIGEM, e não `plan` ausente. Tentei ancorar em `plan`
+ * ausente e estava errado: a Fase 0 já rodou em produção e gravou `plan: "pro"`
+ * nessas contas sem gravar origem nenhuma. Ancorar ali teria rebaixado
+ * justamente quem abriu o app depois daquele deploy — a maior parte delas.
+ *
+ * O laço que essa tentativa queria fechar (premium por patrocínio parecendo
+ * legado depois que o patrocínio acaba) é fechado do outro lado: o patrocínio
+ * CARIMBA `premiumSource: "patrocinio"`, então uma conta ex-patrocinada tem
+ * origem e nunca cai aqui.
+ *
+ * `recomputeTier` carimba a origem quando isto dá verdadeiro, então cada conta
+ * passa por aqui UMA vez e depois entra pelo ramo normal de compra.
+ */
+export function ehPremiumLegado(user: UserDoc): boolean {
+  return (
+    user.tier === "premium" &&
+    !user.premiumSource &&
+    !user.assinaturaStatus &&
+    !user.cortesiaAte &&
+    !user.produtoAssinado &&
+    (user.vinculosPatrocinados ?? 0) === 0
+  );
 }
 
 /** Mantida porque meio projeto (e o app instalado) raciocina em free/premium. */
@@ -193,12 +217,25 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
   const mudanca: Record<string, unknown> = { direitosCalculadoEm: new Date() };
   const mudou = user.plan !== novoPlan || user.tier !== novoTier;
 
+  // Conta premium anterior ao motor: carimba a origem AGORA, para ela sair do
+  // ramo de legado e passar a ser julgada como qualquer compra. Sem isto, ela
+  // dependeria do ramo para sempre — e o ramo é o que a gente quer poder
+  // remover depois que o backfill rodar.
+  if (ehPremiumLegado(user)) mudanca.premiumSource = "purchase";
+  // Premium que vem de um profissional bancar esta pessoa ganha origem própria.
+  // É o que impede a conta de parecer "legado sem origem" no dia em que o
+  // acompanhamento acabar — e o que faz o Pro dela cair junto com o vínculo.
+  else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0 && !user.premiumSource) {
+    mudanca.premiumSource = "patrocinio";
+  }
+
   if (mudou) {
     mudanca.plan = novoPlan;
     mudanca.tier = novoTier;
-    // Cortesia vencida: apaga a origem, senão continuaria "premium por cortesia"
-    // num usuário free e a próxima leitura ficaria confusa.
-    if (novoPlan === "free" && user.premiumSource === "admin") {
+    // Origem que deixou de valer: apaga, senão a conta continuaria dizendo
+    // "premium por cortesia" (ou "por patrocínio") já sendo free, e a próxima
+    // leitura ficaria confusa — inclusive a que decide se ela é legado.
+    if (novoPlan === "free" && (user.premiumSource === "admin" || user.premiumSource === "patrocinio")) {
       mudanca.premiumSource = null;
       mudanca.premiumUntil = null;
     }
@@ -253,6 +290,13 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
     // está certo; a próxima requisição tenta gravar de novo.
   }
 }
+
+// ATENÇÃO, ao mexer em `concederPro`/`revogarPro`: a capacidade decide se os
+// ALUNOS daquele profissional ganham Pro (`services/patrocinio.ts`). Este
+// arquivo não chama o patrocínio de propósito — seria ciclo de import, porque
+// o patrocínio precisa de `recomputeTier` daqui. Quem chama são os dois
+// lugares que concedem: `routes/admin/users.ts` e `scripts/grantPro.ts`. Um
+// terceiro caminho de concessão precisa chamar também.
 
 /**
  * A pessoa pode atuar como coach/nutri agora?

@@ -75,9 +75,37 @@ export interface DiaDoCalendario {
   minutos: number;
 }
 
-export async function listarExercicios(token: string, dias: Janela): Promise<ExercicioNaLista[]> {
-  const r = await apiFetch<{ data: ExercicioNaLista[] }>(`/evolucao/exercicios?dias=${dias}`, { token });
-  return r.data;
+/**
+ * Até onde o servidor DEIXOU esta pessoa ver.
+ *
+ * O plano grátis enxerga os últimos sete dias. O servidor corta em vez de
+ * recusar — um 402 tiraria a pessoa da tela de gráfico — e diz o que fez em
+ * `meta.limitadoPor`. Ler isso não é detalhe: sem ler, a tela continuava
+ * escrevendo "nos últimos 1 ano" em cima de sete dias de dado, e quem olhasse
+ * concluiria que o aplicativo perdeu o histórico dela.
+ */
+export interface JanelaAplicada {
+  dias: number;
+  limitadoPeloPlano: boolean;
+}
+
+function janelaDoMeta(meta: unknown, pedidos: Janela): JanelaAplicada {
+  const m = (meta ?? {}) as { dias?: number; limitadoPor?: string };
+  return {
+    dias: m.dias ?? pedidos,
+    limitadoPeloPlano: m.limitadoPor === "plano",
+  };
+}
+
+export async function listarExercicios(
+  token: string,
+  dias: Janela
+): Promise<{ itens: ExercicioNaLista[]; janela: JanelaAplicada }> {
+  const r = await apiFetch<{ data: ExercicioNaLista[]; meta?: unknown }>(
+    `/evolucao/exercicios?dias=${dias}`,
+    { token }
+  );
+  return { itens: r.data, janela: janelaDoMeta(r.meta, dias) };
 }
 
 export async function serieDoExercicio(

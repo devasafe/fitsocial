@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { View, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { AppStackParams } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
 import {
   JANELAS,
@@ -19,6 +21,7 @@ import {
   type ExercicioNaLista,
   type GrupoTreinado,
   type Janela,
+  type JanelaAplicada,
   type Metrica,
   type MetricaCardio,
   type PontoDoExercicio,
@@ -49,11 +52,15 @@ function formatarValor(v: number, metrica: Metrica): string {
 }
 
 export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
   const { width } = useWindowDimensions();
 
   const [mode, setMode] = useState<"strength" | "cardio">("strength");
   const [janela, setJanela] = useState<Janela>(90);
+  /** O que o servidor DEIXOU ver. No grátis, sete dias — e a tela precisa
+   *  dizer isso, senão afirma "1 ano" sobre uma semana de dado. */
+  const [janelaAplicada, setJanelaAplicada] = useState<JanelaAplicada | null>(null);
 
   const [exercicios, setExercicios] = useState<ExercicioNaLista[]>([]);
   const [grupos, setGrupos] = useState<GrupoTreinado[]>([]);
@@ -108,7 +115,9 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
     ]);
 
     if (forca.status === "fulfilled") {
-      const [lista, gruposDaJanela] = forca.value;
+      const [forcaRes, gruposDaJanela] = forca.value;
+      const lista = forcaRes.itens;
+      setJanelaAplicada(forcaRes.janela);
       setExercicios(lista);
       setGrupos(gruposDaJanela);
       // Mantém o exercício escolhido quando ele continua existindo na janela
@@ -282,12 +291,34 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
             {JANELAS.map((d) => (
               <Chip
                 key={d}
-                label={rotuloDaJanela(d)}
+                label={
+                  janelaAplicada?.limitadoPeloPlano ? `${rotuloDaJanela(d)} 🔒` : rotuloDaJanela(d)
+                }
                 active={janela === d}
                 onPress={() => setJanela(d)}
               />
             ))}
           </ScrollView>
+
+          {/* O corte dito com todas as letras. Sem isto, a tela mostrava sete
+              dias com o chip "1 ano" aceso, e a pessoa concluía que o
+              aplicativo tinha perdido o histórico dela. */}
+          {janelaAplicada?.limitadoPeloPlano && (
+            <TouchableOpacity
+              onPress={() => nav.navigate("Subscription")}
+              activeOpacity={0.85}
+            >
+              <Card level={1}>
+                <Txt variant="bodyStrong">Você está vendo os últimos 7 dias</Txt>
+                <Txt variant="caption" color={colors.text2} style={{ marginTop: 2 }}>
+                  As janelas maiores fazem parte do Pro. Seu histórico continua todo aqui.
+                </Txt>
+                <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.s8 }}>
+                  Conhecer o Pro ›
+                </Txt>
+              </Card>
+            </TouchableOpacity>
+          )}
 
           {/* O erro é de UM modo, não da tela: a musculação falhando não pode
               apagar um cardio que já está carregado na memória. */}
@@ -406,9 +437,11 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
                         size={radarSize}
                       />
                       <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
-                        Séries por grupo muscular {rotuloDaJanela(janela).toLowerCase() === "tudo"
-                          ? "em todo o seu histórico"
-                          : `nos últimos ${rotuloDaJanela(janela).toLowerCase()}`}
+                        Séries por grupo muscular {janelaAplicada?.limitadoPeloPlano
+                          ? "nos últimos 7 dias"
+                          : rotuloDaJanela(janela).toLowerCase() === "tudo"
+                            ? "em todo o seu histórico"
+                            : `nos últimos ${rotuloDaJanela(janela).toLowerCase()}`}
                         . A comparação é com você mesmo.
                       </Txt>
                     </Card>

@@ -51,7 +51,7 @@ function Resumo() {
       const [s, prsRes, lista] = await Promise.all([
         getCheckInStats(token!),
         listPRs(token!),
-        listarExercicios(token!, 90),
+        listarExercicios(token!, 90).then((r) => r.itens),
       ]);
       setStats(s.stats);
       setPrs([...prsRes].sort((a, b) => b.achievedAt.localeCompare(a.achievedAt)));

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { HttpError } from "../utils/httpError.js";
+import { recontarPatrocinios } from "./patrocinio.js";
 import { User, type UserDoc } from "../models/User.js";
 import {
   ProfessionalLink,
@@ -244,6 +245,17 @@ export async function aceitarConvite(
   convite.usosRestantes -= 1;
   await convite.save();
 
+  // O aluno passa a ser bancado pelo profissional.
+  //
+  // É aqui que a promessa "quem paga é o profissional, e o aluno tem o
+  // acompanhamento completo" vira verdade no banco. Sem isto, o mentorado
+  // ficaria com a evolução de sete dias do plano grátis enquanto o treinador
+  // dele vê o ano inteiro no painel.
+  //
+  // Depois do `save()` do vínculo, de propósito: se a gravação do vínculo
+  // falhar, ninguém ganha Pro por um acompanhamento que não existe.
+  await recontarPatrocinios(aluno._id);
+
   return link;
 }
 
@@ -282,6 +294,12 @@ export async function encerrarVinculo(quem: UserDoc, linkId: string): Promise<Pr
   link.encerradoEm = new Date();
   link.encerradoPor = quem._id;
   await link.save();
+
+  // Acabou este patrocínio. O aluno volta ao plano dele — que pode continuar
+  // sendo Pro, se ele paga ou se outro profissional ainda o acompanha. A
+  // recontagem enxerga isso sozinha.
+  await recontarPatrocinios(link.client);
+
   return link;
 }
 
