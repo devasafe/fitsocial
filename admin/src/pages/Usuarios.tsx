@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   listarUsuarios, buscarUsuario, banirUsuario, desbanirUsuario,
-  suspenderUsuario, definirPremium, definirPro,
+  suspenderUsuario, definirPremium, definirPro, zerarTreinos,
   type UsuarioAdmin, type DetalheUsuario,
 } from "../api";
 import { Dialogo } from "../components/Dialogo";
@@ -20,7 +20,8 @@ type Acao =
   | "darCoach"
   | "tirarCoach"
   | "darNutri"
-  | "tirarNutri";
+  | "tirarNutri"
+  | "zerarTreinos";
 
 const dataCurta = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -60,6 +61,8 @@ export function Usuarios({ token }: { token: string }) {
   const [aberto, setAberto] = useState<string | null>(null);
   const [selecionado, setSelecionado] = useState<DetalheUsuario | null>(null);
   const [acao, setAcao] = useState<Acao | null>(null);
+  /** O e-mail digitado, para o zerar em massa. Ver o comentario no Dialogo. */
+  const [confirmacao, setConfirmacao] = useState("");
   const [dias, setDias] = useState(7);
 
   const ehCelular = useEhCelular();
@@ -140,6 +143,11 @@ export function Usuarios({ token }: { token: string }) {
     if (acao === "tirarCoach") await definirPro(token, alvo.id, "coach", false, null, motivo);
     if (acao === "darNutri") await definirPro(token, alvo.id, "nutri", true, dias || null, motivo);
     if (acao === "tirarNutri") await definirPro(token, alvo.id, "nutri", false, null, motivo);
+
+    if (acao === "zerarTreinos") {
+      await zerarTreinos(token, alvo.id, motivo, confirmacao.trim());
+      setConfirmacao("");
+    }
 
     await carregarDetalhe(alvo.id);
     await carregar(null);
@@ -270,6 +278,20 @@ export function Usuarios({ token }: { token: string }) {
         <button className="discreto" onClick={() => pedirAcao("desbanir")}>Reativar conta</button>
       ) : (
         <button className="discreto" onClick={() => pedirAcao("suspender")}>Suspender</button>
+      )}
+
+      {/* Fica no fim das ações e em vermelho: é a única exclusão em massa do
+          painel, e não pode ficar perto dos botões que se clicam sem pensar. */}
+      {(selecionado.treinos?.atividades ?? 0) > 0 && (
+        <button
+          className="discreto perigo"
+          onClick={() => {
+            setConfirmacao("");
+            pedirAcao("zerarTreinos");
+          }}
+        >
+          Zerar treinos ({selecionado.treinos!.atividades})
+        </button>
       )}
 
       {u.premiumSource === "admin" ? (
@@ -457,6 +479,7 @@ export function Usuarios({ token }: { token: string }) {
             : acao === "desbanir" ? "Reativar " + u.name + "?"
             : acao === "suspender" ? "Suspender " + u.name + "?"
             : acao === "premium" ? "Dar premium a " + u.name + "?"
+            : acao === "zerarTreinos" ? "Zerar os treinos de " + u.name + "?"
             : "Tirar a cortesia de " + u.name + "?"
           }
           descricao={
@@ -472,6 +495,8 @@ export function Usuarios({ token }: { token: string }) {
               ? "Passa a poder convidar até 10 alunos pelo painel profissional. Cada aluno ainda precisa aceitar o convite e escolher o que abrir."
               : acao === "tirarCoach" || acao === "tirarNutri"
               ? "Perde o painel na hora. Os acompanhamentos não são apagados — viram histórico, e os alunos deixam de ser vistos."
+              : acao === "zerarTreinos"
+              ? `Apaga ${selecionado?.treinos?.atividades ?? 0} treinos, ${selecionado?.treinos?.exercicios ?? 0} registros de exercício e ${selecionado?.treinos?.recordes ?? 0} recordes. Não tem como desfazer. Os posts ficam — perdem só o cartão do treino.`
               : "A pessoa volta ao plano grátis, a menos que tenha assinatura própria."
           }
           rotuloAcao={
@@ -479,11 +504,38 @@ export function Usuarios({ token }: { token: string }) {
             : acao === "desbanir" ? "Reativar"
             : acao === "suspender" ? "Suspender"
             : acao === "premium" ? "Dar premium"
+            : acao === "zerarTreinos" ? "Zerar treinos"
             : "Tirar cortesia"
           }
-          perigoso={acao === "banir"}
+          perigoso={acao === "banir" || acao === "zerarTreinos"}
+          bloqueado={
+            acao === "zerarTreinos" &&
+            confirmacao.trim().toLowerCase() !== u.email.toLowerCase()
+          }
           extra={
-            acao === "suspender" || acao === "premium" || acao === "darCoach" || acao === "darNutri" ? (
+            acao === "zerarTreinos" ? (
+              <div style={{ marginTop: 14 }}>
+                {/* O e-mail digitado, e nao um "tem certeza?".
+                    Confirmacao que se aceita sem ler nao confirma nada; digitar
+                    o e-mail obriga a olhar de quem e a conta, que e exatamente
+                    o erro a evitar numa acao em massa. */}
+                <label htmlFor="conf">Digite o e-mail da conta para confirmar</label>
+                <input
+                  id="conf"
+                  value={confirmacao}
+                  onChange={(e) => setConfirmacao(e.target.value)}
+                  placeholder={u.email}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+                {confirmacao.trim() !== "" &&
+                  confirmacao.trim().toLowerCase() !== u.email.toLowerCase() && (
+                    <p className="erro" style={{ marginTop: 6 }}>
+                      Não é o e-mail desta conta.
+                    </p>
+                  )}
+              </div>
+            ) : acao === "suspender" || acao === "premium" || acao === "darCoach" || acao === "darNutri" ? (
               <div style={{ marginTop: 14 }}>
                 <label htmlFor="dias">
                   {acao === "suspender"

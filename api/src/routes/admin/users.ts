@@ -14,6 +14,7 @@ import { recontarAlunosDe } from "../../services/patrocinio.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
 import { escaparRegex } from "../../utils/escaparRegex.js";
 import { cuponsDoUsuario } from "../../services/cupons.js";
+import { contarTreinos, zerarTreinos } from "../../services/zerarTreinos.js";
 import { emReais } from "../../services/pagamentos/catalogo.js";
 
 export const adminUsersRouter = Router();
@@ -81,17 +82,22 @@ adminUsersRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const u = await carregar(req.params.id);
-    const [posts, atividades, auditoria, cupons] = await Promise.all([
+    const [posts, atividades, auditoria, cupons, treinos] = await Promise.all([
       Post.countDocuments({ author: u._id, deletedAt: null }),
       Activity.countDocuments({ user: u._id }),
       AdminAudit.find({ targetId: u._id }).sort({ createdAt: -1 }).limit(20),
       cuponsDoUsuario(u._id),
+      // O tamanho do historico de treino, para o painel poder dizer "vai
+      // apagar 47 treinos" antes de apagar. "Tem certeza?" nao e informacao.
+      contarTreinos(u._id),
     ]);
 
     res.json({
       data: {
         user: serializeUser(u),
         contagens: { posts, atividades },
+        /** O que um "zerar treinos" apagaria. */
+        treinos,
         // O histórico de cupons desta pessoa: por onde ela chegou, o que usou
         // ao comprar, e quanto cada um rendeu. É o que responde, no suporte,
         // "essa pessoa veio de qual parceria?".
@@ -109,6 +115,34 @@ adminUsersRouter.get(
       },
       meta: {},
     });
+  })
+);
+
+/**
+ * Zera o histórico de treino de uma pessoa.
+ *
+ * A ÚNICA exclusão em massa do painel. O escopo é fixo no código — não há
+ * filtro que quem usa possa escrever, então não há filtro que possa estar
+ * errado. O único parâmetro é de quem.
+ *
+ * Pede o E-MAIL digitado, e não um "tem certeza?". Confirmação que se aceita
+ * sem ler não confirma nada; digitar o e-mail obriga a olhar de quem é a
+ * conta, que é justamente o erro a evitar.
+ */
+adminUsersRouter.post(
+  "/:id/zerar-treinos",
+  asyncHandler(async (req, res) => {
+    const { reason, confirmacao } = z
+      .object({ reason: motivoSchema, confirmacao: z.string() })
+      .parse(req.body);
+
+    const alvo = await carregar(req.params.id);
+    if (confirmacao.trim().toLowerCase() !== alvo.email.toLowerCase()) {
+      throw new HttpError(400, "O e-mail digitado não é o desta conta.");
+    }
+
+    const resumo = await zerarTreinos(req.user!, alvo, reason);
+    res.json({ data: resumo, meta: {} });
   })
 );
 

@@ -20,6 +20,7 @@ export function Dialogo({
   rotuloAcao,
   perigoso = false,
   extra,
+  bloqueado = false,
   aoConfirmar,
   aoFechar,
 }: {
@@ -28,6 +29,15 @@ export function Dialogo({
   rotuloAcao: string;
   perigoso?: boolean;
   extra?: ReactNode;
+  /**
+   * Impede a confirmacao mesmo com o motivo preenchido.
+   *
+   * Para quando o `extra` traz uma condicao propria -- o e-mail digitado numa
+   * exclusao em massa, por exemplo. O servidor recusa de qualquer forma, mas
+   * um botao acesso numa acao destrutiva convida o erro que ele deveria
+   * impedir.
+   */
+  bloqueado?: boolean;
   aoConfirmar: (motivo: string) => Promise<void>;
   aoFechar: () => void;
 }) {
@@ -103,7 +113,7 @@ export function Dialogo({
           <button
             type="submit"
             className={perigoso ? "acao perigosa" : "acao"}
-            disabled={enviando || motivo.trim().length < 3}
+            disabled={enviando || bloqueado || motivo.trim().length < 3}
           >
             {enviando ? "Aplicando" : rotuloAcao}
           </button>

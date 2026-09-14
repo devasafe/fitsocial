@@ -167,6 +167,18 @@ export interface UsuarioAdmin {
 export interface DetalheUsuario {
   user: UsuarioAdmin;
   contagens: { posts: number; atividades: number };
+  /**
+   * O que um "zerar treinos" apagaria. Opcional: servidor anterior nao manda.
+   *
+   * Existe para o painel dizer "vai apagar 47 treinos" ANTES de apagar. "Tem
+   * certeza?" nao e informacao.
+   */
+  treinos?: {
+    atividades: number;
+    exercicios: number;
+    recordes: number;
+    postsComTreino: number;
+  };
   auditoria: { acao: string; motivo: string; quando: string; por: string }[];
   /**
    * Os cupons desta pessoa. Opcional porque um servidor anterior a esta versão
@@ -387,6 +399,30 @@ export type FiltroDeCupom = "ativos" | "revogados" | "todos";
  * Sem os contadores a tela nao pode dizer "Revogados (1)", e quem acabou de
  * revogar um cupom fica sem saber para onde ele foi.
  */
+/**
+ * Zera o historico de treino de uma pessoa, sem apagar a conta.
+ *
+ * `confirmacao` e o e-mail da conta, digitado. Confirmacao que se aceita sem
+ * ler nao confirma nada; digitar o e-mail obriga a olhar de quem e a conta.
+ */
+export const zerarTreinos = (
+  token: string,
+  id: string,
+  motivo: string,
+  confirmacao: string
+) =>
+  api<{
+    atividades: number;
+    exercicios: number;
+    recordes: number;
+    eventosDeRecorde: number;
+    postsDesvinculados: number;
+  }>(`/admin/users/${id}/zerar-treinos`, {
+    method: "POST",
+    body: { reason: motivo, confirmacao },
+    token,
+  });
+
 export const buscarCupons = (token: string, status: FiltroDeCupom = "ativos") =>
   api<CupomAdmin[], { total: number; ativos: number; revogados: number }>(
     `/admin/cupons?status=${status}`,

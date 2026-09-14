@@ -396,3 +396,125 @@ describe("Acesso profissional pelo painel", () => {
     expect(r.status).toBe(403);
   });
 });
+
+describe("Zerar treinos", () => {
+  /** Uma conta com treino, recorde e um post que compartilhou o treino. */
+  async function comHistorico(email: string) {
+    const u = await registrar(email);
+    const { Activity } = await import("../../models/Activity.js");
+    const { PersonalRecord } = await import("../../models/PersonalRecord.js");
+    const { WorkoutLog } = await import("../../models/WorkoutLog.js");
+    const { Post } = await import("../../models/Post.js");
+
+    const a = await Activity.create({
+      user: u.id,
+      sportId: "musculacao",
+      kind: "strength",
+      title: "Peito",
+      startedAt: new Date(),
+      durationSec: 3600,
+      payload: {},
+    });
+    await WorkoutLog.create({ user: u.id, sessionDay: "2026-09-14", items: [] });
+    await PersonalRecord.create({
+      user: u.id,
+      exerciseSlug: "supino",
+      exerciseName: "Supino",
+      type: "carga_max",
+      value: 100,
+      achievedAt: new Date(),
+      activity: a._id,
+    });
+    const post = await Post.create({ author: u.id, text: "treinei", activity: a._id });
+    return { ...u, activityId: a._id.toString(), postId: post._id.toString() };
+  }
+
+  it("apaga treinos e recordes, e mantém o post sem o cartão de treino", async () => {
+    const adm = await admin("chefe.zerar@teste.com");
+    const alvo = await comHistorico("zerar@teste.com");
+    const { Activity } = await import("../../models/Activity.js");
+    const { PersonalRecord } = await import("../../models/PersonalRecord.js");
+    const { Post } = await import("../../models/Post.js");
+
+    const r = await request(app)
+      .post(`/admin/users/${alvo.id}/zerar-treinos`)
+      .set(auth(adm))
+      .send({ reason: "importou tudo errado", confirmacao: "zerar@teste.com" });
+
+    expect(r.status).toBe(200);
+    expect(r.body.data.atividades).toBe(1);
+    expect(r.body.data.recordes).toBe(1);
+    expect(await Activity.countDocuments({ user: alvo.id })).toBe(0);
+    // O recorde vai junto: deixar 100 kg sem o treino que o gerou é pior que
+    // não apagar nada — a tela mostraria um número sem de onde vir.
+    expect(await PersonalRecord.countDocuments({ user: alvo.id })).toBe(0);
+
+    // O post FICA: é conteúdo social, com curtidas e comentários de outros.
+    const post = (await Post.findById(alvo.postId))!;
+    expect(post).toBeTruthy();
+    // Mas para de apontar para um treino que não existe mais.
+    expect(post.activity ?? null).toBeNull();
+  });
+
+  it("exige o e-mail da conta, não um 'tem certeza?'", async () => {
+    const adm = await admin("chefe.email@teste.com");
+    const alvo = await comHistorico("protegido@teste.com");
+    const { Activity } = await import("../../models/Activity.js");
+
+    const r = await request(app)
+      .post(`/admin/users/${alvo.id}/zerar-treinos`)
+      .set(auth(adm))
+      .send({ reason: "tentando", confirmacao: "outro@email.com" });
+
+    // Confirmação que se aceita sem ler não confirma nada. Digitar o e-mail
+    // obriga a olhar de quem é a conta, que é o erro a evitar.
+    expect(r.status).toBe(400);
+    expect(await Activity.countDocuments({ user: alvo.id })).toBe(1);
+  });
+
+  it("exige motivo, e ele vai para a auditoria com as contagens", async () => {
+    const adm = await admin("chefe.motivo@teste.com");
+    const alvo = await comHistorico("commotivo@teste.com");
+
+    const sem = await request(app)
+      .post(`/admin/users/${alvo.id}/zerar-treinos`)
+      .set(auth(adm))
+      .send({ confirmacao: "commotivo@teste.com" });
+    expect(sem.status).toBe(400);
+
+    await request(app)
+      .post(`/admin/users/${alvo.id}/zerar-treinos`)
+      .set(auth(adm))
+      .send({ reason: "pedido da pessoa", confirmacao: "commotivo@teste.com" });
+
+    const log = (await AdminAudit.findOne({ action: "user.zerarTreinos" }))!;
+    expect(log.reason).toBe("pedido da pessoa");
+    // As contagens, e não os documentos: reconstruir um histórico de treino a
+    // partir de um diff não é operação que alguém vá fazer. O que importa
+    // registrar é o tamanho do que se perdeu.
+    expect(String((log.after as Record<string, unknown>).documento)).toContain("atividades");
+    // E nunca o e-mail inteiro.
+    expect(log.targetLabel).not.toBe("commotivo@teste.com");
+  });
+
+  it("o detalhe da conta diz quanto seria apagado, antes de apagar", async () => {
+    const adm = await admin("chefe.previa@teste.com");
+    const alvo = await comHistorico("previa@teste.com");
+
+    const r = await request(app).get(`/admin/users/${alvo.id}`).set(auth(adm));
+
+    expect(r.body.data.treinos.atividades).toBe(1);
+    expect(r.body.data.treinos.recordes).toBe(1);
+    expect(r.body.data.treinos.postsComTreino).toBe(1);
+  });
+
+  it("quem não é admin não zera nada", async () => {
+    const alvo = await comHistorico("naozera@teste.com");
+    const comum = await registrar("comum.zerar@teste.com");
+    const r = await request(app)
+      .post(`/admin/users/${alvo.id}/zerar-treinos`)
+      .set(auth(comum.token))
+      .send({ reason: "tentando", confirmacao: "naozera@teste.com" });
+    expect(r.status).toBe(403);
+  });
+});
