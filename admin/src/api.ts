@@ -497,6 +497,21 @@ export const buscarDocumentos = (
   );
 };
 
+/**
+ * Conserta os contadores desnormalizados que divergiram.
+ *
+ * `Post.commentCount` so INCREMENTAVA: nenhum caminho o diminuia, nem no app
+ * nem na moderacao. Todo post que teve comentario apagado ou oculto conta alto
+ * desde entao, e nenhuma tela denunciava.
+ */
+export const reconciliarContadores = (token: string) =>
+  api<{
+    postsConferidos: number;
+    postsCorrigidos: number;
+    cuponsConferidos: number;
+    cuponsCorrigidos: number;
+  }>("/admin/dados/reconciliar", { method: "POST", token });
+
 /** Edita só os campos informados. O resto do documento fica como está. */
 export const editarDocumento = (
   token: string,

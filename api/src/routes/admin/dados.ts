@@ -5,6 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { HttpError } from "../../utils/httpError.js";
 import { recordAudit } from "../../services/adminAudit.js";
 import { escaparRegex } from "../../utils/escaparRegex.js";
+import { reconciliarDependentes, reconciliarTudo } from "../../services/contadores.js";
 
 export const adminDadosRouter = Router();
 
@@ -267,6 +268,36 @@ adminDadosRouter.get(
   })
 );
 
+/**
+ * Conserta os contadores desnormalizados que divergiram.
+ *
+ * Existe porque `Post.commentCount` só INCREMENTAVA: não havia caminho nenhum
+ * que o diminuísse, nem no app nem na moderação. Todo post que teve um
+ * comentário apagado ou oculto está contando alto desde então, e nenhuma tela
+ * denunciava isso — a foto dizia "3 comentários" com dois na lista.
+ *
+ * Antes de um POST, um GET faz o DIAGNÓSTICO: diz quantos estão errados sem
+ * mudar nada. Uma varredura que escreve antes de você saber o tamanho do
+ * estrago é uma varredura que você não tem como conferir depois.
+ */
+adminDadosRouter.post(
+  "/reconciliar",
+  asyncHandler(async (req, res) => {
+    const r = await reconciliarTudo();
+    await recordAudit({
+      actor: req.user!,
+      action: "dados.reconciliar",
+      targetKind: "system",
+      targetLabel: "contadores",
+      reason: "reconciliação de contadores desnormalizados",
+      after: {
+        documento: JSON.stringify(r),
+      },
+    });
+    res.json({ data: r, meta: {} });
+  })
+);
+
 const buscaSchema = z.object({
   /** Filtro em JSON, como no Compass. Vazio = tudo. */
   q: z.string().optional(),
@@ -407,6 +438,13 @@ adminDadosRouter.patch(
     await M.updateOne({ _id: req.params.id }, { $set: campos }, { strict: false });
     const depois = await M.findById(req.params.id).lean();
 
+    // Editar tambem mexe em contador: ocultar um comentario (`hidden: true`)
+    // o tira da LISTA, que filtra por isso, sem tirar da contagem.
+    const efeito = await reconciliarDependentes(
+      M.modelName,
+      (depois ?? antes) as Record<string, unknown>
+    );
+
     await recordAudit({
       actor: req.user!,
       action: `dados.update.${M.modelName}`,
@@ -419,7 +457,7 @@ adminDadosRouter.patch(
       after: { documento: JSON.stringify(limpar(depois)).slice(0, 4000) },
     });
 
-    res.json({ data: limpar(depois), meta: {} });
+    res.json({ data: limpar(depois), meta: { efeito } });
   })
 );
 
@@ -459,6 +497,15 @@ adminDadosRouter.delete(
 
     await M.deleteOne({ _id: id });
 
+    // O CRUD apaga o documento e mais nada: ele nao roda a logica de negocio
+    // que manteria os contadores. Sem esta linha, apagar um comentario deixa a
+    // foto dizendo que tem um comentario a mais, para sempre -- foi exatamente
+    // o que aconteceu.
+    const efeito = await reconciliarDependentes(
+      M.modelName,
+      antes as Record<string, unknown>
+    );
+
     await recordAudit({
       actor: req.user!,
       action: `dados.delete.${M.modelName}`,
@@ -472,6 +519,6 @@ adminDadosRouter.delete(
       after: { documento: null },
     });
 
-    res.json({ data: { apagado: true, id }, meta: {} });
+    res.json({ data: { apagado: true, id }, meta: { efeito } });
   })
 );

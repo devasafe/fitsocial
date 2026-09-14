@@ -4,6 +4,7 @@ import {
   buscarDocumentos,
   editarDocumento,
   apagarDocumento,
+  reconciliarContadores,
   type CampoMeta,
   type ColecaoResumo,
   type Documento,
@@ -135,6 +136,7 @@ export function Dados({ token }: { token: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [aberto, setAberto] = useState<Documento | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
+  const [reconciliando, setReconciliando] = useState(false);
   const ehCelular = useEhCelular();
 
   useCamada(aberto !== null, () => setAberto(null));
@@ -188,6 +190,30 @@ export function Dados({ token }: { token: string }) {
             mas apagar não se desfaz.
           </p>
         </div>
+        {/* Fica no topo, e não escondido: os contadores desnormalizados
+            divergem em silêncio, e a única forma de saber é rodar isto. */}
+        <button
+          className="discreto"
+          disabled={reconciliando}
+          onClick={async () => {
+            setReconciliando(true);
+            setErro(null);
+            try {
+              const r = await reconciliarContadores(token);
+              setRecado(
+                r.data.postsCorrigidos + r.data.cuponsCorrigidos === 0
+                  ? `Tudo certo: ${r.data.postsConferidos} posts conferidos, nada fora do lugar.`
+                  : `${r.data.postsCorrigidos} posts e ${r.data.cuponsCorrigidos} cupons corrigidos.`
+              );
+            } catch (e) {
+              setErro((e as Error).message);
+            } finally {
+              setReconciliando(false);
+            }
+          }}
+        >
+          {reconciliando ? "Conferindo…" : "Conferir contagens"}
+        </button>
       </div>
 
       {/* As coleções em grupos: vinte e quatro botões numa linha obrigam a ler

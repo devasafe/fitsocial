@@ -5,6 +5,7 @@ import request from "supertest";
 import { createApp } from "../../app.js";
 import { User } from "../../models/User.js";
 import { Post } from "../../models/Post.js";
+import { Comment } from "../../models/Comment.js";
 import { AdminAudit } from "../../models/AdminAudit.js";
 import { grantAdmin } from "../../scripts/grantAdmin.js";
 
@@ -29,7 +30,12 @@ afterAll(async () => {
   await mongod.stop();
 });
 beforeEach(async () => {
-  await Promise.all([User.deleteMany({}), Post.deleteMany({}), AdminAudit.deleteMany({})]);
+  await Promise.all([
+    User.deleteMany({}),
+    Post.deleteMany({}),
+    Comment.deleteMany({}),
+    AdminAudit.deleteMany({}),
+  ]);
   await request(app)
     .post("/auth/register")
     .send({ name: "Chefe", email: "chefe@teste.com", password: SENHA });
@@ -312,5 +318,84 @@ describe("só as coleções que se usa, e a auditoria é intocável", () => {
     const r = await request(app).get("/admin/dados").set(auth());
     const evt = r.body.data.find((c: { nome: string }) => c.nome === "EventoDeCobranca");
     expect(evt.soLeitura).toBe(true);
+  });
+});
+
+describe("apagar não pode deixar o contador mentindo", () => {
+  /** Um post com N comentários, pelo caminho normal do app. */
+  async function postComComentarios(quantos: number) {
+    const autor = await request(app)
+      .post("/auth/register")
+      .send({ name: "Autor", email: `autor${Date.now()}@t.com`, password: SENHA });
+    const t = autor.body.token as string;
+    const p = await request(app)
+      .post("/social/posts")
+      .set({ Authorization: `Bearer ${t}` })
+      .send({ text: "foto do treino" });
+    const postId = p.body.post?.id ?? p.body.id;
+    for (let i = 0; i < quantos; i++) {
+      await request(app)
+        .post(`/social/posts/${postId}/comments`)
+        .set({ Authorization: `Bearer ${t}` })
+        .send({ text: `comentário ${i}` });
+    }
+    return { postId, token: t };
+  }
+
+  it("apagar um comentário ajusta a contagem do post", async () => {
+    const { postId } = await postComComentarios(3);
+    expect((await Post.findById(postId))!.commentCount).toBe(3);
+
+    const c = (await Comment.findOne({ post: postId }))!;
+    const id = c._id.toString();
+    const r = await request(app)
+      .delete(`/admin/dados/Comment/${id}`)
+      .set(auth())
+      .send({ motivo: "comentário ofensivo", confirmacao: id });
+
+    expect(r.status).toBe(200);
+    // O bug relatado: a foto continuava dizendo 3 com dois na lista. O
+    // `commentCount` só incrementava — nenhum caminho o diminuía.
+    expect((await Post.findById(postId))!.commentCount).toBe(2);
+    expect(r.body.meta.efeito).toContain("recalculada");
+  });
+
+  it("OCULTAR um comentário também ajusta, porque a lista o esconde", async () => {
+    const { postId } = await postComComentarios(2);
+    const c = (await Comment.findOne({ post: postId }))!;
+
+    await request(app)
+      .patch(`/admin/dados/Comment/${c._id.toString()}`)
+      .set(auth())
+      .send({ motivo: "ocultando", campos: { hidden: true } });
+
+    // A lista filtra `hidden: { $ne: true }`. Um contador que diverge da
+    // lista que ele resume é pior que contador nenhum.
+    expect((await Post.findById(postId))!.commentCount).toBe(1);
+  });
+
+  it("a reconciliação conserta o que já estava errado e diz quantos", async () => {
+    const { postId } = await postComComentarios(2);
+    // Simula o estrago que já existe no banco: contador alto sem motivo.
+    await Post.updateOne({ _id: postId }, { $set: { commentCount: 99, likeCount: 7 } });
+
+    const r = await request(app).post("/admin/dados/reconciliar").set(auth());
+
+    expect(r.status).toBe(200);
+    // "1200 posts conferidos" não diz nada; "1 estava errado" diz.
+    expect(r.body.data.postsCorrigidos).toBeGreaterThanOrEqual(1);
+    const depois = (await Post.findById(postId))!;
+    expect(depois.commentCount).toBe(2);
+    expect(depois.likeCount).toBe(0);
+  });
+
+  it("reconciliar duas vezes não muda nada na segunda", async () => {
+    await postComComentarios(2);
+    await request(app).post("/admin/dados/reconciliar").set(auth());
+    const segunda = await request(app).post("/admin/dados/reconciliar").set(auth());
+
+    // Recontagem é idempotente por construção: é a única operação segura de
+    // repetir quando não se sabe o que já foi aplicado.
+    expect(segunda.body.data.postsCorrigidos).toBe(0);
   });
 });
