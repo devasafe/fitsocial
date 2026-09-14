@@ -1,54 +1,141 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buscarColecoes,
   buscarDocumentos,
   editarDocumento,
   apagarDocumento,
+  type CampoMeta,
   type ColecaoResumo,
   type Documento,
+  type MetaDocumentos,
 } from "../api";
 import { useCamada } from "../hooks/useCamada";
+import { useEhCelular } from "../hooks/useEhCelular";
 
-// Acesso direto às coleções.
+// Os dados, para gente.
 //
-// Existe porque o Mongo NÃO está exposto na internet — e não deve estar. Sem
-// isto, apagar um documento errado exigia o console web do provedor da VPS e
-// mongosh digitado à mão: mais lento, sem registro nenhum, e com o risco de um
-// `deleteMany` sem filtro.
+// A primeira versão desta tela mostrava `_id` numa coluna e o documento como
+// JSON cru — e não era descuido de layout: ela não tinha COMO fazer melhor,
+// porque o servidor não contava o que cada campo era. Agora ele conta (tipo,
+// enum, obrigatório), e é isso que sustenta tudo aqui: enum vira seletor,
+// booleano vira chave, data vira "14/09/26 07:32", e `_id` sai da frente.
 //
-// A tela é deliberadamente sem graça. Ela mexe no banco sem rede de proteção,
-// e o que a torna aceitável não é a interface: é o servidor guardar uma cópia
-// do documento na auditoria antes de qualquer mudança.
+// A regra de leitura: quem abre esta tela quer ACHAR alguém e CONSERTAR um
+// campo. Todo o resto — JSON, filtro do Mongo, ids — é saída de emergência, e
+// fica atrás de um clique.
 
 const nf = new Intl.NumberFormat("pt-BR");
 
-/** O JSON do documento, identado, para ler e editar. */
-function comoJson(d: Documento): string {
-  return JSON.stringify(d, null, 2);
+/** Grupos, para não jogar 24 botões numa linha. */
+const GRUPOS: { titulo: string; colecoes: string[] }[] = [
+  { titulo: "Contas", colecoes: ["User", "Post", "Comment", "Report", "Notification"] },
+  {
+    titulo: "Treino",
+    colecoes: [
+      "Activity",
+      "Plan",
+      "WorkoutLog",
+      "FoodLog",
+      "WaterLog",
+      "PersonalRecord",
+      "ExerciseVideo",
+    ],
+  },
+  { titulo: "Desafios", colecoes: ["Challenge", "ChallengeMember"] },
+  {
+    titulo: "Acompanhamento",
+    colecoes: ["ProfessionalLink", "ProfessionalInvite", "CoachMessage", "ProMessage"],
+  },
+  {
+    titulo: "Cobrança",
+    colecoes: ["Assinatura", "Cobranca", "EventoDeCobranca", "Cupom", "CupomUso"],
+  },
+  { titulo: "Sistema", colecoes: ["AdminAudit"] },
+];
+
+/** Nomes em português para os campos que aparecem sempre. */
+const ROTULOS: Record<string, string> = {
+  _id: "id",
+  name: "nome",
+  email: "e-mail",
+  username: "usuário",
+  createdAt: "criado em",
+  updatedAt: "atualizado em",
+  plan: "plano",
+  tier: "acesso",
+  status: "situação",
+  text: "texto",
+  title: "título",
+  author: "autor",
+  user: "pessoa",
+  role: "papel",
+  valorCentavos: "valor",
+  pagoEm: "pago em",
+  validoAte: "vale até",
+  startedAt: "começou em",
+  achievedAt: "conquistado em",
+  actorLabel: "quem fez",
+  targetLabel: "no quê",
+  reason: "motivo",
+  action: "ação",
+  revogadoEm: "revogado em",
+  primeiraCompraEm: "1ª compra",
+};
+
+const rotulo = (campo: string) => ROTULOS[campo] ?? campo.replace(/([A-Z])/g, " $1").toLowerCase();
+
+/** Valores em algo que se lê. Datas, dinheiro e ids ficam legíveis. */
+function mostrar(campo: string, valor: unknown): string {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  if (typeof valor === "boolean") return valor ? "sim" : "não";
+
+  // Centavos são inteiros no banco de propósito; na tela são reais.
+  if (campo.endsWith("Centavos") && typeof valor === "number") {
+    return `R$ ${(valor / 100).toFixed(2).replace(".", ",")}`;
+  }
+
+  if (typeof valor === "string") {
+    // ISO vira data legível: um `createdAt` cru não diz nada a quem lê.
+    if (/^\d{4}-\d{2}-\d{2}T/.test(valor)) {
+      return new Date(valor).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    }
+    // ObjectId inteiro não cabe e não informa: as últimas seis bastam para
+    // conferir de olho, e o valor completo fica no JSON.
+    if (/^[0-9a-f]{24}$/.test(valor)) return `…${valor.slice(-6)}`;
+    return valor.length > 60 ? `${valor.slice(0, 60)}…` : valor;
+  }
+
+  if (Array.isArray(valor)) return valor.length === 0 ? "—" : `${valor.length} itens`;
+  if (typeof valor === "object") return "{…}";
+  return String(valor);
 }
 
-/** Um rótulo curto para a linha da lista, sem precisar abrir. */
-function resumo(d: Documento): string {
-  for (const k of ["name", "title", "codigo", "email", "nome"]) {
+/** O que identifica um documento na lista, sem precisar abrir. */
+function titulo(d: Documento): string {
+  for (const k of ["name", "nome", "title", "codigo", "email", "action", "exerciseName"]) {
     const v = d[k];
     if (typeof v === "string" && v) return v;
   }
-  return String(d._id ?? "");
+  return `…${String(d._id).slice(-6)}`;
 }
 
 export function Dados({ token }: { token: string }) {
   const [colecoes, setColecoes] = useState<ColecaoResumo[] | null>(null);
   const [colecao, setColecao] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState("");
+  const [busca, setBusca] = useState("");
+  const [aplicada, setAplicada] = useState("");
   const [docs, setDocs] = useState<Documento[] | null>(null);
-  const [total, setTotal] = useState(0);
+  const [meta, setMeta] = useState<MetaDocumentos | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aberto, setAberto] = useState<Documento | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
-
-  const atual = colecoes?.find((c) => c.nome === colecao) ?? null;
-  const soLeitura = atual?.soLeitura === true;
+  const ehCelular = useEhCelular();
 
   useCamada(aberto !== null, () => setAberto(null));
 
@@ -59,26 +146,26 @@ export function Dados({ token }: { token: string }) {
   }, [token]);
 
   const carregar = useCallback(
-    async (maisPagina = false) => {
+    async (proximaPagina?: string | null) => {
       if (!colecao) return;
       setErro(null);
+      if (proximaPagina) setCarregandoMais(true);
       try {
         const r = await buscarDocumentos(token, colecao, {
-          q: filtro.trim() || undefined,
+          q: aplicada.trim() || undefined,
           limit: 25,
-          cursor: maisPagina ? cursor : null,
+          cursor: proximaPagina ?? null,
         });
-        setDocs((antes) => (maisPagina && antes ? [...antes, ...r.data] : r.data));
+        setDocs((antes) => (proximaPagina && antes ? [...antes, ...r.data] : r.data));
+        setMeta(r.meta ?? null);
         setCursor(r.meta?.nextCursor ?? null);
-        setTotal(r.meta?.total ?? 0);
       } catch (e) {
         setErro((e as Error).message);
+      } finally {
+        setCarregandoMais(false);
       }
     },
-    // `cursor` de fora de propósito: incluí-lo recriaria a função a cada
-    // página e o efeito abaixo recarregaria a lista do começo.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token, colecao, filtro]
+    [token, colecao, aplicada]
   );
 
   useEffect(() => {
@@ -88,17 +175,61 @@ export function Dados({ token }: { token: string }) {
     void carregar();
   }, [carregar, colecao]);
 
+  const colunas = useMemo(() => meta?.colunas ?? [], [meta]);
+  const atual = colecoes?.find((c) => c.nome === colecao) ?? null;
+
   return (
     <>
       <div className="cabecalho">
         <div>
           <h1>Dados</h1>
           <p className="aviso">
-            Só as coleções que você usa. Toda mudança guarda uma cópia do documento na
-            auditoria — mas apagar não tem como desfazer pelo banco. As marcadas com
-            &#128274; só se leem.
+            Para achar alguém e consertar um campo. Toda mudança guarda uma cópia na auditoria —
+            mas apagar não se desfaz.
           </p>
         </div>
+      </div>
+
+      {/* As coleções em grupos: vinte e quatro botões numa linha obrigam a ler
+          todos para achar um. */}
+      <div className="painel">
+        {colecoes === null ? (
+          <p className="vazio">Carregando…</p>
+        ) : (
+          GRUPOS.map((g) => {
+            const doGrupo = g.colecoes
+              .map((n) => colecoes.find((c) => c.nome === n))
+              .filter((c): c is ColecaoResumo => Boolean(c));
+            if (doGrupo.length === 0) return null;
+            return (
+              <div key={g.titulo} style={{ marginBottom: 10 }}>
+                <div className="aviso" style={{ marginBottom: 4 }}>
+                  {g.titulo}
+                </div>
+                <div className="filtros" style={{ flexWrap: "wrap" }}>
+                  {doGrupo.map((c) => (
+                    <button
+                      key={c.nome}
+                      className={colecao === c.nome ? "ativo" : ""}
+                      onClick={() => {
+                        setColecao(c.nome);
+                        setBusca("");
+                        setAplicada("");
+                        setRecado(null);
+                      }}
+                    >
+                      {c.nome}{" "}
+                      <span className="num" style={{ opacity: 0.6 }}>
+                        {nf.format(c.documentos)}
+                      </span>
+                      {c.soLeitura && <span style={{ marginLeft: 4 }}>&#128274;</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {recado && (
@@ -108,89 +239,99 @@ export function Dados({ token }: { token: string }) {
       )}
       {erro && <p className="erro">{erro}</p>}
 
-      <div className="painel">
-        {colecoes === null ? (
-          <p className="vazio">Carregando…</p>
-        ) : (
-          <div className="filtros" style={{ flexWrap: "wrap" }}>
-            {colecoes.map((c) => (
-              <button
-                key={c.nome}
-                className={colecao === c.nome ? "ativo" : ""}
-                onClick={() => {
-                  setColecao(c.nome);
-                  setFiltro("");
-                  setRecado(null);
-                }}
-              >
-                {c.nome} <span className="num">{nf.format(c.documentos)}</span>
-                {c.soLeitura && (
-                  <span className="aviso" style={{ marginLeft: 4 }}>
-                    &#128274;
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {colecao && (
         <div className="painel" style={{ marginTop: 12 }}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              void carregar();
+              setAplicada(busca);
             }}
           >
             <label>
-              Filtro
+              Buscar em {colecao}
               <input
-                value={filtro}
-                onChange={(e) => setFiltro(e.target.value)}
-                placeholder={'{"email": "alguem@teste.com"}'}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder={
+                  meta?.buscaveis.length ? meta.buscaveis.slice(0, 3).join(", ") : "texto"
+                }
                 spellCheck={false}
               />
             </label>
             <p className="aviso">
-              JSON, igual ao Compass. Vazio = tudo. Exemplos:{" "}
-              <code>{'{"status": "banned"}'}</code> · <code>{'{"tier": "premium"}'}</code>
+              Escreva o que quer achar. Para filtro exato, comece com <code>{"{"}</code> e use
+              JSON: <code>{'{"status":"banned"}'}</code>
             </p>
           </form>
 
           {docs === null ? (
             <p className="vazio">Carregando…</p>
           ) : docs.length === 0 ? (
-            <p className="vazio">Nenhum documento com esse filtro.</p>
+            <p className="vazio">
+              {aplicada ? `Nada encontrado para "${aplicada}".` : "Coleção vazia."}
+            </p>
           ) : (
             <>
               <p className="aviso">
-                {nf.format(docs.length)} de {nf.format(total)}
+                {nf.format(docs.length)} de {nf.format(meta?.total ?? 0)}
+                {atual?.soLeitura && " · só leitura"}
               </p>
-              <div className="rolagem-tabela">
-                <table>
-                  <tbody>
-                    {docs.map((d) => (
-                      <tr key={String(d._id)}>
-                        <td>
-                          {resumo(d)}
-                          <div className="aviso num" style={{ color: "var(--texto-3)" }}>
-                            {String(d._id)}
-                          </div>
-                        </td>
-                        <td className="dir">
-                          <button className="discreto" onClick={() => setAberto(d)}>
-                            Abrir
-                          </button>
-                        </td>
+
+              {ehCelular ? (
+                <ul className="lista-cartoes">
+                  {docs.map((d) => (
+                    <li key={String(d._id)}>
+                      <button className="cartao-item" onClick={() => setAberto(d)}>
+                        <span className="cartao-titulo">
+                          <b>{titulo(d)}</b>
+                        </span>
+                        <span className="cartao-meta">
+                          {colunas.slice(1, 4).map((c) => (
+                            <span key={c}>{mostrar(c, d[c])}</span>
+                          ))}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="rolagem-tabela">
+                  <table>
+                    <thead>
+                      <tr>
+                        {colunas.map((c) => (
+                          <th key={c}>{rotulo(c)}</th>
+                        ))}
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {docs.map((d) => (
+                        <tr key={String(d._id)}>
+                          {colunas.map((c, i) => (
+                            <td key={c} style={i === 0 ? undefined : { color: "var(--texto-2)" }}>
+                              {mostrar(c, d[c])}
+                            </td>
+                          ))}
+                          <td className="dir">
+                            <button className="discreto" onClick={() => setAberto(d)}>
+                              Abrir
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               {cursor && (
-                <button className="discreto" onClick={() => void carregar(true)}>
-                  Carregar mais
+                <button
+                  className="discreto"
+                  onClick={() => void carregar(cursor)}
+                  disabled={carregandoMais}
+                >
+                  {carregandoMais ? "Carregando…" : "Carregar mais"}
                 </button>
               )}
             </>
@@ -198,12 +339,13 @@ export function Dados({ token }: { token: string }) {
         </div>
       )}
 
-      {aberto && colecao && (
-        <Editor
+      {aberto && colecao && meta && (
+        <Ficha
           token={token}
           colecao={colecao}
           documento={aberto}
-          soLeitura={soLeitura}
+          campos={meta.campos}
+          soLeitura={meta.soLeitura}
           aoFechar={() => setAberto(null)}
           aoMudar={(msg) => {
             setAberto(null);
@@ -216,12 +358,19 @@ export function Dados({ token }: { token: string }) {
   );
 }
 
-// ------------------------------------------------------------------ editor
+// ------------------------------------------------------------------- ficha
 
-function Editor({
+/**
+ * A ficha do documento: campo a campo, com o editor certo para cada tipo.
+ *
+ * As mudanças acumulam e vão juntas num salvar só. Pedir motivo por campo
+ * faria consertar três coisas custar três confirmações — e o motivo é o mesmo.
+ */
+function Ficha({
   token,
   colecao,
   documento,
+  campos,
   soLeitura,
   aoFechar,
   aoMudar,
@@ -229,30 +378,43 @@ function Editor({
   token: string;
   colecao: string;
   documento: Documento;
-  /** Auditoria e livro-razao: abre para ler, sem os botoes de mudar. */
+  campos: CampoMeta[];
   soLeitura: boolean;
   aoFechar: () => void;
   aoMudar: (recado: string) => void;
 }) {
   const id = String(documento._id);
-  const [campos, setCampos] = useState("{}");
+  const [mudancas, setMudancas] = useState<Record<string, unknown>>({});
   const [motivo, setMotivo] = useState("");
-  const [confirmacao, setConfirmacao] = useState("");
+  const [verJson, setVerJson] = useState(false);
   const [apagando, setApagando] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  async function salvar(e: FormEvent) {
-    e.preventDefault();
+  const visiveis = campos.filter((c) => c.nome !== "__v" && !c.nome.includes("."));
+  const temMudanca = Object.keys(mudancas).length > 0;
+
+  function mudar(campo: string, valor: unknown) {
+    setMudancas((antes) => {
+      const novo = { ...antes };
+      // Voltar ao valor original tira o campo da lista: salvar um campo com o
+      // mesmo valor gravaria uma linha de auditoria que não diz nada.
+      if (String(valor) === String(documento[campo] ?? "")) delete novo[campo];
+      else novo[campo] = valor;
+      return novo;
+    });
+  }
+
+  async function salvar() {
     setEnviando(true);
     setErro(null);
     try {
-      const parsed = JSON.parse(campos) as Documento;
-      if (Object.keys(parsed).length === 0) throw new Error("Nenhum campo para mudar.");
-      await editarDocumento(token, colecao, id, parsed, motivo.trim());
-      aoMudar(`${colecao}/${id} atualizado.`);
-    } catch (err) {
-      setErro((err as Error).message);
+      await editarDocumento(token, colecao, id, mudancas, motivo.trim());
+      const quantos = Object.keys(mudancas).length;
+      aoMudar(`${quantos === 1 ? "1 campo" : `${quantos} campos`} salvos em ${colecao}.`);
+    } catch (e) {
+      setErro((e as Error).message);
       setEnviando(false);
     }
   }
@@ -262,9 +424,9 @@ function Editor({
     setErro(null);
     try {
       await apagarDocumento(token, colecao, id, motivo.trim(), confirmacao.trim());
-      aoMudar(`${colecao}/${id} apagado. A cópia ficou na auditoria.`);
-    } catch (err) {
-      setErro((err as Error).message);
+      aoMudar("Documento apagado. A cópia ficou na auditoria.");
+    } catch (e) {
+      setErro((e as Error).message);
       setEnviando(false);
     }
   }
@@ -274,55 +436,22 @@ function Editor({
       className="cortina"
       role="dialog"
       aria-modal="true"
-      aria-label={`${colecao} ${id}`}
+      aria-label={titulo(documento)}
       onClick={(e) => {
         if (e.target === e.currentTarget && !enviando) aoFechar();
       }}
     >
       <div className="dialogo">
-        <h2>
-          {colecao} <span className="num" style={{ fontSize: 12 }}>{id}</span>
-        </h2>
+        <h2 style={{ marginBottom: 2 }}>{titulo(documento)}</h2>
+        <p className="aviso num" style={{ margin: 0, color: "var(--texto-3)" }}>
+          {colecao} · {id}
+        </p>
 
-        <div style={{ marginTop: 8 }}>
-          <label>Documento</label>
-          <textarea
-            readOnly
-            value={comoJson(documento)}
-            spellCheck={false}
-            style={{
-              width: "100%",
-              minHeight: 200,
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 12,
-              background: "var(--surface-2)",
-              color: "var(--texto-2)",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              padding: 8,
-            }}
-          />
-        </div>
-
-        {soLeitura ? (
+        {apagando ? (
           <>
-            <p className="aviso" style={{ marginTop: 12 }}>
-              {/* Um painel onde quem apagou pode apagar o registro de ter
-                  apagado nao tem auditoria nenhuma. */}
-              Este registro so se le. A auditoria nao pode ser mudada por quem
-              ela vigia, e o livro-razao dos webhooks sustenta a idempotencia do
-              pagamento.
-            </p>
-            <div className="dialogo-acoes">
-              <button className="discreto" onClick={aoFechar}>
-                Fechar
-              </button>
-            </div>
-          </>
-        ) : apagando ? (
-          <>
-            <p className="erro" style={{ marginTop: 12 }}>
-              Apagar não tem como desfazer pelo banco. Uma cópia fica na auditoria.
+            <p className="erro" style={{ marginTop: 14 }}>
+              Isto apaga do banco e não se desfaz. Uma cópia do documento fica na auditoria, para
+              reconstruir à mão se precisar.
             </p>
             <label>
               Digite o id para confirmar
@@ -331,6 +460,7 @@ function Editor({
                 onChange={(e) => setConfirmacao(e.target.value)}
                 placeholder={id}
                 spellCheck={false}
+                autoFocus
               />
             </label>
             <label>
@@ -352,71 +482,245 @@ function Editor({
                 onClick={() => void apagar()}
                 disabled={enviando || confirmacao.trim() !== id || motivo.trim().length < 3}
               >
-                {enviando ? "Apagando…" : "Apagar"}
+                {enviando ? "Apagando…" : "Apagar de vez"}
               </button>
             </div>
           </>
         ) : (
-          <form onSubmit={salvar}>
-            <label style={{ marginTop: 12 }}>
-              Campos a mudar (JSON)
-              <textarea
-                value={campos}
-                onChange={(e) => setCampos(e.target.value)}
-                spellCheck={false}
+          <>
+            <div style={{ marginTop: 14 }}>
+              {visiveis.map((c) => (
+                <Campo
+                  key={c.nome}
+                  meta={c}
+                  valor={c.nome in mudancas ? mudancas[c.nome] : documento[c.nome]}
+                  mudado={c.nome in mudancas}
+                  soLeitura={soLeitura}
+                  aoMudar={(v) => mudar(c.nome, v)}
+                />
+              ))}
+            </div>
+
+            {/* O JSON continua acessível, atrás de um clique: é o que resolve
+                os campos aninhados que a ficha não edita. */}
+            <button
+              className="discreto"
+              onClick={() => setVerJson((v) => !v)}
+              style={{ marginTop: 10 }}
+            >
+              {verJson ? "Esconder JSON" : "Ver JSON completo"}
+            </button>
+            {verJson && (
+              <pre
                 style={{
-                  width: "100%",
-                  minHeight: 80,
-                  fontFamily: "ui-monospace, monospace",
-                  fontSize: 12,
                   background: "var(--surface-2)",
-                  color: "var(--texto)",
                   border: "1px solid var(--line)",
                   borderRadius: 8,
-                  padding: 8,
+                  padding: 10,
+                  fontSize: 11,
+                  maxHeight: 240,
+                  overflow: "auto",
+                  marginTop: 6,
                 }}
-              />
-            </label>
-            <p className="aviso">
-              Só os campos informados mudam; o resto do documento fica como está.
-            </p>
-            <label>
-              Motivo
-              <input
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Fica registrado na auditoria"
-                minLength={3}
-              />
-            </label>
-            {erro && <p className="erro">{erro}</p>}
-            <div className="dialogo-acoes">
-              <button type="button" className="discreto" onClick={aoFechar} disabled={enviando}>
-                Fechar
-              </button>
-              <button
-                type="button"
-                className="discreto"
-                onClick={() => {
-                  setApagando(true);
-                  setErro(null);
-                }}
-                disabled={enviando}
-                style={{ color: "var(--perigo)" }}
               >
-                Apagar
-              </button>
-              <button
-                type="submit"
-                className="acao"
-                disabled={enviando || motivo.trim().length < 3 || campos.trim() === "{}"}
-              >
-                {enviando ? "Salvando…" : "Salvar"}
-              </button>
-            </div>
-          </form>
+                {JSON.stringify(documento, null, 2)}
+              </pre>
+            )}
+
+            {soLeitura ? (
+              <>
+                <p className="aviso" style={{ marginTop: 12 }}>
+                  Este registro só se lê. A auditoria não pode ser mudada por quem ela vigia, e o
+                  livro-razão dos webhooks sustenta a idempotência do pagamento.
+                </p>
+                <div className="dialogo-acoes">
+                  <button className="discreto" onClick={aoFechar}>
+                    Fechar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {temMudanca && (
+                  <label style={{ marginTop: 12 }}>
+                    Motivo
+                    <input
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="Fica registrado na auditoria"
+                      minLength={3}
+                      autoFocus
+                    />
+                  </label>
+                )}
+                {erro && <p className="erro">{erro}</p>}
+                <div className="dialogo-acoes">
+                  <button className="discreto" onClick={aoFechar} disabled={enviando}>
+                    {temMudanca ? "Descartar" : "Fechar"}
+                  </button>
+                  <button
+                    className="discreto"
+                    onClick={() => {
+                      setApagando(true);
+                      setErro(null);
+                    }}
+                    disabled={enviando}
+                    style={{ color: "var(--perigo)", borderColor: "var(--perigo)" }}
+                  >
+                    Apagar
+                  </button>
+                  <button
+                    className="acao"
+                    onClick={() => void salvar()}
+                    disabled={enviando || !temMudanca || motivo.trim().length < 3}
+                  >
+                    {enviando
+                      ? "Salvando…"
+                      : temMudanca
+                        ? `Salvar ${Object.keys(mudancas).length}`
+                        : "Salvar"}
+                  </button>
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Um campo, com o editor que o tipo pede. */
+function Campo({
+  meta,
+  valor,
+  mudado,
+  soLeitura,
+  aoMudar,
+}: {
+  meta: CampoMeta;
+  valor: unknown;
+  mudado: boolean;
+  soLeitura: boolean;
+  aoMudar: (v: unknown) => void;
+}) {
+  const linha = {
+    display: "grid",
+    gridTemplateColumns: "minmax(90px, 30%) 1fr",
+    gap: 10,
+    alignItems: "center",
+    padding: "7px 0",
+    borderTop: "1px solid var(--line)",
+  } as const;
+
+  const nome = (
+    <span style={{ color: mudado ? "var(--lime)" : "var(--texto-3)", fontSize: 12 }}>
+      {rotulo(meta.nome)}
+      {mudado && " •"}
+    </span>
+  );
+
+  /**
+   * O que se mostra sem oferecer edição.
+   *
+   * `_id` e as datas automáticas não se mudam; `ObjectId` de referência só se
+   * trocaria colando outro id, e trocar o dono de um documento por um campo de
+   * texto é o tipo de conserto que cria dois problemas. Segredo nunca.
+   */
+  const somenteVer =
+    soLeitura ||
+    meta.segredo ||
+    meta.complexo ||
+    meta.nome === "_id" ||
+    meta.tipo === "ObjectId" ||
+    meta.nome === "createdAt" ||
+    meta.nome === "updatedAt";
+
+  if (somenteVer) {
+    return (
+      <div style={linha}>
+        {nome}
+        <span style={{ color: "var(--texto-2)", fontSize: 13 }} className="num">
+          {mostrar(meta.nome, valor)}
+        </span>
+      </div>
+    );
+  }
+
+  // Enum vira seletor: digitar um valor fora da lista grava algo que o resto
+  // do sistema não sabe ler, e o schema só recusaria na hora de salvar.
+  if (meta.enumValores?.length) {
+    return (
+      <div style={linha}>
+        {nome}
+        <select
+          value={valor === null || valor === undefined ? "" : String(valor)}
+          onChange={(e) => aoMudar(e.target.value === "" ? null : e.target.value)}
+        >
+          <option value="">—</option>
+          {meta.enumValores.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  if (meta.tipo === "Boolean") {
+    return (
+      <div style={linha}>
+        {nome}
+        <label style={{ flexDirection: "row", gap: 8, alignItems: "center", margin: 0 }}>
+          <input
+            type="checkbox"
+            checked={valor === true}
+            onChange={(e) => aoMudar(e.target.checked)}
+          />
+          <span style={{ color: "var(--texto-2)", fontSize: 13 }}>
+            {valor === true ? "sim" : "não"}
+          </span>
+        </label>
+      </div>
+    );
+  }
+
+  if (meta.tipo === "Date") {
+    const iso = typeof valor === "string" && valor ? valor.slice(0, 16) : "";
+    return (
+      <div style={linha}>
+        {nome}
+        <input
+          type="datetime-local"
+          value={iso}
+          onChange={(e) => aoMudar(e.target.value ? new Date(e.target.value).toISOString() : null)}
+        />
+      </div>
+    );
+  }
+
+  if (meta.tipo === "Number") {
+    return (
+      <div style={linha}>
+        {nome}
+        <input
+          type="number"
+          value={valor === null || valor === undefined ? "" : String(valor)}
+          onChange={(e) => aoMudar(e.target.value === "" ? null : Number(e.target.value))}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div style={linha}>
+      {nome}
+      <input
+        value={valor === null || valor === undefined ? "" : String(valor)}
+        onChange={(e) => aoMudar(e.target.value)}
+        spellCheck={false}
+      />
     </div>
   );
 }

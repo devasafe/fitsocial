@@ -12,6 +12,7 @@ import { banir, desbanir, suspender, definirVisibilidade, serializeUser } from "
 import { concederPremium, concederPro, revogarPremium, revogarPro } from "../../services/entitlement.js";
 import { recontarAlunosDe } from "../../services/patrocinio.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
+import { escaparRegex } from "../../utils/escaparRegex.js";
 import { cuponsDoUsuario } from "../../services/cupons.js";
 import { emReais } from "../../services/pagamentos/catalogo.js";
 
@@ -30,12 +31,6 @@ async function carregar(id: string) {
   const u = await User.findById(id);
   if (!u) throw new HttpError(404, "Usuário não encontrado");
   return u;
-}
-
-/** Escapa o texto da busca: sem isto, "a+" ou "(" viram regex e quebram.
- *  Mesma expressão usada em routes/social.ts:26. */
-function escaparRegex(texto: string): string {
-  return texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Lista paginada por cursor (nunca offset — convenção do projeto). */

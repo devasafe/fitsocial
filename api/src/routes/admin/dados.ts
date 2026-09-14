@@ -4,6 +4,7 @@ import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { HttpError } from "../../utils/httpError.js";
 import { recordAudit } from "../../services/adminAudit.js";
+import { escaparRegex } from "../../utils/escaparRegex.js";
 
 export const adminDadosRouter = Router();
 
@@ -138,6 +139,115 @@ function assertPodeEscrever(nome: string) {
   }
 }
 
+/**
+ * Os campos de uma coleção, com o TIPO de cada um.
+ *
+ * É isto que permite a tela ser uma tela em vez de um editor de JSON: sabendo
+ * que `plan` é um enum de três valores, ela desenha um seletor; sabendo que
+ * `createdAt` é data, mostra "14/09/2026" e não o ISO cru; sabendo que
+ * `contentVisible` é booleano, desenha uma chave.
+ *
+ * Sem isto, toda edição vira digitar JSON à mão e acertar o tipo de cabeça —
+ * e errar o tipo num campo de enum grava um valor que o resto do sistema não
+ * sabe ler.
+ */
+function camposDo(M: mongoose.Model<unknown>) {
+  const out: {
+    nome: string;
+    tipo: string;
+    enumValores?: string[];
+    obrigatorio?: boolean;
+    segredo?: boolean;
+    /** Aninhado: a tela mostra, mas não oferece edição inline. */
+    complexo?: boolean;
+  }[] = [];
+
+  for (const [nome, path] of Object.entries(M.schema.paths)) {
+    if (nome === "__v") continue;
+    const p = path as unknown as {
+      instance?: string;
+      options?: { enum?: unknown; required?: unknown };
+      enumValues?: string[];
+    };
+    const tipo = p.instance ?? "Mixed";
+    const enumValores = Array.isArray(p.enumValues) && p.enumValues.length
+      ? p.enumValues.filter((v): v is string => typeof v === "string")
+      : undefined;
+
+    out.push({
+      nome,
+      tipo,
+      ...(enumValores ? { enumValores } : {}),
+      ...(p.options?.required ? { obrigatorio: true } : {}),
+      ...(SEGREDOS.has(nome) ? { segredo: true } : {}),
+      // Um campo aninhado ou de array não se edita por um input de texto sem
+      // virar adivinhação de formato.
+      ...(tipo === "Array" || tipo === "Embedded" || tipo === "Mixed" || nome.includes(".")
+        ? { complexo: true }
+        : {}),
+    });
+  }
+
+  // Os campos que identificam primeiro; o resto em ordem alfabética. Uma
+  // tabela que começa por `__v` e `updatedAt` obriga a procurar o nome.
+  const prioridade = ["_id", "name", "nome", "title", "codigo", "email", "username"];
+  return out.sort((a, b) => {
+    const pa = prioridade.indexOf(a.nome);
+    const pb = prioridade.indexOf(b.nome);
+    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
+    return a.nome.localeCompare(b.nome);
+  });
+}
+
+/**
+ * As colunas que a lista mostra, por coleção.
+ *
+ * Escolhidas à mão para o que mais se abre, porque "as três primeiras do
+ * schema" daria `_id`, `createdAt` e `updatedAt` — exatamente o que não
+ * identifica nada. O resto cai no automático, que prefere texto curto.
+ */
+const COLUNAS: Record<string, string[]> = {
+  User: ["name", "email", "plan", "status", "createdAt"],
+  Post: ["author", "text", "createdAt"],
+  Comment: ["author", "text", "createdAt"],
+  Activity: ["user", "title", "sportId", "startedAt"],
+  Plan: ["user", "kind", "createdAt"],
+  Assinatura: ["user", "produto", "ciclo", "status", "validoAte"],
+  Cobranca: ["user", "valorCentavos", "status", "metodo", "pagoEm"],
+  EventoDeCobranca: ["provedor", "tipo", "resultado", "createdAt"],
+  Cupom: ["codigo", "descricao", "usos", "revogadoEm"],
+  CupomUso: ["cupom", "user", "origem", "primeiraCompraEm"],
+  Challenge: ["title", "owner", "startsAt", "endsAt"],
+  ChallengeMember: ["challenge", "user", "createdAt"],
+  ProfessionalLink: ["professional", "client", "papel", "status"],
+  ProfessionalInvite: ["professional", "code", "papel", "status"],
+  CoachMessage: ["user", "role", "createdAt"],
+  ProMessage: ["client", "professional", "createdAt"],
+  Report: ["reporter", "targetKind", "reason", "status"],
+  Notification: ["user", "type", "readAt", "createdAt"],
+  PersonalRecord: ["user", "exerciseSlug", "type", "achievedAt"],
+  WorkoutLog: ["user", "createdAt"],
+  FoodLog: ["user", "createdAt"],
+  WaterLog: ["user", "dia", "ml"],
+  ExerciseVideo: ["exerciseName", "plataforma", "createdAt"],
+  AdminAudit: ["action", "actorLabel", "targetLabel", "reason", "createdAt"],
+};
+
+/** Sobra para quem não está em `COLUNAS`: o que der para ler numa linha. */
+function colunasAutomaticas(M: mongoose.Model<unknown>): string[] {
+  const bons = camposDo(M)
+    .filter(
+      (c) =>
+        !c.segredo &&
+        !c.complexo &&
+        c.nome !== "_id" &&
+        c.nome !== "updatedAt" &&
+        ["String", "Number", "Boolean", "Date"].includes(c.tipo)
+    )
+    .map((c) => c.nome);
+  return bons.slice(0, 4);
+}
+
 /** As coleções, com quantos documentos cada uma tem. */
 adminDadosRouter.get(
   "/",
@@ -176,10 +286,28 @@ adminDadosRouter.get(
 
     let filtro: Record<string, unknown> = {};
     if (q && q.trim()) {
-      try {
-        filtro = JSON.parse(q) as Record<string, unknown>;
-      } catch {
-        throw new HttpError(400, "O filtro não é um JSON válido.");
+      const bruto = q.trim();
+
+      // Texto simples vira busca nos campos de texto da colecao.
+      //
+      // Obrigar JSON para procurar "asafe" e obrigar quem usa a saber o nome
+      // do campo e a sintaxe do Mongo antes de achar uma pessoa. O JSON
+      // continua valendo para quem quer precisao -- e e o que comeca com "{".
+      if (!bruto.startsWith("{")) {
+        const alvos = camposDo(M as never)
+          .filter((c) => c.tipo === "String" && !c.segredo && !c.complexo)
+          .map((c) => c.nome)
+          .slice(0, 6);
+        if (alvos.length === 0) throw new HttpError(400, "Esta colecao nao tem texto para buscar.");
+        // Escapa o que o usuario digitou: um "(" solto derrubaria a consulta
+        // com erro de regex, e ". *" viraria uma varredura da colecao inteira.
+        filtro = { $or: alvos.map((campo) => ({ [campo]: new RegExp(escaparRegex(bruto), "i") })) };
+      } else {
+        try {
+          filtro = JSON.parse(bruto) as Record<string, unknown>;
+        } catch {
+          throw new HttpError(400, "O filtro não é um JSON válido.");
+        }
       }
       // Um `$where` é JavaScript executado no servidor do banco. Nada que
       // venha de um campo de texto entra ali.
@@ -210,6 +338,16 @@ adminDadosRouter.get(
         nextCursor: temMais ? String((pagina[pagina.length - 1] as { _id: unknown })._id) : null,
         // A contagem do filtro, para a tela dizer "3 de 128".
         total: await M.countDocuments(filtro),
+        // O que a tela precisa para desenhar a tabela e os campos: sem isto,
+        // a unica saida seria mostrar `_id` e o JSON cru.
+        colunas: COLUNAS[M.modelName] ?? colunasAutomaticas(M as never),
+        campos: camposDo(M as never),
+        soLeitura: SO_LEITURA.has(M.modelName),
+        /** Campos onde a busca rapida procura, quando nao e JSON. */
+        buscaveis: camposDo(M as never)
+          .filter((c) => c.tipo === "String" && !c.segredo && !c.complexo)
+          .map((c) => c.nome)
+          .slice(0, 6),
       },
     });
   })

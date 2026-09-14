@@ -457,6 +457,30 @@ export type Documento = Record<string, unknown>;
 export const buscarColecoes = (token: string) =>
   api<ColecaoResumo[]>("/admin/dados", { token });
 
+/** O que o servidor conta sobre um campo. E o que permite a tela nao ser JSON. */
+export interface CampoMeta {
+  nome: string;
+  /** "String", "Number", "Boolean", "Date", "ObjectId", "Array"... */
+  tipo: string;
+  /** Quando existe, a tela desenha um seletor em vez de um campo de texto. */
+  enumValores?: string[];
+  obrigatorio?: boolean;
+  /** Hash e token: aparecem como «oculto» e nao se editam. */
+  segredo?: boolean;
+  /** Aninhado ou array: mostra, mas nao oferece edicao inline. */
+  complexo?: boolean;
+}
+
+export interface MetaDocumentos {
+  nextCursor: string | null;
+  total: number;
+  /** As colunas que a lista deve mostrar, nesta ordem. */
+  colunas: string[];
+  campos: CampoMeta[];
+  soLeitura: boolean;
+  buscaveis: string[];
+}
+
 export const buscarDocumentos = (
   token: string,
   colecao: string,
@@ -467,7 +491,7 @@ export const buscarDocumentos = (
   if (opcoes.limit) p.set("limit", String(opcoes.limit));
   if (opcoes.cursor) p.set("cursor", opcoes.cursor);
   if (opcoes.ordem) p.set("ordem", opcoes.ordem);
-  return api<Documento[], { nextCursor: string | null; total: number }>(
+  return api<Documento[], MetaDocumentos>(
     `/admin/dados/${encodeURIComponent(colecao)}?${p.toString()}`,
     { token }
   );
