@@ -7,7 +7,13 @@
 
 	# Cache longo para os assets com hash no nome. O nome muda a cada build,
 	# entao eles podem ser imutaveis.
-	@hashed path_regexp \.[0-9a-f]{8,}\.(js|css|woff2?|png|jpg|svg)$
+	#
+	# O separador e [.-], e nao so ponto. O Expo gera os DOIS formatos:
+	# `index-<32 hex>.js` para o bundle e o css, e `Sora_500Medium.<32 hex>.ttf`
+	# para fontes e imagens. O padrao antigo exigia ponto, entao o bundle de
+	# 1,5 MB e as fontes nunca casavam -- baixavam inteiros a cada visita, e o
+	# unico sinal era o site parecer lento no primeiro acesso.
+	@hashed path_regexp [.-][0-9a-f]{8,}\.(js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|map)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 
 	# E o HTML NUNCA cacheado.
@@ -20,6 +26,6 @@
 	# aberto o site ficando preso na versao antiga: o HTML velho aponta para
 	# o bundle velho, que continua no ar por ser imutavel. Deploy feito,
 	# codigo no ar, e a pessoa vendo o de ontem -- sem nada que explique.
-	@html not path_regexp \.[0-9a-f]{8,}\.(js|css|woff2?|png|jpg|svg)$
+	@html not path_regexp [.-][0-9a-f]{8,}\.(js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|map)$
 	header @html Cache-Control "no-cache"
 }
