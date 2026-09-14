@@ -9,11 +9,13 @@ import {
   abrirCheckout,
   obterAssinatura,
   cancelarAssinatura,
+  validarCupom,
+  type CupomValidado,
   type AssinaturaAtual,
   type Ciclo,
   type ProdutoDoCatalogo,
 } from "../api/billing";
-import { Button, Txt, Screen, Card, Chip, ErrorState } from "../components/ui";
+import { Button, Txt, Screen, Card, Chip, ErrorState, Field } from "../components/ui";
 import { SkeletonLista } from "../components/Skeleton";
 import { colors, radius, spacing } from "../theme";
 import { MARCA } from "../marca";
@@ -40,6 +42,17 @@ const STATUS_LEGIVEL: Record<AssinaturaAtual["status"], string> = {
   cancelada: "Cancelada",
 };
 
+/**
+ * Centavos em reais.
+ *
+ * O servidor manda todo preço já formatado, e é ele que manda — mas o preço
+ * COM desconto é calculado aqui, na hora, enquanto a pessoa digita o cupom.
+ * Pedir ao servidor a cada tecla seria uma requisição por caractere.
+ */
+function reais(centavos: number): string {
+  return `R$ ${(centavos / 100).toFixed(2).replace(".", ",")}`;
+}
+
 function comoData(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -61,6 +74,16 @@ export function SubscriptionScreen() {
   const [cancelando, setCancelando] = useState(false);
   /** Ligado depois de mandar a pessoa ao gateway: o pagamento termina lá fora. */
   const [esperandoPagamento, setEsperandoPagamento] = useState(false);
+
+  const [codigoDigitado, setCodigoDigitado] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState<CupomValidado | null>(null);
+  const [conferindoCupom, setConferindoCupom] = useState(false);
+  const [erroDoCupom, setErroDoCupom] = useState<string | null>(null);
+  /**
+   * O campo começa escondido, como no cadastro: quem tem cupom procura, e
+   * quem não tem não precisa olhar mais um campo antes de assinar.
+   */
+  const [mostrarCupom, setMostrarCupom] = useState(false);
 
   const carregar = useCallback(
     async (silencioso = false) => {
@@ -118,11 +141,36 @@ export function SubscriptionScreen() {
     }, [carregar, refreshUser])
   );
 
+  /**
+   * Confere o cupom contra o servidor, para o desconto aparecer na tela.
+   *
+   * O produto usado na conferência é o Pro: é o que o cupom vai valer em 90%
+   * dos casos, e um cupom restrito a outro plano avisa na hora de assinar, que
+   * é quando a informação importa de verdade.
+   */
+  async function conferirCupom() {
+    const codigo = codigoDigitado.trim();
+    if (!token || !codigo) return;
+    setConferindoCupom(true);
+    setErroDoCupom(null);
+    try {
+      const r = await validarCupom(token, codigo, paraMim?.produto ?? "pro", ciclo);
+      setCupomAplicado(r.data);
+    } catch (e) {
+      setCupomAplicado(null);
+      setErroDoCupom((e as Error).message);
+    } finally {
+      setConferindoCupom(false);
+    }
+  }
+
   async function assinar(p: ProdutoDoCatalogo) {
     if (!token) return;
     setAbrindo(p.produto);
     try {
-      const r = await abrirCheckout(token, p.produto, ciclo);
+      // O cupom conferido vai junto. O servidor valida DE NOVO antes de
+      // cobrar: a conferência da tela é conveniência, não autoridade.
+      const r = await abrirCheckout(token, p.produto, ciclo, cupomAplicado?.codigo);
       await irParaPagamento(r.data.urlDeCheckout);
       // Só DEPOIS de ter aberto. Ligar o aviso antes deixaria a pessoa olhando
       // um "terminando o pagamento" sem que nada tivesse aberto.
@@ -284,6 +332,29 @@ export function SubscriptionScreen() {
             mesesGratis={paraMim?.mesesGratisNoAnual ?? 0}
           />
 
+          <CampoDeCupom
+            mostrar={mostrarCupom}
+            aoMostrar={() => setMostrarCupom(true)}
+            codigo={codigoDigitado}
+            aoDigitar={(v) => {
+              setCodigoDigitado(v);
+              // Mexer no código invalida o que já estava aplicado: manter o
+              // desconto antigo na tela enquanto o campo diz outra coisa é
+              // prometer um preço que o servidor não vai cobrar.
+              setCupomAplicado(null);
+              setErroDoCupom(null);
+            }}
+            aplicado={cupomAplicado}
+            conferindo={conferindoCupom}
+            erro={erroDoCupom}
+            aoConferir={() => void conferirCupom()}
+            aoTirar={() => {
+              setCupomAplicado(null);
+              setCodigoDigitado("");
+              setErroDoCupom(null);
+            }}
+          />
+
           {/* O Pro primeiro e sozinho: é o único que serve para todo mundo, e
               empilhar quatro cartões iguais faria a escolha de 90% das pessoas
               competir com três que não são para elas. */}
@@ -292,6 +363,7 @@ export function SubscriptionScreen() {
               produto={paraMim}
               ciclo={ciclo}
               destaque
+              desconto={cupomAplicado?.descontoCentavos ?? 0}
               carregando={abrindo === paraMim.produto}
               desabilitado={abrindo !== null}
               onAssinar={() => void assinar(paraMim)}
@@ -315,6 +387,7 @@ export function SubscriptionScreen() {
               produto={p}
               ciclo={ciclo}
               destaque={false}
+              desconto={cupomAplicado?.descontoCentavos ?? 0}
               carregando={abrindo === p.produto}
               desabilitado={abrindo !== null}
               onAssinar={() => void assinar(p)}
@@ -332,6 +405,106 @@ export function SubscriptionScreen() {
 }
 
 // ---------------------------------------------------------------- pedaços
+
+/**
+ * O campo do cupom.
+ *
+ * Escondido até alguém pedir, como no cadastro: a maior parte não tem cupom, e
+ * um campo a mais entre a decisão e o pagamento custa desistência.
+ *
+ * O desconto é CONFERIDO no servidor antes de aparecer. Calcular na tela seria
+ * mais rápido e mentiria: cupom vencido, esgotado ou restrito a outro plano só
+ * o servidor sabe — e a pessoa descobriria o preço de verdade na página do
+ * gateway, que é o pior lugar para uma surpresa.
+ */
+function CampoDeCupom({
+  mostrar,
+  aoMostrar,
+  codigo,
+  aoDigitar,
+  aplicado,
+  conferindo,
+  erro,
+  aoConferir,
+  aoTirar,
+}: {
+  mostrar: boolean;
+  aoMostrar: () => void;
+  codigo: string;
+  aoDigitar: (v: string) => void;
+  aplicado: CupomValidado | null;
+  conferindo: boolean;
+  erro: string | null;
+  aoConferir: () => void;
+  aoTirar: () => void;
+}) {
+  if (!mostrar) {
+    return (
+      <TouchableOpacity
+        onPress={aoMostrar}
+        activeOpacity={0.7}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Txt variant="label" color={colors.text2}>
+          Tenho um cupom
+        </Txt>
+      </TouchableOpacity>
+    );
+  }
+
+  if (aplicado) {
+    return (
+      <Card level={2} style={{ gap: spacing.xs }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+          <Txt variant="titleCard" color={colors.lime}>
+            {aplicado.codigo}
+          </Txt>
+          <TouchableOpacity
+            onPress={aoTirar}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginLeft: "auto" }}
+          >
+            <Txt variant="label" color={colors.text3}>
+              tirar
+            </Txt>
+          </TouchableOpacity>
+        </View>
+        <Txt variant="body" color={colors.text2}>
+          {aplicado.mesesGratis > 0
+            ? `${aplicado.mesesGratis} ${aplicado.mesesGratis === 1 ? "mês" : "meses"} grátis — a cobrança começa depois disso.`
+            : aplicado.descontoFormatado
+              ? `${aplicado.descontoFormatado} de desconto, enquanto a assinatura durar.`
+              : "Cupom aplicado."}
+        </Txt>
+      </Card>
+    );
+  }
+
+  return (
+    <Card level={2} style={{ gap: spacing.sm }}>
+      <Field
+        label="Cupom"
+        value={codigo}
+        onChangeText={(v) => aoDigitar(v.toUpperCase().replace(/\s/g, ""))}
+        autoCapitalize="characters"
+        autoCorrect={false}
+        placeholder="CÓDIGO"
+      />
+      {erro ? (
+        <Txt variant="caption" color={colors.danger}>
+          {erro}
+        </Txt>
+      ) : null}
+      <Button
+        title="Aplicar"
+        variant="secondary"
+        onPress={aoConferir}
+        loading={conferindo}
+        disabled={codigo.trim().length === 0}
+      />
+    </Card>
+  );
+}
 
 function SeletorDeCiclo({
   ciclo,
@@ -360,6 +533,7 @@ function PlanoCard({
   produto,
   ciclo,
   destaque,
+  desconto,
   carregando,
   desabilitado,
   onAssinar,
@@ -367,15 +541,17 @@ function PlanoCard({
   produto: ProdutoDoCatalogo;
   ciclo: Ciclo;
   destaque: boolean;
+  /** Centavos que o cupom tira. Zero quando não há cupom aplicado. */
+  desconto: number;
   carregando: boolean;
   desabilitado: boolean;
   onAssinar: () => void;
 }) {
-  const preco = produto.precoFormatado[ciclo];
-  const porMes =
-    ciclo === "anual"
-      ? `${(produto.precoCentavos.anual / 12 / 100).toFixed(2).replace(".", ",")}`
-      : null;
+  const cheio = produto.precoCentavos[ciclo];
+  const comDesconto = Math.max(100, cheio - desconto);
+  const temDesconto = desconto > 0 && comDesconto < cheio;
+  const preco = temDesconto ? reais(comDesconto) : produto.precoFormatado[ciclo];
+  const porMes = ciclo === "anual" ? reais(Math.round(comDesconto / 12)) : null;
 
   return (
     <Card
@@ -409,6 +585,17 @@ function PlanoCard({
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "baseline", gap: spacing.xs }}>
+        {temDesconto ? (
+          /* O preço cheio riscado ao lado: sem ele, "R$ 23,92" não mostra que
+             o cupom fez diferença, e o desconto passa em branco. */
+          <Txt
+            variant="body"
+            color={colors.text3}
+            style={{ textDecorationLine: "line-through" }}
+          >
+            {produto.precoFormatado[ciclo]}
+          </Txt>
+        ) : null}
         <Txt variant="metricMd">{preco}</Txt>
         <Txt variant="body" color={colors.text2}>
           {ciclo === "anual" ? "/ano" : "/mês"}
@@ -416,7 +603,7 @@ function PlanoCard({
       </View>
       {porMes ? (
         <Txt variant="caption" color={colors.text3} style={{ marginTop: -spacing.sm }}>
-          Equivale a R$ {porMes} por mês
+          Equivale a {porMes} por mês
         </Txt>
       ) : null}
 

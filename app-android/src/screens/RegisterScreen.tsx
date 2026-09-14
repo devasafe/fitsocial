@@ -21,6 +21,15 @@ export function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [cupom, setCupom] = useState("");
+  /**
+   * O campo do cupom começa ESCONDIDO.
+   *
+   * A maior parte das pessoas não tem cupom nenhum, e um campo a mais numa
+   * tela de cadastro custa desistência. Quem recebeu um código de um parceiro
+   * sabe que tem, e procura onde digitar.
+   */
+  const [mostrarCupom, setMostrarCupom] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
@@ -30,7 +39,13 @@ export function RegisterScreen({ navigation }: Props) {
     }
     setLoading(true);
     try {
-      await register(name.trim(), email.trim(), password, username || undefined);
+      await register(
+        name.trim(),
+        email.trim(),
+        password,
+        username || undefined,
+        cupom.trim() || undefined
+      );
     } catch (err) {
       notify("Não foi possível cadastrar", (err as Error).message);
     } finally {
@@ -84,6 +99,33 @@ export function RegisterScreen({ navigation }: Props) {
           placeholder="mínimo 8 caracteres"
         />
 
+        {mostrarCupom ? (
+          <>
+            <Field
+              label="Cupom"
+              value={cupom}
+              onChangeText={(v) => setCupom(v.toUpperCase().replace(/\s/g, ""))}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder="CÓDIGO"
+            />
+            <Txt variant="caption" color={colors.text3} style={styles.hint}>
+              Se o código não valer, sua conta é criada do mesmo jeito.
+            </Txt>
+          </>
+        ) : (
+          <TouchableOpacity
+            onPress={() => setMostrarCupom(true)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.cupomLink}
+          >
+            <Txt variant="label" color={colors.text2}>
+              Tenho um cupom
+            </Txt>
+          </TouchableOpacity>
+        )}
+
         <Button title="Criar conta" onPress={handleRegister} loading={loading} size="lg" glow />
 
         <TouchableOpacity
@@ -107,4 +149,5 @@ const styles = StyleSheet.create({
   subtitle: { marginBottom: spacing.xl },
   hint: { marginTop: -spacing.sm, marginBottom: spacing.md },
   link: { marginTop: spacing.lg, alignItems: "center" },
+  cupomLink: { alignItems: "center", marginBottom: spacing.md, paddingVertical: spacing.xs },
 });

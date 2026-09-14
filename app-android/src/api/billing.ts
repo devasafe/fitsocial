@@ -60,12 +60,44 @@ export function listarProdutos() {
  * A URL é uma página do gateway: é lá que o CPF e os dados do cartão são
  * digitados, e nada disso passa por aqui.
  */
-export function abrirCheckout(token: string, produto: Produto, ciclo: Ciclo) {
-  return apiFetch<{ data: { assinatura: string; urlDeCheckout: string } }>("/billing/checkout", {
+export function abrirCheckout(token: string, produto: Produto, ciclo: Ciclo, cupom?: string) {
+  return apiFetch<{
+    data: {
+      assinatura: string;
+      urlDeCheckout: string;
+      valorCentavos: number;
+      descontoCentavos: number;
+      cupom: string | null;
+    };
+  }>("/billing/checkout", {
     method: "POST",
     token,
-    body: { produto, ciclo },
+    body: { produto, ciclo, ...(cupom ? { cupom } : {}) },
   });
+}
+
+export interface CupomValidado {
+  codigo: string;
+  descontoCentavos: number;
+  descontoFormatado: string | null;
+  /** Meses de cortesia, quando o cupom é desse tipo. */
+  mesesGratis: number;
+  temParceiro: boolean;
+}
+
+/**
+ * O cupom vale? Consulta pura, antes de mandar a pessoa ao gateway.
+ *
+ * Existe para o desconto aparecer NA TELA: descobrir o preço final só na
+ * página de pagamento é o tipo de surpresa que faz desistir. Quem decide de
+ * verdade continua sendo o servidor, no checkout.
+ */
+export function validarCupom(token: string, codigo: string, produto: Produto, ciclo: Ciclo) {
+  const q = new URLSearchParams({ produto, ciclo }).toString();
+  return apiFetch<{ data: CupomValidado }>(
+    `/billing/cupom/${encodeURIComponent(codigo)}?${q}`,
+    { token }
+  );
 }
 
 export function obterAssinatura(token: string) {

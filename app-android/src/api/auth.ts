@@ -35,10 +35,26 @@ interface AuthResponse {
   user: AppUser;
 }
 
-export function registerRequest(name: string, email: string, password: string, username?: string) {
+export function registerRequest(
+  name: string,
+  email: string,
+  password: string,
+  username?: string,
+  /**
+   * O cupom pelo qual a pessoa chegou. Opcional, e o servidor NUNCA barra o
+   * cadastro por causa dele: código errado é ignorado e a conta é criada.
+   */
+  cupom?: string
+) {
   return apiFetch<AuthResponse>("/auth/register", {
     method: "POST",
-    body: { name, email, password, ...(username ? { username } : {}) },
+    body: {
+      name,
+      email,
+      password,
+      ...(username ? { username } : {}),
+      ...(cupom ? { cupom } : {}),
+    },
   });
 }
 
