@@ -10,6 +10,33 @@ const nf = new Intl.NumberFormat("pt-BR");
 const porExtenso = (dia: string) =>
   new Date(dia + "T12:00:00").toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
 
+const NOME_DO_PLANO: Record<string, string> = {
+  free: "Grátis",
+  pro: "Pro",
+  pro_plus: "Pro+",
+};
+
+/** Grátis primeiro: é a base de onde todo mundo sai. */
+const ORDEM_DO_PLANO = ["free", "pro", "pro_plus"];
+
+/**
+ * Por que a conta tem o acesso que tem, em português.
+ *
+ * As chaves vêm de `origemDoPlano`, no servidor — e é ele quem manda. Antes
+ * esta tabela traduzia os valores CRUS do banco (`admin`, `purchase`), o que
+ * deixava de fora tudo que o motor passou a saber.
+ */
+const ORIGEM: Record<string, string> = {
+  assinatura: "assinatura no cartão",
+  inadimplente: "assinatura com pagamento atrasado",
+  cortesia: "cortesia dada por você",
+  fundador: "fundador",
+  cupom: "meses grátis de cupom",
+  profissional: "treinador ou nutricionista",
+  patrocinio: "bancado por quem acompanha",
+  legado: "compra antiga, sem origem registrada",
+};
+
 export function Painel({ token }: { token: string }) {
   const [dias, setDias] = useState(30);
   const [dados, setDados] = useState<Panorama | null>(null);
@@ -94,9 +121,18 @@ export function Painel({ token }: { token: string }) {
             <Cartao valor={nf.format(totais.contas)} rotulo="contas" />
             <Cartao
               valor={nf.format(totais.premium)}
-              rotulo="premium"
+              rotulo="com acesso pago"
               apoio={`${conversao.taxa}% do total`}
               destaque={totais.premium > 0}
+            />
+            {/* Separado do de cima, e não somado a ele: "tem acesso" inclui
+                cortesia, fundador e quem é bancado pelo treinador. Só este
+                número é receita. */}
+            <Cartao
+              valor={nf.format(conversao.pagantes ?? 0)}
+              rotulo="pagando"
+              apoio={`${conversao.taxaPagante ?? 0}% do total`}
+              destaque={(conversao.pagantes ?? 0) > 0}
             />
             <Cartao
               valor={nf.format(totais.ativos7d)}
@@ -189,7 +225,32 @@ export function Painel({ token }: { token: string }) {
           </section>
 
           <section className="secao">
-            <h2>Assinaturas</h2>
+            <h2>Planos</h2>
+            <div className="painel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Plano</th>
+                    <th className="dir">Contas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...(conversao.porPlano ?? [])]
+                    // Grátis primeiro, que é a base de onde todo mundo sai.
+                    .sort((a, b) => ORDEM_DO_PLANO.indexOf(a.plano) - ORDEM_DO_PLANO.indexOf(b.plano))
+                    .map((x) => (
+                      <tr key={x.plano}>
+                        <td>{NOME_DO_PLANO[x.plano] ?? x.plano}</td>
+                        <td className="dir num">{nf.format(x.total)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>De onde vem o acesso</h2>
             <div className="painel">
               {totais.premium === 0 ? (
                 <p className="vazio">Nenhuma conta premium ainda.</p>
@@ -204,12 +265,7 @@ export function Painel({ token }: { token: string }) {
                   <tbody>
                     {conversao.porOrigem.map((o) => (
                       <tr key={o.origem}>
-                        <td>
-                          {o.origem === "admin" ? "cortesia dada por você"
-                            : o.origem === "purchase" ? "compra na loja"
-                            : o.origem === "founder" ? "fundador"
-                            : o.origem}
-                        </td>
+                        <td>{ORIGEM[o.origem] ?? o.origem}</td>
                         <td className="dir num">{nf.format(o.total)}</td>
                       </tr>
                     ))}

@@ -180,8 +180,53 @@ describe("Panorama", () => {
 
     expect(p.totais.contas).toBe(2);
     expect(p.conversao.ativacao).toBe(50); // 1 de 2 registrou treino
-    expect(p.conversao.taxa).toBe(50); // 1 de 2 é premium
-    expect(p.conversao.porOrigem).toEqual([{ origem: "admin", total: 1 }]);
+    expect(p.conversao.taxa).toBe(50); // 1 de 2 tem acesso pago
+    // A origem vem do MOTOR, e não do campo cru: "admin" no banco é "cortesia"
+    // para quem lê o painel. Antes o agrupamento era por `premiumSource`, e ele
+    // não enxergava assinatura nenhuma — todo assinante caía em "sem origem".
+    expect(p.conversao.porOrigem).toEqual([{ origem: "cortesia", total: 1 }]);
+    // Cortesia NÃO é receita: quem paga é contado à parte.
+    expect(p.conversao.pagantes).toBe(0);
+    expect(p.conversao.taxaPagante).toBe(0);
+    expect(p.conversao.porPlano).toEqual(
+      expect.arrayContaining([
+        { plano: "free", total: 1 },
+        { plano: "pro", total: 1 },
+      ])
+    );
+  });
+
+  it("separa quem PAGA de quem só tem acesso", async () => {
+    // O número que decide receita. Uma cortesia e uma assinatura aparecem as
+    // duas como "premium" no total, e só este campo as distingue.
+    const pagante = await usuario("paga@teste.com");
+    const cortesia = await usuario("cortesia@teste.com");
+    await User.updateOne(
+      { _id: pagante._id },
+      {
+        $set: {
+          tier: "premium",
+          assinaturaStatus: "ativa",
+          produtoAssinado: "pro",
+          assinaturaAte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        },
+      }
+    );
+    await User.updateOne(
+      { _id: cortesia._id },
+      { $set: { tier: "premium", premiumSource: "admin" } }
+    );
+
+    const p = await panorama(30);
+
+    expect(p.conversao.premium).toBe(2);
+    expect(p.conversao.pagantes).toBe(1);
+    expect(p.conversao.porOrigem).toEqual(
+      expect.arrayContaining([
+        { origem: "assinatura", total: 1 },
+        { origem: "cortesia", total: 1 },
+      ])
+    );
   });
 
   it("informa desde quando a medição de acesso existe", async () => {

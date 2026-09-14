@@ -124,8 +124,29 @@ export interface UsuarioAdmin {
   role: string;
   tier: string;
   tierEfetivo: "free" | "premium";
+  /** O plano de verdade, calculado pelo mesmo motor que o aplicativo usa. */
+  planoEfetivo?: "free" | "pro" | "pro_plus";
+  /** Como a linha deve aparecer: "Grátis", "Pro", "Pro Coach", "Pro Nutri", "Pro+". */
+  rotuloDoPlano?: string;
+  /** Por que esta conta tem o acesso que tem. É o que separa quem paga. */
+  origemDoPlano?:
+    | "gratis"
+    | "cortesia"
+    | "fundador"
+    | "cupom"
+    | "assinatura"
+    | "inadimplente"
+    | "profissional"
+    | "patrocinio"
+    | "legado";
   premiumSource: string | null;
   premiumUntil: string | null;
+  assinaturaAte?: string | null;
+  assinaturaStatus?: string | null;
+  produtoAssinado?: string | null;
+  cortesiaAte?: string | null;
+  /** Quantos profissionais bancam o Pro desta pessoa. */
+  vinculosPatrocinados?: number;
   status: string;
   statusEfetivo: string;
   statusReason: string;
@@ -240,7 +261,12 @@ export interface Panorama {
   conversao: {
     premium: number;
     porOrigem: { origem: string; total: number }[];
+    /** Quantas contas em cada plano, incluindo as grátis. */
+    porPlano?: { plano: string; total: number }[];
+    /** Quantos têm dinheiro entrando. `premium` inclui cortesia e patrocínio. */
+    pagantes?: number;
     taxa: number;
+    taxaPagante?: number;
     ativacao: number;
   };
   acessoDesde: string | null;

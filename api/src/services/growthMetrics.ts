@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { User } from "../models/User.js";
+import { origemDoPlano, planEfetivo } from "./entitlement.js";
 import { Activity } from "../models/Activity.js";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
@@ -194,12 +195,72 @@ export interface Panorama {
   conversao: {
     premium: number;
     porOrigem: { origem: string; total: number }[];
+    /** Quantas contas em cada plano, incluindo as grátis. */
+    porPlano: { plano: string; total: number }[];
+    /** Quantos têm dinheiro entrando — assinatura ativa ou em carência. */
+    pagantes: number;
     taxa: number;
+    /** % da base que paga. `taxa` conta todo acesso pago, inclusive cortesia. */
+    taxaPagante: number;
     /** % dos cadastrados que chegaram a registrar o primeiro treino. */
     ativacao: number;
   };
   /** Dia em que a medição de acesso começou; null enquanto ninguém acessou. */
   acessoDesde: string | null;
+}
+
+/**
+ * Quantas contas em cada plano, e por que cada uma tem o acesso que tem.
+ *
+ * EM MEMÓRIA, e não por `$group`, porque a resposta não está num campo: ela é
+ * calculada pelo motor a partir de sete campos e do relógio de agora. O
+ * agrupamento anterior usava `premiumSource`, e ele ficou cego — assinatura não
+ * carimba origem de propósito (ela tem prazo próprio), então todo assinante
+ * caía em "sem origem", justo no número que existe para medir receita.
+ *
+ * Carregar todas as contas segue o que `retencao()` já faz neste mesmo arquivo,
+ * e com projeção enxuta. Vale enquanto a base couber na memória com folga; se
+ * um dia não couber, o caminho é materializar `origemDoPlano` num campo e
+ * voltar ao `$group`.
+ */
+async function contarPlanos(): Promise<{
+  porPlano: { plano: string; total: number }[];
+  porOrigem: { origem: string; total: number }[];
+  pagantes: number;
+  base: number;
+}> {
+  const contas = await User.find(
+    { deletedAt: null },
+    {
+      email: 1, tier: 1, plan: 1, premiumSource: 1, premiumUntil: 1,
+      cortesiaAte: 1, assinaturaStatus: 1, assinaturaAte: 1, produtoAssinado: 1,
+      vinculosPatrocinados: 1, pro: 1,
+    }
+  );
+
+  const plano = new Map<string, number>();
+  const origem = new Map<string, number>();
+  let pagantes = 0;
+
+  for (const u of contas) {
+    const p = planEfetivo(u);
+    const o = origemDoPlano(u);
+    plano.set(p, (plano.get(p) ?? 0) + 1);
+    origem.set(o, (origem.get(o) ?? 0) + 1);
+    // Só quem tem dinheiro entrando. Cortesia, fundador, patrocínio e
+    // capacidade dada à mão são acesso que a casa paga.
+    if (o === "assinatura" || o === "inadimplente") pagantes += 1;
+  }
+
+  return {
+    porPlano: [...plano].map(([k, total]) => ({ plano: k, total })),
+    porOrigem: [...origem]
+      .filter(([k]) => k !== "gratis")
+      .map(([k, total]) => ({ origem: k, total })),
+    pagantes,
+    /** Quantas contas entraram nesta conta. É o denominador honesto. */
+    base: contas.length,
+  };
 }
 
 export async function panorama(dias: number): Promise<Panorama> {
@@ -222,10 +283,7 @@ export async function panorama(dias: number): Promise<Panorama> {
     contarPorDia(Comment as never, "createdAt", dias),
     contarPorDia(CoachMessage as never, "createdAt", dias),
     retencao(),
-    User.aggregate<{ _id: string | null; total: number }>([
-      { $match: { tier: "premium" } },
-      { $group: { _id: "$premiumSource", total: { $sum: 1 } } },
-    ]),
+    contarPlanos(),
     Activity.distinct("user"),
     UserDailyActive.findOne({}, { dia: 1 }).sort({ dia: 1 }).lean(),
   ]);
@@ -242,8 +300,18 @@ export async function panorama(dias: number): Promise<Panorama> {
     retencao: ret,
     conversao: {
       premium,
-      porOrigem: porOrigem.map((o) => ({ origem: o._id ?? "sem origem", total: o.total })),
+      porOrigem: porOrigem.porOrigem,
+      porPlano: porOrigem.porPlano,
+      // O número que importa para receita: quantos estão PAGANDO, e não
+      // quantos têm acesso. Os dois ficam lado a lado de propósito.
+      pagantes: porOrigem.pagantes,
       taxa: contas ? Math.round((premium / contas) * 100) : 0,
+      // Divide pela MESMA população que `contarPlanos` contou. `contas` inclui
+    // quem excluiu a conta, e misturar os dois faria a taxa cair sozinha a cada
+    // exclusão, por um motivo que ninguém acharia olhando a tela.
+    taxaPagante: porOrigem.base
+      ? Math.round((porOrigem.pagantes / porOrigem.base) * 100)
+      : 0,
       ativacao: contas ? Math.round((comTreino.length / contas) * 100) : 0,
     },
     acessoDesde: primeiroAcesso?.dia ?? null,

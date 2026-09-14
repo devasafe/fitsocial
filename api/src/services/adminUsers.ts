@@ -3,7 +3,13 @@ import { User, type UserDoc } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
 import { recordAudit, maskEmail } from "./adminAudit.js";
 import { definirVisibilidadeDoConteudo, invalidarOcultos } from "./moderation.js";
-import { limiteDeAlunos, temCapacidade } from "./entitlement.js";
+import {
+  limiteDeAlunos,
+  origemDoPlano,
+  planEfetivo,
+  temCapacidade,
+  tierDoPlan,
+} from "./entitlement.js";
 
 /** Estado que o painel mostra — já resolve suspensão vencida, para a lista não
  *  mentir enquanto a pessoa não tenta acessar o app. */
@@ -15,11 +21,47 @@ export function statusEfetivo(u: UserDoc): string {
   return u.status ?? "active";
 }
 
-/** Premium vencido conta como free, mesmo antes de alguém recalcular. */
+/**
+ * Premium vencido conta como free, mesmo antes de alguém recalcular.
+ *
+ * Passou a DERIVAR do motor, e não a decidir por conta própria. A versão
+ * anterior olhava `tier` e `premiumUntil` crus, o que a deixava cega para tudo
+ * que o motor passou a saber — assinatura, cupom, patrocínio, capacidade
+ * profissional. Na prática o painel mostrava "grátis" para gente que tinha
+ * acesso e "premium" para gente que não tinha mais, e a divergência só
+ * aparecia quando alguém comparava a tela com o aplicativo.
+ *
+ * Duas implementações da mesma regra sempre divergem. Esta é a que some.
+ */
 export function tierEfetivo(u: UserDoc): "free" | "premium" {
-  if (u.tier !== "premium") return "free";
-  if (u.premiumUntil && u.premiumUntil.getTime() <= Date.now()) return "free";
-  return "premium";
+  return tierDoPlan(planEfetivo(u));
+}
+
+/** O rótulo que o painel mostra. O plano de verdade, não o binário. */
+const NOME_DO_PLANO: Record<string, string> = {
+  free: "Grátis",
+  pro: "Pro",
+  pro_plus: "Pro+",
+};
+
+/**
+ * Como esta conta deve aparecer na lista.
+ *
+ * "Pro" sozinho não diz o suficiente para quem administra: um treinador e um
+ * aluno que assinou aparecem os dois como Pro, e são coisas diferentes — um
+ * ocupa vaga de painel e banca alunos, o outro não. Por isso o rótulo mistura
+ * plano e capacidade, que é como o produto é vendido.
+ */
+export function rotuloDoPlano(u: UserDoc): string {
+  const plano = planEfetivo(u);
+  if (plano === "free") return NOME_DO_PLANO.free!;
+
+  const coach = temCapacidade(u, "coach");
+  const nutri = temCapacidade(u, "nutri");
+  if (coach && nutri) return "Pro+";
+  if (coach) return "Pro Coach";
+  if (nutri) return "Pro Nutri";
+  return NOME_DO_PLANO[plano] ?? plano;
 }
 
 export function serializeUser(u: UserDoc) {
@@ -32,8 +74,21 @@ export function serializeUser(u: UserDoc) {
     role: u.role ?? "user",
     tier: u.tier,
     tierEfetivo: tierEfetivo(u),
+    // O plano de verdade, e de onde ele vem. Campos ADITIVOS: o painel antigo
+    // continua lendo `tierEfetivo` e ignora estes.
+    planoEfetivo: planEfetivo(u),
+    rotuloDoPlano: rotuloDoPlano(u),
+    origemDoPlano: origemDoPlano(u),
     premiumSource: u.premiumSource ?? null,
     premiumUntil: u.premiumUntil ?? null,
+    // Quando o acesso pago acaba, seja qual for a fonte. É o que o suporte
+    // precisa para responder "até quando eu tenho isso?".
+    assinaturaAte: u.assinaturaAte ?? null,
+    assinaturaStatus: u.assinaturaStatus ?? null,
+    produtoAssinado: u.produtoAssinado ?? null,
+    cortesiaAte: u.cortesiaAte ?? null,
+    /** Quantos profissionais bancam o Pro desta pessoa. */
+    vinculosPatrocinados: u.vinculosPatrocinados ?? 0,
     status: u.status ?? "active",
     statusEfetivo: statusEfetivo(u),
     statusReason: u.statusReason ?? "",

@@ -113,15 +113,15 @@ describe("capacidade profissional", () => {
     expect(temCapacidade(vencido, "coach")).toBe(false);
   });
 
-  // Os três eixos são independentes: um coach pode ser aluno free, e um
-  // admin não vira coach por ser admin.
-  it("capacidade não depende do plano nem do papel", async () => {
-    const coachFree = await criar({ plan: "free", pro: { coach: { ativo: true } } });
-    expect(temCapacidade(coachFree, "coach")).toBe(true);
-    expect(calcularTier(coachFree)).toBe("free");
-
+  // Papel e capacidade continuam independentes: um admin não vira coach por
+  // ser admin. O que deixou de ser independente é PLANO e capacidade — ver o
+  // teste "ter painel é uma fonte de acesso".
+  it("capacidade não depende do papel", async () => {
     const admin = await criar({ role: "admin" });
     expect(temCapacidade(admin, "coach")).toBe(false);
+
+    const coach = await criar({ plan: "free", pro: { coach: { ativo: true } } });
+    expect(temCapacidade(coach, "coach")).toBe(true);
   });
 
   it("dá para ser coach e nutri ao mesmo tempo", async () => {
@@ -275,15 +275,34 @@ describe("pro_plus é o rótulo de ter os dois painéis", () => {
     expect(planEfetivo(u)).toBe("pro");
   });
 
-  it("quem é free não vira pro_plus por ter capacidade", async () => {
-    const u = await criar({
+  it("ter painel é uma fonte de acesso: coach ganha Pro, e os dois painéis, Pro+", async () => {
+    // Este teste já afirmou o CONTRÁRIO — que capacidade não promovia plano,
+    // porque "é o que a pessoa faz com os outros, não o que comprou para si".
+    // A regra caiu por duas razões que se somam:
+    //
+    //  - O catálogo vende "Pro Coach = tudo do Pro, para você", e quem COMPRA
+    //    já recebia (a compra grava `produtoAssinado`). Quem o admin liberava
+    //    à mão, não. Dois caminhos para a mesma coisa, com desfechos opostos.
+    //  - O ALUNO de um treinador ganha Pro de graça pelo patrocínio. O
+    //    treinador não ganhar era uma assimetria indefensável.
+    const coach = await criar({ pro: { coach: { ativo: true, origem: "manual" } } });
+    expect(planEfetivo(coach)).toBe("pro");
+
+    const ambos = await criar({
       pro: {
         coach: { ativo: true, origem: "manual" },
         nutri: { ativo: true, origem: "manual" },
       },
     });
-    // Capacidade é o que a pessoa faz COM OS OUTROS; plano é o que ela comprou
-    // para si. São eixos diferentes, e um não promove o outro.
+    expect(planEfetivo(ambos)).toBe("pro_plus");
+  });
+
+  it("capacidade VENCIDA não sustenta plano nenhum", async () => {
+    // O prazo é o que faz a fonte poder acabar. Sem isto, um coach cuja
+    // assinatura venceu ficaria Pro para sempre pelo campo que sobrou.
+    const u = await criar({
+      pro: { coach: { ativo: true, origem: "gateway", validoAte: new Date(Date.now() - 1000) } },
+    });
     expect(planEfetivo(u)).toBe("free");
   });
 });
@@ -401,5 +420,73 @@ describe("a escrita do recálculo não pode atrapalhar ninguém", () => {
     const doBanco = (await User.findById(u._id))!;
     expect(doBanco.name).toBe("Outro nome");
     expect(doBanco.tier).toBe("free");
+  });
+});
+
+describe("capacidade não pode virar um carimbo permanente", () => {
+  it("coach liberado à mão ganha origem PRÓPRIA, nunca 'purchase'", async () => {
+    const u = await criar({ pro: { coach: { ativo: true, origem: "manual" } } });
+    await recomputeTier(u);
+
+    const depois = (await User.findById(u._id))!;
+    expect(depois.plan).toBe("pro");
+    // Os dois desfechos errados, e por que "profissional" é o certo:
+    //
+    //  - "purchase" é fonte SEM prazo: colaria o Pro na conta para sempre, e o
+    //    ramo 4b passaria a sustentá-lo sozinho.
+    //  - NENHUMA origem é igualmente ruim: `tier: "premium"` sem origem é a
+    //    definição de premium legado, e o ramo 7 o sustentaria para sempre do
+    //    mesmo jeito.
+    //
+    // A origem própria é o que permite apagá-la quando a capacidade acabar.
+    expect(depois.premiumSource).toBe("profissional");
+  });
+
+  it("a origem some junto com a capacidade", async () => {
+    const u = await criar({ pro: { coach: { ativo: true, origem: "manual" } } });
+    await recomputeTier(u);
+    expect((await User.findById(u._id))!.premiumSource).toBe("profissional");
+
+    const antes = (await User.findById(u._id))!;
+    antes.set("pro.coach.ativo", false);
+    await antes.save();
+    await recomputeTier(antes);
+
+    // Origem que deixou de valer não pode ficar na conta: a próxima leitura
+    // ficaria confusa, inclusive a que decide se ela é legado.
+    const depois = (await User.findById(u._id))!;
+    expect(depois.premiumSource ?? null).toBeNull();
+    expect(depois.plan).toBe("free");
+  });
+
+  it("revogar a capacidade DERRUBA o plano", async () => {
+    const u = await criar({ pro: { coach: { ativo: true, origem: "manual" } } });
+    await recomputeTier(u);
+
+    const antes = (await User.findById(u._id))!;
+    antes.set("pro.coach.ativo", false);
+    await antes.save();
+    await recomputeTier(antes);
+
+    const depois = (await User.findById(u._id))!;
+    expect(depois.plan).toBe("free");
+    expect(depois.tier).toBe("free");
+  });
+
+  it("capacidade com prazo que vence derruba o plano sozinha", async () => {
+    const u = await criar({
+      pro: { coach: { ativo: true, origem: "manual", validoAte: new Date(Date.now() + 60_000) } },
+    });
+    await recomputeTier(u);
+    expect((await User.findById(u._id))!.plan).toBe("pro");
+
+    await User.updateOne(
+      { _id: u._id },
+      { $set: { "pro.coach.validoAte": new Date(Date.now() - 1000) } }
+    );
+    const vencido = (await User.findById(u._id))!;
+    await recomputeTier(vencido);
+
+    expect((await User.findById(u._id))!.plan).toBe("free");
   });
 });

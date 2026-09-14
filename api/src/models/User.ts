@@ -120,11 +120,14 @@ const userSchema = new Schema(
     // a pessoa é premium, para o webhook da loja não derrubar uma cortesia.
     premiumSource: {
       type: String,
-      // "patrocinio": um profissional banca o Pro deste aluno. Tem origem
-      // própria para a conta nunca ser confundida com premium legado sem
-      // origem — o que a faria ficar premium para sempre depois que o
-      // acompanhamento acabasse.
-      enum: ["purchase", "admin", "founder", "patrocinio", null],
+      // "patrocinio": um profissional banca o Pro deste aluno.
+      // "profissional": a pessoa TEM painel de coach ou nutri.
+      //
+      // As duas têm origem própria pelo mesmo motivo: sem ela, a conta ficaria
+      // indistinguível de um premium legado no dia em que a fonte acabasse — e
+      // premium legado é premium PARA SEMPRE. Na prática, revogar o coach de
+      // alguém deixaria de surtir efeito.
+      enum: ["purchase", "admin", "founder", "patrocinio", "profissional", null],
       default: null,
     },
     /** Fim da cortesia. null = sem prazo. */

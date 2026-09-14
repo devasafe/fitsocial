@@ -73,7 +73,7 @@ function planoDoProduto(produto: string | null | undefined): Plano | null {
  * custo nenhum de banco — e é o que faz vencimento acontecer sem cron, porque
  * a comparação é sempre contra o relógio de agora.
  *
- * São cinco fontes de acesso pago e elas têm ordem. A ordem não é arbitrária:
+ * São seis fontes de acesso pago e elas têm ordem. A ordem não é arbitrária:
  *
  * 1. CORTESIA DO ADMIN ganha de tudo. É o ponto desta camada desde o começo —
  *    uma cortesia dada pelo painel não pode ser derrubada em silêncio pelo
@@ -81,7 +81,9 @@ function planoDoProduto(produto: string | null | undefined): Plano | null {
  * 2. FUNDADOR vem de uma lista em env, lida ao vivo.
  * 3. CORTESIA DE CUPOM — meses grátis que nós concedemos, sem gateway.
  * 4. COMPRA, com a carência de inadimplência embutida.
- * 5. PATROCÍNIO — o aluno cujo profissional paga. Vem por ÚLTIMO de propósito:
+ * 5. CAPACIDADE PROFISSIONAL — quem atende gente aqui dentro tem o Pro, porque
+ *    é isso que o catálogo vende.
+ * 6. PATROCÍNIO — o aluno cujo profissional paga. Vem por ÚLTIMO de propósito:
  *    quem paga E é acompanhado deve aparecer como pagante nos relatórios, não
  *    como patrocinado, e não pode perder o que comprou se o vínculo encerrar.
  */
@@ -118,10 +120,26 @@ export function calcularPlan(user: UserDoc, agora = new Date()): Plano {
   ) {
     return noDocumento;
   }
-  // 5. Patrocínio: alguém paga para acompanhar esta pessoa.
+  // 5. Capacidade profissional ativa.
+  //
+  // Quem atende gente aqui dentro tem o Pro, e isso não é generosidade: o
+  // catálogo vende "Pro Coach = tudo do Pro, para você", e `CATALOGO.pro_coach`
+  // declara `plano: "pro"`. Quem COMPRA já recebia, porque a compra grava
+  // `produtoAssinado` e o ramo 4 resolve. Quem o ADMIN liberava à mão, não —
+  // `concederPro` escreve só a capacidade, e nenhum ramo olhava para ela.
+  //
+  // O resultado era um treinador com painel, alunos e plano de treino para
+  // montar, que não podia ver a própria evolução nem os próprios recordes. E o
+  // painel mostrava "grátis" para ele, corretamente, o que tornava o problema
+  // invisível: parecia erro de tela.
+  //
+  // Só ELEVA. Nenhuma conta perde acesso por causa deste ramo.
+  if (temCapacidade(user, "coach", agora) || temCapacidade(user, "nutri", agora)) return "pro";
+
+  // 6. Patrocínio: alguém paga para acompanhar esta pessoa.
   if ((user.vinculosPatrocinados ?? 0) > 0) return "pro";
 
-  // 6. LEGADO: premium sem nenhuma fonte que o explique.
+  // 7. LEGADO: premium sem nenhuma fonte que o explique.
   //
   // O primeiro webhook do RevenueCat que foi para produção fazia
   // `User.updateOne({_id}, { tier })` e mais nada — sem `premiumSource`, sem
@@ -185,6 +203,65 @@ export function calcularTier(user: UserDoc, agora = new Date()): "free" | "premi
  * sido: o RÓTULO DERIVADO de ter as duas capacidades ativas, venham elas de
  * compra ou da mão do admin. Nada além disso depende dele.
  */
+/** De onde vem o acesso desta conta. É a mesma ordem de `calcularPlan`. */
+export type OrigemDoPlano =
+  | "gratis"
+  | "cortesia"
+  | "fundador"
+  | "cupom"
+  | "assinatura"
+  | "inadimplente"
+  | "profissional"
+  | "patrocinio"
+  | "legado";
+
+/**
+ * Por que esta conta está no plano em que está.
+ *
+ * Existe para o painel, e a pergunta que ela responde é a que decide dinheiro:
+ * "quantos desses Pro são gente PAGANDO?". Sem isso, cortesia, fundador,
+ * patrocínio e assinatura viram todos a mesma palavra na tela, e não há como
+ * contar receita olhando a lista de usuários.
+ *
+ * ESPELHA a ordem de `calcularPlan` — os dois têm de ser lidos juntos, e mudar
+ * um sem o outro faz o painel explicar uma coisa e o app fazer outra.
+ */
+export function origemDoPlano(user: UserDoc, agora = new Date()): OrigemDoPlano {
+  if (calcularPlan(user, agora) === "free") return "gratis";
+
+  if (user.premiumSource === "admin" && valeAinda(user.premiumUntil, agora)) return "cortesia";
+  if (isFounder(user.email)) return "fundador";
+  if (user.cortesiaAte && valeAinda(user.cortesiaAte, agora)) return "cupom";
+
+  if (user.assinaturaStatus && user.assinaturaStatus !== "expirada") {
+    const folga =
+      user.assinaturaStatus === "inadimplente"
+        ? CARENCIA_DE_INADIMPLENCIA_DIAS * 24 * 60 * 60 * 1000
+        : 0;
+    const limite = user.assinaturaAte ? new Date(user.assinaturaAte.getTime() + folga) : null;
+    if (valeAinda(limite, agora) && planoDoProduto(user.produtoAssinado)) {
+      // Separado de "assinatura" porque é o caso que precisa de ação: a
+      // cobrança falhou e a conta está vivendo da carência.
+      return user.assinaturaStatus === "inadimplente" ? "inadimplente" : "assinatura";
+    }
+  }
+  if (
+    user.premiumSource === "purchase" &&
+    // O terceiro termo do ramo 4b, que faltava aqui: sem ele, uma conta
+    // carimbada `purchase` mas com `plan: "free"` seria contada como pagante
+    // enquanto o Pro dela vinha de outra fonte.
+    planDoUsuario(user) !== "free" &&
+    valeAinda(user.premiumUntil, agora)
+  ) {
+    return "assinatura";
+  }
+  if (temCapacidade(user, "coach", agora) || temCapacidade(user, "nutri", agora)) {
+    return "profissional";
+  }
+  if ((user.vinculosPatrocinados ?? 0) > 0) return "patrocinio";
+  return "legado";
+}
+
 export function planEfetivo(user: UserDoc, agora = new Date()): Plano {
   const base = calcularPlan(user, agora);
   if (base === "free") return "free";
@@ -237,6 +314,10 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
       assinaturaStatus: null,
       assinaturaAte: null,
       produtoAssinado: null,
+      // A capacidade também é zerada: ela tem `validoAte` próprio e o admin
+      // pode revogá-la, então é fonte COM PRAZO, e esta variável só pode
+      // significar "o que o documento sustenta sem nenhuma fonte com prazo".
+      pro: undefined,
     } as UserDoc);
 
     if (isFounder(user.email)) {
@@ -260,6 +341,19 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
       // Resultado com a ordem antiga: estornar o pagamento derrubava a
       // assinatura e a capacidade, e a pessoa continuava Pro. Testado em
       // "quem comprou e estornou volta a ser free".
+    } else if (temCapacidade(user, "coach") || temCapacidade(user, "nutri")) {
+      // Origem PRÓPRIA, e nunca "purchase". É a mesma escolha do patrocínio,
+      // logo abaixo, e pelo mesmo motivo.
+      //
+      // "purchase" é uma fonte sem prazo: carimbá-la colaria o Pro na conta
+      // para sempre, e o botão "tirar coach" deixaria de surtir efeito. Mas
+      // não carimbar NADA seria igualmente ruim — a conta ficaria com
+      // `tier: "premium"` e nenhuma origem, que é a definição exata de premium
+      // legado, e o ramo 7 a sustentaria para sempre do mesmo jeito.
+      //
+      // O carimbo é o que permite a limpeza mais abaixo apagá-lo no dia em que
+      // a capacidade acabar.
+      mudanca.premiumSource = "profissional";
     } else if (soPeloDocumento !== "free") {
       // Se sustenta sozinha: é o legado, e vira compra de uma vez por todas.
       mudanca.premiumSource = "purchase";
@@ -282,7 +376,11 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
     // Origem que deixou de valer: apaga, senão a conta continuaria dizendo
     // "premium por cortesia" (ou "por patrocínio") já sendo free, e a próxima
     // leitura ficaria confusa — inclusive a que decide se ela é legado.
-    if (novoPlan === "free" && (user.premiumSource === "admin" || user.premiumSource === "patrocinio")) {
+    const origemQueExpira =
+      user.premiumSource === "admin" ||
+      user.premiumSource === "patrocinio" ||
+      user.premiumSource === "profissional";
+    if (novoPlan === "free" && origemQueExpira) {
       mudanca.premiumSource = null;
       mudanca.premiumUntil = null;
     }

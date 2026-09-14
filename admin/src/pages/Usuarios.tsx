@@ -6,6 +6,7 @@ import {
 } from "../api";
 import { Dialogo } from "../components/Dialogo";
 import { Selo } from "../components/Selo";
+import { Plano } from "../components/Plano";
 import { useEhCelular } from "../hooks/useEhCelular";
 import { empilharCamada, useCamada } from "../hooks/useCamada";
 import { MARCA } from "../marca";
@@ -23,6 +24,19 @@ type Acao =
 
 const dataCurta = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+/**
+ * Quando o acesso pago desta conta acaba.
+ *
+ * São três campos diferentes porque são três fontes com prazo próprio, e a
+ * ficha precisa responder "até quando?" sem quem está no suporte ter de saber
+ * qual delas está valendo. Cortesia sem data é cortesia sem prazo — e aí não
+ * há o que mostrar.
+ */
+function ateQuando(u: UsuarioAdmin): string | null {
+  const data = u.assinaturaAte ?? u.cortesiaAte ?? u.premiumUntil;
+  return data ? dataCurta(data) : null;
+}
 
 const FILTROS = [
   { v: "", r: "Todas" },
@@ -141,16 +155,32 @@ export function Usuarios({ token }: { token: string }) {
       <p style={{ color: "var(--texto-2)", margin: "6px 0 0" }}>{u.email}</p>
       {u.username && <p style={{ color: "var(--texto-3)", margin: "2px 0 0" }}>@{u.username}</p>}
 
-      {/* Dito por extenso, e não só implícito no rótulo do botão: quem abre a
-          ficha precisa saber o que a conta já é antes de decidir mudá-la. */}
+      {/* O plano, dito por extenso e com a origem.
+          Quem abre a ficha precisa saber o que a conta JÁ É — e, sobretudo, se
+          ela está pagando — antes de decidir mudá-la. */}
+      <p style={{ margin: "8px 0 0", fontSize: 14 }}>
+        <Plano u={u} />
+        {ateQuando(u) && (
+          <span style={{ color: "var(--texto-3)", marginLeft: 8 }}>até {ateQuando(u)}</span>
+        )}
+      </p>
+
       {(u.pro?.coach.ativo || u.pro?.nutri.ativo) && (
-        <p style={{ color: "var(--lime)", margin: "6px 0 0", fontSize: 13 }}>
+        <p style={{ color: "var(--texto-2)", margin: "4px 0 0", fontSize: 13 }}>
           {[
             u.pro?.coach.ativo ? `coach (até ${u.pro.coach.limite} alunos)` : null,
             u.pro?.nutri.ativo ? `nutri (até ${u.pro.nutri.limite} pacientes)` : null,
           ]
             .filter(Boolean)
             .join(" · ")}
+        </p>
+      )}
+
+      {(u.vinculosPatrocinados ?? 0) > 0 && (
+        <p style={{ color: "var(--texto-3)", margin: "4px 0 0", fontSize: 13 }}>
+          {u.vinculosPatrocinados === 1
+            ? "1 profissional banca o Pro desta pessoa"
+            : `${u.vinculosPatrocinados} profissionais bancam o Pro desta pessoa`}
         </p>
       )}
 
@@ -288,10 +318,7 @@ export function Usuarios({ token }: { token: string }) {
                   </span>
                   <span className="cartao-sub">{x.email}</span>
                   <span className="cartao-meta">
-                    <span style={{ color: x.tierEfetivo === "premium" ? "var(--lime)" : undefined }}>
-                      {x.tierEfetivo === "premium" ? "premium" : "grátis"}
-                    </span>
-                    {x.premiumSource === "admin" && <span>cortesia</span>}
+                    <Plano u={x} />
                     {x.role === "admin" && <span>admin</span>}
                     <span className="num">{dataCurta(x.createdAt)}</span>
                   </span>
@@ -322,12 +349,7 @@ export function Usuarios({ token }: { token: string }) {
                       )}
                     </td>
                     <td style={{ color: "var(--texto-2)" }}>{x.email}</td>
-                    <td style={{ color: x.tierEfetivo === "premium" ? "var(--lime)" : undefined }}>
-                      {x.tierEfetivo === "premium" ? "premium" : "grátis"}
-                      {x.premiumSource === "admin" && (
-                        <span className="aviso" style={{ marginLeft: 6 }}>cortesia</span>
-                      )}
-                    </td>
+                    <td><Plano u={x} /></td>
                     <td><Selo estado={x.statusEfetivo} /></td>
                     <td className="dir num" style={{ color: "var(--texto-2)" }}>
                       {dataCurta(x.createdAt)}
