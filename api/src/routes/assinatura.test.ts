@@ -843,3 +843,48 @@ describe("o checkout pago libera na hora, mas não paga duas vezes", () => {
     expect(apos2.getTime()).toBeGreaterThan(apos1.getTime());
   });
 });
+
+describe("a fatura emitida fecha a janela do cancelamento", () => {
+  it("a emissão da fatura carimba o id da assinatura, sem mexer em dinheiro", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+
+    await webhook({
+      tipo: "checkout.pago",
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      eventoId: "ck",
+    });
+    // Sem o cliente no evento de checkout — que é o que o Asaas fez na compra
+    // real — o id da assinatura não tinha de onde vir.
+    expect((await Assinatura.findById(a._id))!.provedorAssinaturaId).toBeFalsy();
+
+    // A fatura é emitida segundos depois, e traz o id.
+    await webhook({
+      tipo: "cobranca.criada",
+      referencia: a._id.toString(),
+      provedorAssinaturaId: "sub_da_fatura",
+      provedorCobrancaId: "pay_futura",
+      valorCentavos: 2990,
+      eventoId: "cri",
+      ocorridoEm: new Date(Date.now() + 1000).toISOString(),
+    });
+
+    const depois = (await Assinatura.findById(a._id))!;
+    expect(depois.provedorAssinaturaId).toBe("sub_da_fatura");
+    // Emitir fatura NÃO é receber: nada entra no livro-razão, e o prazo não
+    // se move.
+    expect(await Cobranca.countDocuments({ assinatura: a._id })).toBe(0);
+    expect(depois.validoAte!.getTime()).toBe(
+      (await Assinatura.findById(a._id))!.validoAte!.getTime()
+    );
+
+    // E agora dá para cancelar, sem esperar a captura.
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+    expect(r.status).toBe(200);
+    expect(dublê.cancelamentos).toContain("sub_da_fatura");
+  });
+});

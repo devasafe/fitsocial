@@ -417,6 +417,17 @@ export async function aplicarEvento(
       break;
     }
 
+    case "cobranca.criada": {
+      // Nada a fazer aqui de propósito: o que importava — carimbar o id da
+      // assinatura e o do cliente — já aconteceu antes do `switch`.
+      //
+      // Este evento existe porque o `CHECKOUT_PAID` do Asaas não trouxe o
+      // cliente na compra real, e sem ele não havia como descobrir qual
+      // assinatura do gateway nasceu daquele checkout. A emissão da fatura
+      // vem segundos depois e traz os dois ids, sempre.
+      break;
+    }
+
     case "checkout.expirado": {
       // O link venceu ou foi abandonado sem pagar. Só faz sentido para quem
       // nunca chegou a pagar — uma assinatura já ativa não regride porque um

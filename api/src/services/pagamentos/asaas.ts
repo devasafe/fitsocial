@@ -36,7 +36,9 @@ import type { Provedor } from "../../models/Assinatura.js";
 const TIPOS: Record<string, TipoDeEvento> = {
   PAYMENT_CONFIRMED: "pagamento.aprovado",
   PAYMENT_RECEIVED: "pagamento.aprovado",
-  PAYMENT_CREATED: "desconhecido",
+  // Não é dinheiro: é a fatura sendo emitida. Vale pelo que ela carrega — o id
+  // da assinatura no gateway, que o evento de checkout não traz.
+  PAYMENT_CREATED: "cobranca.criada",
   PAYMENT_OVERDUE: "pagamento.falhou",
   PAYMENT_DELETED: "assinatura.cancelada",
   PAYMENT_REFUNDED: "estorno",

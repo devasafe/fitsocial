@@ -28,10 +28,14 @@ export type TipoDeEvento =
   | "assinatura.cancelada"
   | "estorno"
   | "chargeback"
-  // A pessoa concluiu o checkout. NÃO libera acesso — quem libera é o dinheiro
-  // confirmado. Serve para carimbar os ids que só passam a existir agora.
+  // A pessoa concluiu o checkout, o cartão foi autorizado e a assinatura
+  // existe no gateway.
   | "checkout.pago"
   | "checkout.expirado"
+  // A fatura foi EMITIDA — ninguém pagou nada ainda. Não move dinheiro nem
+  // direitos; existe só porque é o primeiro evento que traz o id da assinatura
+  // no gateway, e sem ele o botão de cancelar não teria o que chamar.
+  | "cobranca.criada"
   | "desconhecido";
 
 export interface EventoNormalizado {
