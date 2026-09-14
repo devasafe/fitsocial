@@ -281,18 +281,28 @@ export function Usuarios({ token }: { token: string }) {
       )}
 
       {/* Fica no fim das ações e em vermelho: é a única exclusão em massa do
-          painel, e não pode ficar perto dos botões que se clicam sem pensar. */}
-      {(selecionado.treinos?.atividades ?? 0) > 0 && (
-        <button
-          className="discreto perigo"
-          onClick={() => {
-            setConfirmacao("");
-            pedirAcao("zerarTreinos");
-          }}
-        >
-          Zerar treinos ({selecionado.treinos!.atividades})
-        </button>
-      )}
+          painel, e não pode ficar perto dos botões que se clicam sem pensar.
+
+          APARECE SEMPRE, mesmo com zero treinos, só desabilitado. A primeira
+          versão o escondia quando não havia o que zerar — e o efeito foi
+          alguém procurar o botão numa conta sem treino e concluir que ele não
+          existia. Um botão ausente não se distingue de um botão que nunca foi
+          feito; um botão apagado dizendo "(0)" responde a pergunta. */}
+      <button
+        className="discreto perigo"
+        disabled={(selecionado.treinos?.atividades ?? 0) === 0}
+        title={
+          (selecionado.treinos?.atividades ?? 0) === 0
+            ? "Esta conta não tem treino registrado"
+            : undefined
+        }
+        onClick={() => {
+          setConfirmacao("");
+          pedirAcao("zerarTreinos");
+        }}
+      >
+        Zerar treinos ({selecionado.treinos?.atividades ?? 0})
+      </button>
 
       {u.premiumSource === "admin" ? (
         <button className="discreto" onClick={() => pedirAcao("tirarPremium")}>Tirar cortesia</button>
