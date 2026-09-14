@@ -19,6 +19,71 @@ export const adminDadosRouter = Router();
 // ferramenta que transforma um erro de clique em perda definitiva.
 
 /**
+ * As coleções que aparecem na tela.
+ *
+ * Lista explícita, e não "todas as que o Mongoose conhece". Trinta e sete
+ * coleções na tela é convite a abrir a errada, e a maior parte delas nunca
+ * precisa de conserto à mão — telemetria e tabelas de junção se resolvem por
+ * script, não por clique.
+ *
+ * O que ficou FORA, e por quê:
+ *
+ *  - `AiUsage`, `UserDailyActive`, `PersonalRecordEvent` — telemetria e
+ *    histórico de alto volume. Apagar uma linha ali não conserta nada.
+ *  - `Like`, `Follow`, `ReadState`, `ChallengePost` — junção e estado de
+ *    leitura, gerados pelo uso. Apagar à mão só cria inconsistência.
+ *  - `PasswordReset`, `PushDevice` — só guardam token. Não há o que consertar,
+ *    e há o que vazar.
+ *  - `Profile` — não é coleção de dados: é a tabela de valores que a IA e o
+ *    schema validam.
+ */
+const COLECOES = [
+  // Contas e conteúdo
+  "User",
+  "Post",
+  "Comment",
+  "Report",
+  "Notification",
+  // Treino e registro
+  "Activity",
+  "Plan",
+  "WorkoutLog",
+  "FoodLog",
+  "WaterLog",
+  "PersonalRecord",
+  "ExerciseVideo",
+  // Desafios
+  "Challenge",
+  "ChallengeMember",
+  // Acompanhamento profissional
+  "ProfessionalLink",
+  "ProfessionalInvite",
+  "CoachMessage",
+  "ProMessage",
+  // Cobrança
+  "Assinatura",
+  "Cobranca",
+  "EventoDeCobranca",
+  "Cupom",
+  "CupomUso",
+  // Auditoria — só leitura, ver abaixo
+  "AdminAudit",
+] as const;
+
+/**
+ * Coleções que se LEEM mas não se mudam por aqui.
+ *
+ * `AdminAudit` é o registro de quem fez o quê. Um painel onde quem apagou
+ * pode apagar o registro de ter apagado não tem auditoria nenhuma — o valor
+ * dela vem exatamente de não ser editável por quem ela vigia.
+ *
+ * `EventoDeCobranca` é o livro-razão dos webhooks, e a idempotência do
+ * pagamento depende dele: apagar uma linha faz o gateway poder creditar o
+ * mesmo pagamento duas vezes no reenvio seguinte.
+ */
+const SO_LEITURA = new Set(["AdminAudit", "EventoDeCobranca"]);
+
+/**
  * Campos que NUNCA saem daqui.
  *
  * Hash de senha e token de reset não têm por que aparecer numa tela, e
@@ -57,23 +122,34 @@ function limpar(valor: unknown, profundidade = 0): unknown {
  * em coleções internas do banco.
  */
 function modelo(nome: string) {
-  const encontrado = mongoose.modelNames().find((n) => n.toLowerCase() === nome.toLowerCase());
+  const encontrado = (COLECOES as readonly string[]).find(
+    (n) => n.toLowerCase() === nome.toLowerCase()
+  );
+  // 404, e não 403: quem varre não precisa saber que a coleção existe e está
+  // só de fora da lista.
   if (!encontrado) throw new HttpError(404, `Não existe coleção "${nome}".`);
   return mongoose.model(encontrado);
+}
+
+/** Recusa a escrita nas coleções que só se leem. */
+function assertPodeEscrever(nome: string) {
+  if (SO_LEITURA.has(nome)) {
+    throw new HttpError(403, `${nome} é só leitura: esses registros não se mudam por aqui.`);
+  }
 }
 
 /** As coleções, com quantos documentos cada uma tem. */
 adminDadosRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const nomes = mongoose.modelNames().sort();
     const itens = await Promise.all(
-      nomes.map(async (nome) => {
+      COLECOES.map(async (nome) => {
         const M = mongoose.model(nome);
         return {
           nome,
           colecao: M.collection.collectionName,
           documentos: await M.estimatedDocumentCount(),
+          soLeitura: SO_LEITURA.has(nome),
         };
       })
     );
@@ -175,6 +251,7 @@ adminDadosRouter.patch(
   asyncHandler(async (req, res) => {
     const { motivo, campos } = edicaoSchema.parse(req.body);
     const M = modelo(String(req.params.colecao));
+    assertPodeEscrever(M.modelName);
     if (!mongoose.isValidObjectId(req.params.id)) throw new HttpError(400, "Id inválido");
 
     if (Object.keys(campos).length === 0) throw new HttpError(400, "Nenhum campo para mudar.");
@@ -232,6 +309,7 @@ adminDadosRouter.delete(
   asyncHandler(async (req, res) => {
     const { motivo, confirmacao } = exclusaoSchema.parse(req.body);
     const M = modelo(String(req.params.colecao));
+    assertPodeEscrever(M.modelName);
     const id = String(req.params.id);
     if (!mongoose.isValidObjectId(id)) throw new HttpError(400, "Id inválido");
     if (confirmacao !== id) {

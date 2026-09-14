@@ -47,6 +47,9 @@ export function Dados({ token }: { token: string }) {
   const [aberto, setAberto] = useState<Documento | null>(null);
   const [recado, setRecado] = useState<string | null>(null);
 
+  const atual = colecoes?.find((c) => c.nome === colecao) ?? null;
+  const soLeitura = atual?.soLeitura === true;
+
   useCamada(aberto !== null, () => setAberto(null));
 
   useEffect(() => {
@@ -91,8 +94,9 @@ export function Dados({ token }: { token: string }) {
         <div>
           <h1>Dados</h1>
           <p className="aviso">
-            Acesso direto às coleções. Toda mudança guarda uma cópia do documento na auditoria —
-            mas apagar não tem como desfazer pelo banco.
+            Só as coleções que você usa. Toda mudança guarda uma cópia do documento na
+            auditoria — mas apagar não tem como desfazer pelo banco. As marcadas com
+            &#128274; só se leem.
           </p>
         </div>
       </div>
@@ -120,6 +124,11 @@ export function Dados({ token }: { token: string }) {
                 }}
               >
                 {c.nome} <span className="num">{nf.format(c.documentos)}</span>
+                {c.soLeitura && (
+                  <span className="aviso" style={{ marginLeft: 4 }}>
+                    &#128274;
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -194,6 +203,7 @@ export function Dados({ token }: { token: string }) {
           token={token}
           colecao={colecao}
           documento={aberto}
+          soLeitura={soLeitura}
           aoFechar={() => setAberto(null)}
           aoMudar={(msg) => {
             setAberto(null);
@@ -212,12 +222,15 @@ function Editor({
   token,
   colecao,
   documento,
+  soLeitura,
   aoFechar,
   aoMudar,
 }: {
   token: string;
   colecao: string;
   documento: Documento;
+  /** Auditoria e livro-razao: abre para ler, sem os botoes de mudar. */
+  soLeitura: boolean;
   aoFechar: () => void;
   aoMudar: (recado: string) => void;
 }) {
@@ -291,7 +304,22 @@ function Editor({
           />
         </div>
 
-        {apagando ? (
+        {soLeitura ? (
+          <>
+            <p className="aviso" style={{ marginTop: 12 }}>
+              {/* Um painel onde quem apagou pode apagar o registro de ter
+                  apagado nao tem auditoria nenhuma. */}
+              Este registro so se le. A auditoria nao pode ser mudada por quem
+              ela vigia, e o livro-razao dos webhooks sustenta a idempotencia do
+              pagamento.
+            </p>
+            <div className="dialogo-acoes">
+              <button className="discreto" onClick={aoFechar}>
+                Fechar
+              </button>
+            </div>
+          </>
+        ) : apagando ? (
           <>
             <p className="erro" style={{ marginTop: 12 }}>
               Apagar não tem como desfazer pelo banco. Uma cópia fica na auditoria.

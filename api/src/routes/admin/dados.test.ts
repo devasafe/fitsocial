@@ -245,3 +245,72 @@ describe("editar e apagar deixam cópia na auditoria", () => {
     expect(r.status).toBe(404);
   });
 });
+
+describe("só as coleções que se usa, e a auditoria é intocável", () => {
+  it("lista só as escolhidas, não as 37 do Mongoose", async () => {
+    const r = await request(app).get("/admin/dados").set(auth());
+    const nomes = r.body.data.map((c: { nome: string }) => c.nome);
+
+    expect(nomes).toContain("User");
+    expect(nomes).toContain("Assinatura");
+    expect(nomes).toContain("Cupom");
+    // Telemetria e tabela de junção não se consertam por clique.
+    expect(nomes).not.toContain("AiUsage");
+    expect(nomes).not.toContain("Like");
+    expect(nomes).not.toContain("PushDevice");
+    expect(nomes.length).toBeLessThan(30);
+  });
+
+  it("coleção de fora da lista é 404, mesmo existindo no banco", async () => {
+    // 404 e não 403: quem varre não precisa saber que ela existe e está só
+    // de fora.
+    const r = await request(app).get("/admin/dados/AiUsage").set(auth());
+    expect(r.status).toBe(404);
+  });
+
+  it("a auditoria pode ser LIDA", async () => {
+    const id = await alguem();
+    await request(app)
+      .patch(`/admin/dados/User/${id}`)
+      .set(auth())
+      .send({ motivo: "gerando um registro", campos: { name: "Novo" } });
+
+    const r = await request(app).get("/admin/dados/AdminAudit").set(auth());
+    expect(r.status).toBe(200);
+    expect(r.body.data.length).toBeGreaterThan(0);
+  });
+
+  it("mas NÃO pode ser apagada nem editada", async () => {
+    const id = await alguem();
+    await request(app)
+      .patch(`/admin/dados/User/${id}`)
+      .set(auth())
+      .send({ motivo: "gerando um registro", campos: { name: "Novo" } });
+    const log = (await AdminAudit.findOne({}))!;
+    const logId = log._id.toString();
+
+    const apagar = await request(app)
+      .delete(`/admin/dados/AdminAudit/${logId}`)
+      .set(auth())
+      .send({ motivo: "apagando o rastro", confirmacao: logId });
+    const editar = await request(app)
+      .patch(`/admin/dados/AdminAudit/${logId}`)
+      .set(auth())
+      .send({ motivo: "mudando o rastro", campos: { reason: "outra coisa" } });
+
+    // Um painel onde quem apagou pode apagar o registro de ter apagado não
+    // tem auditoria nenhuma: o valor dela vem de não ser editável por quem
+    // ela vigia.
+    expect(apagar.status).toBe(403);
+    expect(editar.status).toBe(403);
+    expect(await AdminAudit.countDocuments({ _id: logId })).toBe(1);
+  });
+
+  it("o livro-razão dos webhooks também é só leitura", async () => {
+    // Apagar uma linha dali faz o gateway poder creditar o mesmo pagamento
+    // duas vezes no reenvio seguinte: a idempotência depende dela.
+    const r = await request(app).get("/admin/dados").set(auth());
+    const evt = r.body.data.find((c: { nome: string }) => c.nome === "EventoDeCobranca");
+    expect(evt.soLeitura).toBe(true);
+  });
+});

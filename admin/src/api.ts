@@ -447,6 +447,8 @@ export interface ColecaoResumo {
   nome: string;
   colecao: string;
   documentos: number;
+  /** Se leem, nao se mudam: auditoria e livro-razao de webhook. */
+  soLeitura?: boolean;
 }
 
 /** Um documento qualquer. A forma varia por coleção — é o ponto. */
