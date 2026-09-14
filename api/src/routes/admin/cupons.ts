@@ -110,12 +110,30 @@ async function comRelatorio(c: CupomDoc | null) {
 adminCuponsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const incluirRevogados = req.query.todos === "1";
-    const filtro = incluirRevogados ? {} : { revogadoEm: null };
+    // Tres estados, e nao dois.
+    //
+    // Com so "ativos" e "todos", revogar um cupom o fazia DESAPARECER da tela
+    // sem nada explicando -- e "revogar nao funciona" foi a leitura natural
+    // de quem estava olhando. Uma lista propria da ao cupom revogado um lugar
+    // onde ele ainda existe.
+    const status = String(req.query.status ?? (req.query.todos === "1" ? "todos" : "ativos"));
+    const filtro =
+      status === "revogados"
+        ? { revogadoEm: { $ne: null } }
+        : status === "todos"
+          ? {}
+          : { revogadoEm: null };
     const cupons = await Cupom.find(filtro).sort({ createdAt: -1 }).limit(200);
+    // Os contadores das abas vem juntos: sem eles a tela nao pode dizer
+    // "Revogados (1)", e quem revogou continua sem saber para onde o cupom foi.
+    const [ativos, revogados] = await Promise.all([
+      Cupom.countDocuments({ revogadoEm: null }),
+      Cupom.countDocuments({ revogadoEm: { $ne: null } }),
+    ]);
+
     res.json({
       data: await Promise.all(cupons.map((c) => comRelatorio(c))),
-      meta: { total: cupons.length },
+      meta: { total: cupons.length, ativos, revogados },
     });
   })
 );

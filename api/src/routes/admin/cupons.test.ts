@@ -190,16 +190,34 @@ describe("o relatório de parceria", () => {
     ]);
   });
 
-  it("a lista esconde os revogados por padrão, e mostra sob pedido", async () => {
+  it("as três abas separam ativos, revogados e todos", async () => {
     await criar({ codigo: "VIVO", desconto: { tipo: "valor", valor: 500 } });
     await criar({ codigo: "MORTO", desconto: { tipo: "valor", valor: 500 } });
     await request(app).post("/admin/cupons/MORTO/revogar").set(auth()).send({ motivo: "fim" });
 
-    const padrao = await request(app).get("/admin/cupons").set(auth());
-    expect(padrao.body.data.map((c: { codigo: string }) => c.codigo)).toEqual(["VIVO"]);
+    const ativos = await request(app).get("/admin/cupons").set(auth());
+    expect(ativos.body.data.map((c: { codigo: string }) => c.codigo)).toEqual(["VIVO"]);
 
-    const todos = await request(app).get("/admin/cupons?todos=1").set(auth());
+    // A aba que faltava. Sem ela, revogar fazia o cupom desaparecer da tela
+    // sem nada explicando — e "revogar não funciona" era a leitura óbvia.
+    const revogados = await request(app).get("/admin/cupons?status=revogados").set(auth());
+    expect(revogados.body.data.map((c: { codigo: string }) => c.codigo)).toEqual(["MORTO"]);
+
+    const todos = await request(app).get("/admin/cupons?status=todos").set(auth());
     expect(todos.body.data).toHaveLength(2);
+
+    // E os contadores das abas vêm no meta, em qualquer uma delas.
+    expect(ativos.body.meta.ativos).toBe(1);
+    expect(ativos.body.meta.revogados).toBe(1);
+    expect(revogados.body.meta.ativos).toBe(1);
+  });
+
+  it("o `todos=1` antigo continua funcionando", async () => {
+    // O painel velho, se alguém tiver a aba aberta, não pode quebrar.
+    await criar({ codigo: "COMPAT", desconto: { tipo: "valor", valor: 500 } });
+    await request(app).post("/admin/cupons/COMPAT/revogar").set(auth()).send({ motivo: "fim" });
+    const r = await request(app).get("/admin/cupons?todos=1").set(auth());
+    expect(r.body.data).toHaveLength(1);
   });
 });
 

@@ -38,15 +38,16 @@ export class ErroApi extends Error {
   }
 }
 
-interface Envelope<T> {
+interface Envelope<T, M = Record<string, unknown>> {
   data: T;
-  meta?: Record<string, unknown>;
+  /** Opcional: rota que nao tem nada a dizer no `meta` devolve `{}`. */
+  meta?: M;
 }
 
-export async function api<T>(
+export async function api<T, M = Record<string, unknown>>(
   caminho: string,
   opcoes: { method?: string; body?: unknown; token?: string | null } = {}
-): Promise<Envelope<T>> {
+): Promise<Envelope<T, M>> {
   const { method = "GET", body, token } = opcoes;
 
   let res: Response;
@@ -72,7 +73,7 @@ export async function api<T>(
     throw new ErroApi(res.status, (dados as { error?: string }).error ?? `Erro ${res.status}`);
   }
 
-  return dados as Envelope<T>;
+  return dados as Envelope<T, M>;
 }
 
 /* ---------- formatos que a API devolve ---------- */
@@ -378,8 +379,19 @@ export interface UsoDeCupom {
   comissaoCentavos: number;
 }
 
-export const buscarCupons = (token: string, todos = false) =>
-  api<CupomAdmin[]>(`/admin/cupons${todos ? "?todos=1" : ""}`, { token });
+export type FiltroDeCupom = "ativos" | "revogados" | "todos";
+
+/**
+ * Lista os cupons. O `meta` traz a contagem das abas.
+ *
+ * Sem os contadores a tela nao pode dizer "Revogados (1)", e quem acabou de
+ * revogar um cupom fica sem saber para onde ele foi.
+ */
+export const buscarCupons = (token: string, status: FiltroDeCupom = "ativos") =>
+  api<CupomAdmin[], { total: number; ativos: number; revogados: number }>(
+    `/admin/cupons?status=${status}`,
+    { token }
+  );
 
 export const buscarCupom = (token: string, codigo: string) =>
   api<CupomAdmin & { usos: UsoDeCupom[] }>(`/admin/cupons/${encodeURIComponent(codigo)}`, { token });

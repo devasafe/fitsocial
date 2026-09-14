@@ -7,6 +7,7 @@ import {
   revogarCupom,
   reativarCupom,
   type CupomAdmin,
+  type FiltroDeCupom,
   type UsoDeCupom,
 } from "../api";
 import { Dialogo } from "../components/Dialogo";
@@ -33,7 +34,15 @@ const TIPOS = [
 
 export function Cupons({ token }: { token: string }) {
   const [lista, setLista] = useState<CupomAdmin[] | null>(null);
-  const [mostrarRevogados, setMostrarRevogados] = useState(false);
+  const [filtro, setFiltro] = useState<FiltroDeCupom>("ativos");
+  const [contagens, setContagens] = useState({ ativos: 0, revogados: 0 });
+  /**
+   * O que acabou de acontecer, dito na tela.
+   *
+   * Revogar fazia o cupom DESAPARECER da lista de ativos sem nada explicando,
+   * e "revogar nao funciona" era a leitura obvia de quem estava olhando.
+   */
+  const [recado, setRecado] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<CupomAdmin | null>(null);
@@ -49,12 +58,13 @@ export function Cupons({ token }: { token: string }) {
   const carregar = useCallback(async () => {
     setErro(null);
     try {
-      const r = await buscarCupons(token, mostrarRevogados);
+      const r = await buscarCupons(token, filtro);
       setLista(r.data);
+      if (r.meta) setContagens({ ativos: r.meta.ativos, revogados: r.meta.revogados });
     } catch (e) {
       setErro((e as Error).message);
     }
-  }, [token, mostrarRevogados]);
+  }, [token, filtro]);
 
   useEffect(() => {
     setLista(null);
@@ -84,20 +94,31 @@ export function Cupons({ token }: { token: string }) {
       </div>
 
       <div className="filtros">
-        <button
-          className={mostrarRevogados ? "" : "ativo"}
-          onClick={() => setMostrarRevogados(false)}
-        >
-          Ativos
-        </button>
-        <button
-          className={mostrarRevogados ? "ativo" : ""}
-          onClick={() => setMostrarRevogados(true)}
-        >
-          Todos
-        </button>
+        {(
+          [
+            { v: "ativos" as const, r: `Ativos (${contagens.ativos})` },
+            { v: "revogados" as const, r: `Revogados (${contagens.revogados})` },
+            { v: "todos" as const, r: "Todos" },
+          ]
+        ).map((f) => (
+          <button
+            key={f.v}
+            className={filtro === f.v ? "ativo" : ""}
+            onClick={() => {
+              setFiltro(f.v);
+              setRecado(null);
+            }}
+          >
+            {f.r}
+          </button>
+        ))}
       </div>
 
+      {recado && (
+        <p className="aviso" style={{ color: "var(--lime)" }}>
+          {recado}
+        </p>
+      )}
       {erro && <p className="erro">{erro}</p>}
 
       <div className="painel">
@@ -105,7 +126,9 @@ export function Cupons({ token }: { token: string }) {
           <p className="vazio">Carregando…</p>
         ) : lista.length === 0 ? (
           <p className="vazio">
-            Nenhum cupom ainda. Crie um para fechar parceria ou fazer uma campanha.
+            {filtro === "revogados"
+              ? "Nenhum cupom revogado."
+              : "Nenhum cupom ainda. Crie um para fechar parceria ou fazer uma campanha."}
           </p>
         ) : ehCelular ? (
           <ul className="lista-cartoes">
@@ -244,8 +267,16 @@ export function Cupons({ token }: { token: string }) {
           rotuloAcao={acao.revogar ? "Revogar" : "Reativar"}
           perigoso={acao.revogar}
           aoConfirmar={async (motivo) => {
-            if (acao.revogar) await revogarCupom(token, acao.cupom.codigo, motivo);
-            else await reativarCupom(token, acao.cupom.codigo, motivo);
+            const codigo = acao.cupom.codigo;
+            if (acao.revogar) {
+              await revogarCupom(token, codigo, motivo);
+              // O cupom sai da aba de ativos. Dizer PARA ONDE ele foi é o que
+              // separa "funcionou" de "sumiu sem explicação".
+              setRecado(`${codigo} foi revogado. Ele está na aba Revogados.`);
+            } else {
+              await reativarCupom(token, codigo, motivo);
+              setRecado(`${codigo} voltou a valer. Ele está na aba Ativos.`);
+            }
             void carregar();
           }}
           aoFechar={() => setAcao(null)}
