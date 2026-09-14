@@ -185,6 +185,84 @@ adminCuponsRouter.get(
   })
 );
 
+const editarSchema = z.object({
+  motivo: motivoSchema,
+  descricao: z.string().max(200).optional(),
+  desconto: descontoSchema.nullable().optional(),
+  parceiro: parceiroSchema.nullable().optional(),
+  produtos: z.array(z.enum(PRODUTOS)).optional(),
+  ciclos: z.array(z.enum(CICLOS)).optional(),
+  limiteDeUsos: z.number().int().min(1).nullable().optional(),
+  validoAte: z.coerce.date().nullable().optional(),
+});
+
+/**
+ * Edita o cupom. O CÓDIGO não se muda.
+ *
+ * Ele está gravado em toda conta que entrou por aqui (`User.cupom`) e em toda
+ * linha de uso (`CupomUso.cupom`). Renomear quebraria o vínculo de quem já
+ * chegou — o parceiro perderia o histórico dele de uma vez, e é justamente o
+ * histórico que diz quanto ele tem a receber. Quem quer outro código cria
+ * outro cupom; os dois podem apontar para o mesmo parceiro.
+ *
+ * E o que MUDA só vale daqui para a frente. Desconto novo não retroage para
+ * quem já assinou (o preço está na `Assinatura`), e comissão nova não reescreve
+ * venda passada (está na `Cobranca`). Isso não é limitação: é o que impede o
+ * relatório de ontem de dizer outra coisa hoje.
+ */
+adminCuponsRouter.patch(
+  "/:codigo",
+  asyncHandler(async (req, res) => {
+    const dados = editarSchema.parse(req.body);
+    const cupom = await Cupom.findOne({ codigo: normalizarCodigo(String(req.params.codigo)) });
+    if (!cupom) throw new HttpError(404, "Cupom não encontrado");
+
+    const antes = {
+      desconto: cupom.desconto,
+      parceiro: cupom.parceiro?.nome ?? null,
+      comissao: cupom.parceiro?.comissaoPercentual ?? 0,
+    };
+
+    // `undefined` = não mexeu; `null` = tirou de propósito. A diferença
+    // importa: sem ela, editar só a descrição apagaria o parceiro.
+    if (dados.descricao !== undefined) cupom.descricao = dados.descricao;
+    if (dados.desconto !== undefined) cupom.set("desconto", dados.desconto);
+    if (dados.parceiro !== undefined) cupom.set("parceiro", dados.parceiro);
+    if (dados.produtos !== undefined) cupom.set("produtos", dados.produtos);
+    if (dados.ciclos !== undefined) cupom.set("ciclos", dados.ciclos);
+    if (dados.limiteDeUsos !== undefined) cupom.limiteDeUsos = dados.limiteDeUsos;
+    if (dados.validoAte !== undefined) cupom.validoAte = dados.validoAte;
+
+    if (!cupom.desconto && !cupom.parceiro) {
+      throw new HttpError(400, "O cupom precisa de um desconto, de um parceiro, ou dos dois.");
+    }
+
+    // Baixar o teto para menos do que já foi usado não é erro: é como se
+    // encerra um cupom sem revogá-lo. Mas dizer isso na resposta evita a
+    // pergunta "por que ninguém consegue mais usar?".
+    const esgotado = cupom.limiteDeUsos !== null && (cupom.usos ?? 0) >= (cupom.limiteDeUsos ?? 0);
+
+    await cupom.save();
+
+    await recordAudit({
+      actor: req.user!,
+      action: "cupom.update",
+      targetKind: "cupom",
+      targetId: cupom._id,
+      targetLabel: cupom.codigo,
+      reason: dados.motivo,
+      before: antes,
+      after: {
+        desconto: cupom.desconto,
+        parceiro: cupom.parceiro?.nome ?? null,
+        comissao: cupom.parceiro?.comissaoPercentual ?? 0,
+      },
+    });
+
+    res.json({ data: await comRelatorio(cupom), meta: { esgotado } });
+  })
+);
+
 /**
  * Revoga. Não apaga.
  *

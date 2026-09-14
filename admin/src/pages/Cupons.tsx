@@ -3,6 +3,7 @@ import {
   buscarCupons,
   buscarCupom,
   criarCupom,
+  editarCupom,
   revogarCupom,
   reativarCupom,
   type CupomAdmin,
@@ -35,11 +36,13 @@ export function Cupons({ token }: { token: string }) {
   const [mostrarRevogados, setMostrarRevogados] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState<CupomAdmin | null>(null);
   const [aberto, setAberto] = useState<(CupomAdmin & { usos: UsoDeCupom[] }) | null>(null);
   const [acao, setAcao] = useState<{ cupom: CupomAdmin; revogar: boolean } | null>(null);
   const ehCelular = useEhCelular();
 
   useCamada(criando, () => setCriando(false));
+  useCamada(editando !== null, () => setEditando(null));
   useCamada(aberto !== null, () => setAberto(null));
   useCamada(acao !== null, () => setAcao(null));
 
@@ -201,10 +204,26 @@ export function Cupons({ token }: { token: string }) {
         />
       )}
 
+      {editando && (
+        <FormularioDeCupom
+          token={token}
+          editando={editando}
+          aoFechar={() => setEditando(null)}
+          aoCriar={() => {
+            setEditando(null);
+            void carregar();
+          }}
+        />
+      )}
+
       {aberto && (
         <Detalhe
           cupom={aberto}
           aoFechar={() => setAberto(null)}
+          aoEditar={() => {
+            setEditando(aberto);
+            setAberto(null);
+          }}
           aoPedirAcao={(revogar) => {
             setAcao({ cupom: aberto, revogar });
             setAberto(null);
@@ -240,24 +259,42 @@ export function Cupons({ token }: { token: string }) {
 
 function FormularioDeCupom({
   token,
+  editando,
   aoFechar,
   aoCriar,
 }: {
   token: string;
+  /** Quando vem preenchido, o formulario edita em vez de criar. */
+  editando?: CupomAdmin | null;
   aoFechar: () => void;
   aoCriar: () => void;
 }) {
-  const [codigo, setCodigo] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [temDesconto, setTemDesconto] = useState(true);
-  const [tipo, setTipo] = useState<"percentual" | "valor" | "meses_gratis">("percentual");
-  const [valor, setValor] = useState("");
-  const [temParceiro, setTemParceiro] = useState(false);
-  const [nome, setNome] = useState("");
-  const [contato, setContato] = useState("");
-  const [comissao, setComissao] = useState("");
-  const [limite, setLimite] = useState("");
-  const [validade, setValidade] = useState("");
+  const ehEdicao = Boolean(editando);
+  const [codigo, setCodigo] = useState(editando?.codigo ?? "");
+  const [descricao, setDescricao] = useState(editando?.descricao ?? "");
+  const [temDesconto, setTemDesconto] = useState(editando ? Boolean(editando.desconto) : true);
+  const [tipo, setTipo] = useState<"percentual" | "valor" | "meses_gratis">(
+    editando?.desconto?.tipo ?? "percentual"
+  );
+  const [valor, setValor] = useState(
+    // Centavos voltam a reais so na tela; na API o valor trafega em centavos.
+    editando?.desconto
+      ? editando.desconto.tipo === "valor"
+        ? (editando.desconto.valor / 100).toFixed(2)
+        : String(editando.desconto.valor)
+      : ""
+  );
+  const [temParceiro, setTemParceiro] = useState(Boolean(editando?.parceiro));
+  const [nome, setNome] = useState(editando?.parceiro?.nome ?? "");
+  const [contato, setContato] = useState(editando?.parceiro?.contato ?? "");
+  const [comissao, setComissao] = useState(
+    editando?.parceiro ? String(editando.parceiro.comissaoPercentual) : ""
+  );
+  const [limite, setLimite] = useState(editando?.limiteDeUsos ? String(editando.limiteDeUsos) : "");
+  const [validade, setValidade] = useState(
+    editando?.validoAte ? editando.validoAte.slice(0, 10) : ""
+  );
+  const [motivo, setMotivo] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -266,8 +303,7 @@ function FormularioDeCupom({
     setEnviando(true);
     setErro(null);
     try {
-      await criarCupom(token, {
-        codigo: codigo.trim() || undefined,
+      const corpo = {
         descricao: descricao.trim() || undefined,
         desconto: temDesconto
           ? {
@@ -286,7 +322,15 @@ function FormularioDeCupom({
           : null,
         limiteDeUsos: limite ? Number(limite) : null,
         validoAte: validade || null,
-      });
+      };
+
+      if (editando) {
+        // O codigo NAO vai: ele esta gravado em cada conta que entrou por
+        // aqui, e renomear apagaria o historico de quem tem a receber.
+        await editarCupom(token, editando.codigo, { ...corpo, motivo: motivo.trim() });
+      } else {
+        await criarCupom(token, { ...corpo, codigo: codigo.trim() || undefined });
+      }
       aoCriar();
     } catch (err) {
       setErro((err as Error).message);
@@ -309,20 +353,32 @@ function FormularioDeCupom({
       }}
     >
       <form className="dialogo" onSubmit={enviar}>
-        <h2>Novo cupom</h2>
+        <h2>{ehEdicao ? "Editar " + editando!.codigo : "Novo cupom"}</h2>
 
-        <label>
-          Código
-          <input
-            value={codigo}
-            onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-            placeholder="deixe vazio para sortear"
-            maxLength={40}
-          />
-        </label>
-        <p className="aviso">
-          O que a pessoa digita. Vazio = o sistema sorteia um código sem letras que se confundem.
-        </p>
+        {ehEdicao && (
+          <p className="aviso">
+            O código não muda: ele está gravado em cada conta que entrou por ele. O que você
+            alterar aqui vale só para quem usar de agora em diante — quem já assinou mantém o
+            preço, e as comissões já pagas não se movem.
+          </p>
+        )}
+
+        {!ehEdicao && (
+          <label>
+            Código
+            <input
+              value={codigo}
+              onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+              placeholder="deixe vazio para sortear"
+              maxLength={40}
+            />
+          </label>
+        )}
+        {!ehEdicao && (
+          <p className="aviso">
+            O que a pessoa digita. Vazio = o sistema sorteia um código sem letras que se confundem.
+          </p>
+        )}
 
         <label>
           Para que é (só você vê)
@@ -446,14 +502,31 @@ function FormularioDeCupom({
           <input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} />
         </label>
 
+        {ehEdicao && (
+          <label>
+            Motivo
+            <input
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Fica registrado na auditoria"
+              minLength={3}
+              required
+            />
+          </label>
+        )}
+
         {erro && <p className="erro">{erro}</p>}
 
         <div className="dialogo-acoes">
           <button type="button" className="discreto" onClick={aoFechar}>
             Cancelar
           </button>
-          <button type="submit" className="acao" disabled={enviando}>
-            {enviando ? "Criando…" : "Criar cupom"}
+          <button
+            type="submit"
+            className="acao"
+            disabled={enviando || (ehEdicao && motivo.trim().length < 3)}
+          >
+            {enviando ? "Salvando…" : ehEdicao ? "Salvar" : "Criar cupom"}
           </button>
         </div>
       </form>
@@ -466,10 +539,12 @@ function FormularioDeCupom({
 function Detalhe({
   cupom,
   aoFechar,
+  aoEditar,
   aoPedirAcao,
 }: {
   cupom: CupomAdmin & { usos: UsoDeCupom[] };
   aoFechar: () => void;
+  aoEditar: () => void;
   aoPedirAcao: (revogar: boolean) => void;
 }) {
   const r = cupom.relatorio;
@@ -571,6 +646,9 @@ function Detalhe({
         <div className="dialogo-acoes">
           <button className="discreto" onClick={aoFechar}>
             Fechar
+          </button>
+          <button className="discreto" onClick={aoEditar}>
+            Editar
           </button>
           {cupom.revogadoEm ? (
             <button className="acao" onClick={() => aoPedirAcao(false)}>Reativar</button>

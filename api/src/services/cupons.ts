@@ -238,6 +238,42 @@ export async function relatorioDoCupom(codigo: string): Promise<{
   };
 }
 
+/**
+ * O histórico de cupons DESTA pessoa.
+ *
+ * Pode ter mais de uma linha, e isso não é erro: alguém entra pelo cupom de um
+ * parceiro no cadastro e usa um cupom de campanha no checkout. As duas coisas
+ * aconteceram e as duas contam — para parceiros diferentes, inclusive.
+ *
+ * Traz o cupom junto para o painel poder dizer "10% · parceria com o João" em
+ * vez de só o código, que sozinho não explica nada a quem está no suporte.
+ */
+export async function cuponsDoUsuario(userId: mongoose.Types.ObjectId) {
+  const usos = await CupomUso.find({ user: userId }).sort({ createdAt: -1 });
+  if (usos.length === 0) return [];
+
+  const cupons = await Cupom.find({ codigo: { $in: usos.map((u) => u.cupom) } });
+  const porCodigo = new Map(cupons.map((c) => [c.codigo, c]));
+
+  return usos.map((u) => {
+    const c = porCodigo.get(u.cupom);
+    return {
+      id: u._id.toString(),
+      codigo: u.cupom,
+      // O cupom pode ter sido revogado depois — o uso continua valendo, e o
+      // painel precisa mostrar os dois fatos sem que um apague o outro.
+      descricao: c?.descricao ?? "",
+      parceiro: c?.parceiro?.nome ?? null,
+      revogado: Boolean(c?.revogadoEm),
+      origem: u.origem,
+      entrouEm: u.get("createdAt") as Date,
+      primeiraCompraEm: u.primeiraCompraEm ?? null,
+      totalPagoCentavos: u.totalPagoCentavos ?? 0,
+      comissaoCentavos: u.comissaoTotalCentavos ?? 0,
+    };
+  });
+}
+
 /** Conserta o contador desnormalizado a partir da verdade, que são os usos. */
 export async function recontarUsos(codigo: string): Promise<number> {
   const cod = normalizarCodigo(codigo);

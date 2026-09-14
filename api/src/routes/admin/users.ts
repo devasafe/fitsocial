@@ -12,6 +12,8 @@ import { banir, desbanir, suspender, definirVisibilidade, serializeUser } from "
 import { concederPremium, concederPro, revogarPremium, revogarPro } from "../../services/entitlement.js";
 import { recontarAlunosDe } from "../../services/patrocinio.js";
 import { recordAudit, maskEmail } from "../../services/adminAudit.js";
+import { cuponsDoUsuario } from "../../services/cupons.js";
+import { emReais } from "../../services/pagamentos/catalogo.js";
 
 export const adminUsersRouter = Router();
 
@@ -84,16 +86,25 @@ adminUsersRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const u = await carregar(req.params.id);
-    const [posts, atividades, auditoria] = await Promise.all([
+    const [posts, atividades, auditoria, cupons] = await Promise.all([
       Post.countDocuments({ author: u._id, deletedAt: null }),
       Activity.countDocuments({ user: u._id }),
       AdminAudit.find({ targetId: u._id }).sort({ createdAt: -1 }).limit(20),
+      cuponsDoUsuario(u._id),
     ]);
 
     res.json({
       data: {
         user: serializeUser(u),
         contagens: { posts, atividades },
+        // O histórico de cupons desta pessoa: por onde ela chegou, o que usou
+        // ao comprar, e quanto cada um rendeu. É o que responde, no suporte,
+        // "essa pessoa veio de qual parceria?".
+        cupons: cupons.map((c) => ({
+          ...c,
+          totalPagoFormatado: emReais(c.totalPagoCentavos),
+          comissaoFormatada: emReais(c.comissaoCentavos),
+        })),
         auditoria: auditoria.map((a) => ({
           acao: a.action,
           motivo: a.reason,

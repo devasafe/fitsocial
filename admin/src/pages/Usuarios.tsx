@@ -176,10 +176,47 @@ export function Usuarios({ token }: { token: string }) {
         </p>
       )}
 
-      {u.cupom && (
+      {/* O histórico de cupons.
+          Pode ter mais de uma linha, e isso não é erro: quem entra pelo cupom
+          de um parceiro e usa um de campanha no checkout tem os dois, e os
+          dois contam — para parceiros diferentes, inclusive. */}
+      {(selecionado.cupons ?? []).length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <h3 style={{ fontSize: 13, marginBottom: 6 }}>Cupons</h3>
+          {(selecionado.cupons ?? []).map((c) => (
+            <div
+              key={c.id}
+              style={{ borderTop: "1px solid var(--line)", padding: "7px 0", fontSize: 13 }}
+            >
+              <b>{c.codigo}</b>
+              {c.revogado && (
+                <span className="aviso" style={{ marginLeft: 6 }}>
+                  revogado
+                </span>
+              )}
+              <span style={{ color: "var(--texto-3)", marginLeft: 6 }}>
+                {c.origem === "cadastro" ? "no cadastro" : "no pagamento"} ·{" "}
+                {dataCurta(c.entrouEm)}
+              </span>
+              <div style={{ color: "var(--texto-2)", marginTop: 2 }}>
+                {c.parceiro ? `parceria: ${c.parceiro}` : c.descricao || "campanha"}
+              </div>
+              <div style={{ color: "var(--texto-3)", marginTop: 2 }}>
+                {c.primeiraCompraEm
+                  ? `pagou desde ${dataCurta(c.primeiraCompraEm)} · ${c.totalPagoFormatado}`
+                  : "ainda não pagou"}
+                {c.parceiro && ` · comissão ${c.comissaoFormatada}`}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Sem nenhum uso registrado, mas com o campo na conta: é um cupom que
+          foi gravado antes de o histórico existir. Vale dizer, em vez de
+          sumir com a informação. */}
+      {u.cupom && (selecionado.cupons ?? []).length === 0 && (
         <p style={{ color: "var(--texto-3)", margin: "4px 0 0", fontSize: 13 }}>
-          {/* Fecha o laço da parceria: quem abre a ficha vê por qual cupom a
-              pessoa chegou, sem ter de procurar na tela de cupons. */}
           chegou pelo cupom <b style={{ color: "var(--texto-2)" }}>{u.cupom}</b>
           {u.cupomEm && ` em ${dataCurta(u.cupomEm)}`}
         </p>

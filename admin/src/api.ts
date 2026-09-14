@@ -167,6 +167,14 @@ export interface DetalheUsuario {
   user: UsuarioAdmin;
   contagens: { posts: number; atividades: number };
   auditoria: { acao: string; motivo: string; quando: string; por: string }[];
+  /**
+   * Os cupons desta pessoa. Opcional porque um servidor anterior a esta versão
+   * não manda o campo, e a ficha não pode quebrar por isso.
+   *
+   * Pode ter mais de um: quem entra pelo cupom de um parceiro e usa um de
+   * campanha no checkout tem os dois, e os dois contam.
+   */
+  cupons?: CupomNaFicha[];
 }
 
 export interface FiltroUsuarios {
@@ -342,6 +350,21 @@ export interface CupomAdmin {
   };
 }
 
+/** O histórico de cupons de UMA pessoa, como a ficha dela mostra. */
+export interface CupomNaFicha {
+  id: string;
+  codigo: string;
+  descricao: string;
+  parceiro: string | null;
+  /** O cupom foi encerrado depois — o uso continua valendo. */
+  revogado: boolean;
+  origem: "cadastro" | "checkout";
+  entrouEm: string;
+  primeiraCompraEm: string | null;
+  totalPagoFormatado: string;
+  comissaoFormatada: string;
+}
+
 export interface UsoDeCupom {
   id: string;
   user: string;
@@ -372,6 +395,25 @@ export interface NovoCupom {
 
 export const criarCupom = (token: string, dados: NovoCupom) =>
   api<CupomAdmin>("/admin/cupons", { method: "POST", body: dados, token });
+
+export interface EdicaoDeCupom extends NovoCupom {
+  /** Obrigatório: vai para a auditoria, como toda ação do painel. */
+  motivo: string;
+}
+
+/**
+ * Edita o cupom. O código NÃO muda.
+ *
+ * Ele está gravado em cada conta que entrou por aqui; renomear apagaria o
+ * histórico de quem tem a receber. Campos ausentes ficam como estão — só
+ * `null` explícito remove.
+ */
+export const editarCupom = (token: string, codigo: string, dados: EdicaoDeCupom) =>
+  api<CupomAdmin>(`/admin/cupons/${encodeURIComponent(codigo)}`, {
+    method: "PATCH",
+    body: dados,
+    token,
+  });
 
 export const revogarCupom = (token: string, codigo: string, motivo: string) =>
   api<CupomAdmin>(`/admin/cupons/${encodeURIComponent(codigo)}/revogar`, {
