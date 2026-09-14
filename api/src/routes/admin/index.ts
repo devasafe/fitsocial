@@ -7,6 +7,7 @@ import { adminAiRouter } from "./ai.js";
 import { adminUsersRouter } from "./users.js";
 import { adminMetricsRouter } from "./metrics.js";
 import { adminReportsRouter } from "./reports.js";
+import { adminCuponsRouter } from "./cupons.js";
 
 export const adminRouter = Router();
 
@@ -31,3 +32,4 @@ adminRouter.use("/ai", adminAiRouter);
 adminRouter.use("/users", adminUsersRouter);
 adminRouter.use("/metrics", adminMetricsRouter);
 adminRouter.use("/reports", adminReportsRouter);
+adminRouter.use("/cupons", adminCuponsRouter);

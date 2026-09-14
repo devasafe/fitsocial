@@ -13,7 +13,7 @@ const adminAuditSchema = new Schema(
     action: { type: String, required: true, index: true },
     targetKind: {
       type: String,
-      enum: ["user", "post", "comment", "aiKey", "system"],
+      enum: ["user", "post", "comment", "aiKey", "cupom", "system"],
       required: true,
     },
     targetId: { type: Schema.Types.ObjectId, default: null },

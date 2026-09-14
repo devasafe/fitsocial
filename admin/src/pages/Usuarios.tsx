@@ -176,6 +176,15 @@ export function Usuarios({ token }: { token: string }) {
         </p>
       )}
 
+      {u.cupom && (
+        <p style={{ color: "var(--texto-3)", margin: "4px 0 0", fontSize: 13 }}>
+          {/* Fecha o laço da parceria: quem abre a ficha vê por qual cupom a
+              pessoa chegou, sem ter de procurar na tela de cupons. */}
+          chegou pelo cupom <b style={{ color: "var(--texto-2)" }}>{u.cupom}</b>
+          {u.cupomEm && ` em ${dataCurta(u.cupomEm)}`}
+        </p>
+      )}
+
       {(u.vinculosPatrocinados ?? 0) > 0 && (
         <p style={{ color: "var(--texto-3)", margin: "4px 0 0", fontSize: 13 }}>
           {u.vinculosPatrocinados === 1

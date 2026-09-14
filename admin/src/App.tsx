@@ -4,6 +4,7 @@ import { Entrar } from "./pages/Entrar";
 import { Ia } from "./pages/Ia";
 import { Usuarios } from "./pages/Usuarios";
 import { Denuncias } from "./pages/Denuncias";
+import { Cupons } from "./pages/Cupons";
 import { MARCA } from "./marca";
 
 // O Painel carrega o Recharts, que sozinho pesa mais que o resto do app
@@ -21,6 +22,7 @@ const SECOES = [
   { id: "painel", rotulo: "Crescimento", curto: "Crescimento", icone: "◆" },
   { id: "usuarios", rotulo: "Usuários", curto: "Usuários", icone: "●" },
   { id: "denuncias", rotulo: "Denúncias", curto: "Denúncias", icone: "⚑" },
+  { id: "cupons", rotulo: "Cupons e parcerias", curto: "Cupons", icone: "✱" },
   { id: "ia", rotulo: "Consumo de IA", curto: "IA", icone: "▲" },
 ] as const;
 
@@ -126,6 +128,8 @@ export function App() {
           <Usuarios token={token} />
         ) : seccao === "denuncias" ? (
           <Denuncias token={token} />
+        ) : seccao === "cupons" ? (
+          <Cupons token={token} />
         ) : seccao === "ia" ? (
           <Ia token={token} />
         ) : (

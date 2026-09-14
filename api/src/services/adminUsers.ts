@@ -89,6 +89,9 @@ export function serializeUser(u: UserDoc) {
     cortesiaAte: u.cortesiaAte ?? null,
     /** Quantos profissionais bancam o Pro desta pessoa. */
     vinculosPatrocinados: u.vinculosPatrocinados ?? 0,
+    /** Por qual cupom esta pessoa chegou. É o que liga a conta à parceria. */
+    cupom: u.cupom ?? null,
+    cupomEm: u.cupomEm ?? null,
     status: u.status ?? "active",
     statusEfetivo: statusEfetivo(u),
     statusReason: u.statusReason ?? "",

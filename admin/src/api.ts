@@ -147,6 +147,9 @@ export interface UsuarioAdmin {
   cortesiaAte?: string | null;
   /** Quantos profissionais bancam o Pro desta pessoa. */
   vinculosPatrocinados?: number;
+  /** Por qual cupom esta pessoa chegou. */
+  cupom?: string | null;
+  cupomEm?: string | null;
   status: string;
   statusEfetivo: string;
   statusReason: string;
@@ -303,5 +306,83 @@ export const resolverDenuncia = (
   api<{ decision: string; denunciasFechadas: number }>(`/admin/reports/${reportId}/resolve`, {
     method: "POST",
     body: { decision, reason },
+    token,
+  });
+
+/* ---------- cupons ---------- */
+
+export interface CupomAdmin {
+  id: string;
+  codigo: string;
+  descricao: string;
+  /** `null` quando o cupom só rastreia origem, sem mexer em preço. */
+  desconto: { tipo: "percentual" | "valor" | "meses_gratis"; valor: number; rotulo: string } | null;
+  /** `null` quando é campanha nossa, sem ninguém para pagar. */
+  parceiro: { nome: string; contato: string; comissaoPercentual: number } | null;
+  produtos: string[];
+  ciclos: string[];
+  limiteDeUsos: number | null;
+  usos: number;
+  validoAte: string | null;
+  revogadoEm: string | null;
+  criadoEm: string;
+  relatorio: {
+    /** Quantas pessoas CHEGARAM por ele, pagantes ou não. */
+    entraram: number;
+    pagaram: number;
+    /** Entraram e ainda não pagaram. Diz se o cupom converte ou só atrai. */
+    gratis: number;
+    receitaCentavos: number;
+    receitaFormatada: string;
+    comissaoCentavos: number;
+    comissaoFormatada: string;
+    /** O que sobra depois de pagar o parceiro. */
+    liquidoCentavos: number;
+    liquidoFormatado: string;
+  };
+}
+
+export interface UsoDeCupom {
+  id: string;
+  user: string;
+  nome: string;
+  email: string;
+  plano: string;
+  origem: "cadastro" | "checkout";
+  entrouEm: string;
+  primeiraCompraEm: string | null;
+  totalPagoCentavos: number;
+  comissaoCentavos: number;
+}
+
+export const buscarCupons = (token: string, todos = false) =>
+  api<CupomAdmin[]>(`/admin/cupons${todos ? "?todos=1" : ""}`, { token });
+
+export const buscarCupom = (token: string, codigo: string) =>
+  api<CupomAdmin & { usos: UsoDeCupom[] }>(`/admin/cupons/${encodeURIComponent(codigo)}`, { token });
+
+export interface NovoCupom {
+  codigo?: string;
+  descricao?: string;
+  desconto?: { tipo: "percentual" | "valor" | "meses_gratis"; valor: number } | null;
+  parceiro?: { nome: string; contato?: string; comissaoPercentual: number } | null;
+  limiteDeUsos?: number | null;
+  validoAte?: string | null;
+}
+
+export const criarCupom = (token: string, dados: NovoCupom) =>
+  api<CupomAdmin>("/admin/cupons", { method: "POST", body: dados, token });
+
+export const revogarCupom = (token: string, codigo: string, motivo: string) =>
+  api<CupomAdmin>(`/admin/cupons/${encodeURIComponent(codigo)}/revogar`, {
+    method: "POST",
+    body: { motivo },
+    token,
+  });
+
+export const reativarCupom = (token: string, codigo: string, motivo: string) =>
+  api<CupomAdmin>(`/admin/cupons/${encodeURIComponent(codigo)}/reativar`, {
+    method: "POST",
+    body: { motivo },
     token,
   });

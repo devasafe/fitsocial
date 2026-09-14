@@ -1,0 +1,586 @@
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  buscarCupons,
+  buscarCupom,
+  criarCupom,
+  revogarCupom,
+  reativarCupom,
+  type CupomAdmin,
+  type UsoDeCupom,
+} from "../api";
+import { Dialogo } from "../components/Dialogo";
+import { useCamada } from "../hooks/useCamada";
+import { useEhCelular } from "../hooks/useEhCelular";
+
+// O painel de cupons.
+//
+// A tela responde a UMA pergunta acima de todas: quanto cada parceria trouxe, e
+// quanto dela é lucro depois de pagar o parceiro. Por isso a linha da lista
+// mostra `entraram / pagaram` juntos — um número sozinho não diz nada. Cem
+// pessoas entrando e ninguém pagando é um cupom que atrai e não converte, e
+// isso é uma informação, não um erro.
+
+const nf = new Intl.NumberFormat("pt-BR");
+const dataCurta = (iso: string) =>
+  new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+const TIPOS = [
+  { v: "percentual", r: "% de desconto", dica: "20 = 20% off" },
+  { v: "valor", r: "R$ de desconto", dica: "10 = R$ 10,00 off" },
+  { v: "meses_gratis", r: "meses grátis", dica: "3 = 3 meses de Pro" },
+] as const;
+
+export function Cupons({ token }: { token: string }) {
+  const [lista, setLista] = useState<CupomAdmin[] | null>(null);
+  const [mostrarRevogados, setMostrarRevogados] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [aberto, setAberto] = useState<(CupomAdmin & { usos: UsoDeCupom[] }) | null>(null);
+  const [acao, setAcao] = useState<{ cupom: CupomAdmin; revogar: boolean } | null>(null);
+  const ehCelular = useEhCelular();
+
+  useCamada(criando, () => setCriando(false));
+  useCamada(aberto !== null, () => setAberto(null));
+  useCamada(acao !== null, () => setAcao(null));
+
+  const carregar = useCallback(async () => {
+    setErro(null);
+    try {
+      const r = await buscarCupons(token, mostrarRevogados);
+      setLista(r.data);
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }, [token, mostrarRevogados]);
+
+  useEffect(() => {
+    setLista(null);
+    void carregar();
+  }, [carregar]);
+
+  async function abrir(codigo: string) {
+    try {
+      const r = await buscarCupom(token, codigo);
+      setAberto(r.data);
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+  }
+
+  return (
+    <>
+      <div className="cabecalho">
+        <div>
+          <h1>Cupons</h1>
+          <p className="aviso">
+            Desconto mexe no preço; parceria marca de onde a pessoa veio. Um cupom pode ser os
+            dois.
+          </p>
+        </div>
+        <button onClick={() => setCriando(true)}>Novo cupom</button>
+      </div>
+
+      <div className="filtros">
+        <button
+          className={mostrarRevogados ? "" : "ativo"}
+          onClick={() => setMostrarRevogados(false)}
+        >
+          Ativos
+        </button>
+        <button
+          className={mostrarRevogados ? "ativo" : ""}
+          onClick={() => setMostrarRevogados(true)}
+        >
+          Todos
+        </button>
+      </div>
+
+      {erro && <p className="erro">{erro}</p>}
+
+      <div className="painel">
+        {lista === null ? (
+          <p className="vazio">Carregando…</p>
+        ) : lista.length === 0 ? (
+          <p className="vazio">
+            Nenhum cupom ainda. Crie um para fechar parceria ou fazer uma campanha.
+          </p>
+        ) : ehCelular ? (
+          <ul className="lista-cartoes">
+            {lista.map((c) => (
+              <li key={c.id}>
+                <button className="cartao-item" onClick={() => void abrir(c.codigo)}>
+                  <span className="cartao-titulo">
+                    <b>{c.codigo}</b>
+                    {c.revogadoEm && <span className="aviso">revogado</span>}
+                  </span>
+                  <span className="cartao-sub">
+                    {c.parceiro ? c.parceiro.nome : c.descricao || "campanha"}
+                  </span>
+                  <span className="cartao-meta">
+                    {c.desconto && <span>{c.desconto.rotulo}</span>}
+                    <span className="num">
+                      {nf.format(c.relatorio.entraram)} entraram · {nf.format(c.relatorio.pagaram)}{" "}
+                      pagando
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="rolagem-tabela">
+            <table>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Desconto</th>
+                  <th>Parceiro</th>
+                  <th className="dir">Entraram</th>
+                  <th className="dir">Pagando</th>
+                  <th className="dir">Receita</th>
+                  <th className="dir">Comissão</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((c) => (
+                  <tr key={c.id} style={c.revogadoEm ? { opacity: 0.5 } : undefined}>
+                    <td>
+                      <b>{c.codigo}</b>
+                      {c.revogadoEm && (
+                        <span className="aviso" style={{ marginLeft: 6 }}>
+                          revogado
+                        </span>
+                      )}
+                      {c.descricao && (
+                        <div className="aviso" style={{ color: "var(--texto-3)" }}>
+                          {c.descricao}
+                        </div>
+                      )}
+                    </td>
+                    <td>{c.desconto ? c.desconto.rotulo : "—"}</td>
+                    <td>
+                      {c.parceiro ? (
+                        <>
+                          {c.parceiro.nome}
+                          <span className="aviso" style={{ marginLeft: 6 }}>
+                            {c.parceiro.comissaoPercentual}%
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="dir num">{nf.format(c.relatorio.entraram)}</td>
+                    <td className="dir num">{nf.format(c.relatorio.pagaram)}</td>
+                    <td className="dir num">{c.relatorio.receitaFormatada}</td>
+                    <td className="dir num" style={{ color: "var(--texto-2)" }}>
+                      {c.relatorio.comissaoFormatada}
+                    </td>
+                    <td className="dir">
+                      <button className="discreto" onClick={() => void abrir(c.codigo)}>
+                        Abrir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {criando && (
+        <FormularioDeCupom
+          token={token}
+          aoFechar={() => setCriando(false)}
+          aoCriar={() => {
+            setCriando(false);
+            void carregar();
+          }}
+        />
+      )}
+
+      {aberto && (
+        <Detalhe
+          cupom={aberto}
+          aoFechar={() => setAberto(null)}
+          aoPedirAcao={(revogar) => {
+            setAcao({ cupom: aberto, revogar });
+            setAberto(null);
+          }}
+        />
+      )}
+
+      {acao && (
+        <Dialogo
+          titulo={
+            acao.revogar ? `Revogar ${acao.cupom.codigo}?` : `Reativar ${acao.cupom.codigo}?`
+          }
+          descricao={
+            acao.revogar
+              ? "Ninguém mais consegue usar esse código. Quem já entrou por ele continua contando no relatório do parceiro — o cupom não é apagado."
+              : "O código volta a valer para usos novos."
+          }
+          rotuloAcao={acao.revogar ? "Revogar" : "Reativar"}
+          perigoso={acao.revogar}
+          aoConfirmar={async (motivo) => {
+            if (acao.revogar) await revogarCupom(token, acao.cupom.codigo, motivo);
+            else await reativarCupom(token, acao.cupom.codigo, motivo);
+            void carregar();
+          }}
+          aoFechar={() => setAcao(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ criar
+
+function FormularioDeCupom({
+  token,
+  aoFechar,
+  aoCriar,
+}: {
+  token: string;
+  aoFechar: () => void;
+  aoCriar: () => void;
+}) {
+  const [codigo, setCodigo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [temDesconto, setTemDesconto] = useState(true);
+  const [tipo, setTipo] = useState<"percentual" | "valor" | "meses_gratis">("percentual");
+  const [valor, setValor] = useState("");
+  const [temParceiro, setTemParceiro] = useState(false);
+  const [nome, setNome] = useState("");
+  const [contato, setContato] = useState("");
+  const [comissao, setComissao] = useState("");
+  const [limite, setLimite] = useState("");
+  const [validade, setValidade] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault();
+    setEnviando(true);
+    setErro(null);
+    try {
+      await criarCupom(token, {
+        codigo: codigo.trim() || undefined,
+        descricao: descricao.trim() || undefined,
+        desconto: temDesconto
+          ? {
+              tipo,
+              // Reais viram CENTAVOS aqui, na borda. Dinheiro fracionário
+              // atravessando a API é como um centavo vira três.
+              valor: tipo === "valor" ? Math.round(Number(valor) * 100) : Number(valor),
+            }
+          : null,
+        parceiro: temParceiro
+          ? {
+              nome: nome.trim(),
+              contato: contato.trim() || undefined,
+              comissaoPercentual: Number(comissao) || 0,
+            }
+          : null,
+        limiteDeUsos: limite ? Number(limite) : null,
+        validoAte: validade || null,
+      });
+      aoCriar();
+    } catch (err) {
+      setErro((err as Error).message);
+      setEnviando(false);
+    }
+  }
+
+  const dica = TIPOS.find((t) => t.v === tipo)?.dica ?? "";
+
+  return (
+    <div
+      className="cortina"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Novo cupom"
+      // Só no alvo exato: um arrasto que termine sobre a cortina não pode
+      // fechar um formulário meio preenchido.
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !enviando) aoFechar();
+      }}
+    >
+      <form className="dialogo" onSubmit={enviar}>
+        <h2>Novo cupom</h2>
+
+        <label>
+          Código
+          <input
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+            placeholder="deixe vazio para sortear"
+            maxLength={40}
+          />
+        </label>
+        <p className="aviso">
+          O que a pessoa digita. Vazio = o sistema sorteia um código sem letras que se confundem.
+        </p>
+
+        <label>
+          Para que é (só você vê)
+          <input
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            placeholder="Parceria com a academia X"
+            maxLength={200}
+          />
+        </label>
+
+        <fieldset style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+          <legend style={{ padding: "0 6px" }}>
+            <label style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={temDesconto}
+                onChange={(e) => setTemDesconto(e.target.checked)}
+              />
+              Dá desconto
+            </label>
+          </legend>
+          {temDesconto && (
+            <>
+              <div className="filtros">
+                {TIPOS.map((t) => (
+                  <button
+                    key={t.v}
+                    type="button"
+                    className={tipo === t.v ? "ativo" : ""}
+                    onClick={() => setTipo(t.v)}
+                  >
+                    {t.r}
+                  </button>
+                ))}
+              </div>
+              <label>
+                Valor
+                <input
+                  type="number"
+                  min={1}
+                  step={tipo === "valor" ? "0.01" : "1"}
+                  value={valor}
+                  onChange={(e) => setValor(e.target.value)}
+                  placeholder={dica}
+                  required={temDesconto}
+                />
+              </label>
+              <p className="aviso">
+                {tipo === "meses_gratis"
+                  ? "Meses grátis não passam pelo gateway: a pessoa já entra com o Pro e a cobrança só começa depois."
+                  : "O desconto vale enquanto a assinatura durar."}
+              </p>
+            </>
+          )}
+        </fieldset>
+
+        <fieldset style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+          <legend style={{ padding: "0 6px" }}>
+            <label style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={temParceiro}
+                onChange={(e) => setTemParceiro(e.target.checked)}
+              />
+              É de parceria
+            </label>
+          </legend>
+          {temParceiro && (
+            <>
+              <label>
+                Nome do parceiro
+                <input
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  required={temParceiro}
+                  maxLength={120}
+                />
+              </label>
+              <label>
+                Contato
+                <input
+                  value={contato}
+                  onChange={(e) => setContato(e.target.value)}
+                  placeholder="@instagram, WhatsApp, e-mail"
+                  maxLength={200}
+                />
+              </label>
+              <label>
+                Comissão (%)
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={comissao}
+                  onChange={(e) => setComissao(e.target.value)}
+                  placeholder="30"
+                />
+              </label>
+              <p className="aviso">
+                Percentual de cada pagamento que fica para o parceiro. Gravado no momento da
+                venda: mudar depois não reescreve o que já foi vendido.
+              </p>
+            </>
+          )}
+        </fieldset>
+
+        <label>
+          Limite de usos
+          <input
+            type="number"
+            min={1}
+            value={limite}
+            onChange={(e) => setLimite(e.target.value)}
+            placeholder="sem limite"
+          />
+        </label>
+
+        <label>
+          Válido até
+          <input type="date" value={validade} onChange={(e) => setValidade(e.target.value)} />
+        </label>
+
+        {erro && <p className="erro">{erro}</p>}
+
+        <div className="dialogo-acoes">
+          <button type="button" className="discreto" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button type="submit" className="acao" disabled={enviando}>
+            {enviando ? "Criando…" : "Criar cupom"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------- detalhe
+
+function Detalhe({
+  cupom,
+  aoFechar,
+  aoPedirAcao,
+}: {
+  cupom: CupomAdmin & { usos: UsoDeCupom[] };
+  aoFechar: () => void;
+  aoPedirAcao: (revogar: boolean) => void;
+}) {
+  const r = cupom.relatorio;
+  return (
+    <div
+      className="cortina"
+      role="dialog"
+      aria-modal="true"
+      aria-label={cupom.codigo}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) aoFechar();
+      }}
+    >
+      <div className="dialogo">
+        <h2>{cupom.codigo}</h2>
+        <p style={{ color: "var(--texto-2)", margin: 0 }}>
+          {cupom.descricao || "sem descrição"}
+          {cupom.revogadoEm && ` · revogado em ${dataCurta(cupom.revogadoEm)}`}
+        </p>
+
+        {cupom.parceiro && (
+          <p className="aviso" style={{ marginTop: 4 }}>
+            {cupom.parceiro.nome}
+            {cupom.parceiro.contato && ` · ${cupom.parceiro.contato}`} ·{" "}
+            {cupom.parceiro.comissaoPercentual}% de comissão
+          </p>
+        )}
+
+        <div className="stats-3" style={{ marginTop: 12 }}>
+          <div>
+            <div className="num" style={{ fontSize: 22 }}>
+              {nf.format(r.entraram)}
+            </div>
+            <div className="aviso">entraram</div>
+          </div>
+          <div>
+            <div className="num" style={{ fontSize: 22 }}>
+              {nf.format(r.pagaram)}
+            </div>
+            <div className="aviso">pagando</div>
+          </div>
+          <div>
+            <div className="num" style={{ fontSize: 22 }}>
+              {nf.format(r.gratis)}
+            </div>
+            <div className="aviso">ainda no grátis</div>
+          </div>
+        </div>
+
+        <div className="stats-3" style={{ marginTop: 8 }}>
+          <div>
+            <div className="num" style={{ fontSize: 18 }}>
+              {r.receitaFormatada}
+            </div>
+            <div className="aviso">receita</div>
+          </div>
+          <div>
+            <div className="num" style={{ fontSize: 18, color: "var(--texto-2)" }}>
+              {r.comissaoFormatada}
+            </div>
+            <div className="aviso">comissão do parceiro</div>
+          </div>
+          <div>
+            <div className="num" style={{ fontSize: 18, color: "var(--lime)" }}>
+              {r.liquidoFormatado}
+            </div>
+            <div className="aviso">sobra para você</div>
+          </div>
+        </div>
+
+        {cupom.usos.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <h3 style={{ fontSize: 13, marginBottom: 6 }}>Quem entrou</h3>
+            <div className="rolagem-tabela" style={{ maxHeight: 240, overflowY: "auto" }}>
+              <table>
+                <tbody>
+                  {cupom.usos.map((u) => (
+                    <tr key={u.id}>
+                      <td>
+                        {u.nome}
+                        <div className="aviso" style={{ color: "var(--texto-3)" }}>
+                          {u.email}
+                        </div>
+                      </td>
+                      <td style={{ color: u.primeiraCompraEm ? "var(--lime)" : "var(--texto-3)" }}>
+                        {u.primeiraCompraEm ? "pagando" : "grátis"}
+                      </td>
+                      <td className="dir num" style={{ color: "var(--texto-2)" }}>
+                        {dataCurta(u.entrouEm)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="dialogo-acoes">
+          <button className="discreto" onClick={aoFechar}>
+            Fechar
+          </button>
+          {cupom.revogadoEm ? (
+            <button className="acao" onClick={() => aoPedirAcao(false)}>Reativar</button>
+          ) : (
+            <button className="acao perigosa" onClick={() => aoPedirAcao(true)}>
+              Revogar
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

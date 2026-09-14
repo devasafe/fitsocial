@@ -26,6 +26,15 @@ const CAMPOS_PERMITIDOS = new Set([
   "assinaturaStatus",
   "produtoAssinado",
   "vinculosPatrocinados",
+  // Cupom. O diff de criação e de revogação passa por aqui, e sem estes nomes
+  // a auditoria de um cupom de parceria gravaria `null` — justo o registro que
+  // responde "com que comissão esse cupom foi criado?" no dia em que o
+  // parceiro discordar do valor.
+  "codigo",
+  "desconto",
+  "parceiro",
+  "comissao",
+  "revogadoEm",
 ]);
 
 function filtrar(obj: Record<string, unknown> | null | undefined) {
@@ -40,7 +49,7 @@ function filtrar(obj: Record<string, unknown> | null | undefined) {
 export interface AuditInput {
   actor: UserDoc | null;
   action: string;
-  targetKind: "user" | "post" | "comment" | "aiKey" | "system";
+  targetKind: "user" | "post" | "comment" | "aiKey" | "cupom" | "system";
   targetId?: mongoose.Types.ObjectId | string | null;
   targetLabel?: string;
   reason?: string;
