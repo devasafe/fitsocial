@@ -186,7 +186,12 @@ export function ehPremiumLegado(user: UserDoc): boolean {
     !user.assinaturaStatus &&
     !user.cortesiaAte &&
     !user.produtoAssinado &&
-    (user.vinculosPatrocinados ?? 0) === 0
+    (user.vinculosPatrocinados ?? 0) === 0 &&
+    // A capacidade profissional é a sexta fonte, e entrou nesta lista junto
+    // com o ramo 5 de `calcularPlan`. Toda fonte COM PRAZO tem de estar aqui:
+    // "legado" quer dizer premium que nenhuma outra fonte explica.
+    !user.pro?.coach?.ativo &&
+    !user.pro?.nutri?.ativo
   );
 }
 
@@ -304,65 +309,39 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
   //
   // A pergunta certa é: **por que esta conta é paga SEM contar o patrocínio?**
   if (!user.premiumSource) {
-    // O plano que esta conta teria SEM a assinatura e SEM o patrocínio — ou
-    // seja, só pelo que já estava no documento antes de qualquer um dos dois.
-    // É essa a pergunta que separa "legado de verdade" de "está paga agora por
-    // um motivo que tem prazo próprio".
-    const soPeloDocumento = calcularPlan({
-      ...(user.toObject() as object),
-      vinculosPatrocinados: 0,
-      assinaturaStatus: null,
-      assinaturaAte: null,
-      produtoAssinado: null,
-      // A capacidade também é zerada: ela tem `validoAte` próprio e o admin
-      // pode revogá-la, então é fonte COM PRAZO, e esta variável só pode
-      // significar "o que o documento sustenta sem nenhuma fonte com prazo".
-      pro: undefined,
-    } as UserDoc);
-
+    // POR QUE esta conta é paga, perguntado na ordem de `calcularPlan`.
+    //
+    // A versão anterior montava um documento sintético zerando as fontes "com
+    // prazo" e perguntava o que sobrava. A ideia era boa e o jeito era frágil:
+    // a lista de campos a zerar tinha de ser mantida à mão, e ela ficou
+    // desatualizada TRÊS VEZES — na assinatura, na capacidade profissional e
+    // na cortesia de cupom. O sintoma era sempre o mesmo e sempre caro: a
+    // conta levava o carimbo "purchase", que não tem prazo, e ficava paga para
+    // sempre depois que a fonte de verdade acabasse.
+    //
+    // Agora a pergunta é feita por `ehPremiumLegado`, que é a mesma função que
+    // o ramo 7 usa. Um lugar só para manter: se alguém acrescentar uma fonte
+    // nova e esquecer dela ali, o ramo 7 quebra junto e o teste acusa.
     if (isFounder(user.email)) {
       mudanca.premiumSource = "founder";
-    } else if (user.assinaturaStatus) {
-      // NÃO carimba. A assinatura já tem ramo próprio, com `assinaturaAte`
-      // para expirar. Carimbar "purchase" aqui criaria uma SEGUNDA fonte, essa
-      // sem prazo nenhum — e a conta ficaria paga para sempre depois de o
-      // estorno ou o vencimento derrubarem a assinatura.
-      //
-      // ESTA CLÁUSULA VEM ANTES DA DE LEGADO, e a ordem é o conserto.
-      //
-      // `soPeloDocumento` zera os campos da assinatura, mas não zera o `tier`
-      // que a compra JÁ GRAVOU — e não pode zerar, senão o legado de verdade
-      // deixaria de ser reconhecido. O efeito era que toda conta paga virava
-      // indistinguível de um premium legado no request seguinte à compra,
-      // levava o carimbo "purchase", e daí o ramo 4b de `calcularPlan` a
-      // sustentava para sempre: `premiumUntil` é nulo numa conta de
-      // assinatura, e prazo nulo quer dizer "sem prazo".
-      //
-      // Resultado com a ordem antiga: estornar o pagamento derrubava a
-      // assinatura e a capacidade, e a pessoa continuava Pro. Testado em
-      // "quem comprou e estornou volta a ser free".
-    } else if (temCapacidade(user, "coach") || temCapacidade(user, "nutri")) {
-      // Origem PRÓPRIA, e nunca "purchase". É a mesma escolha do patrocínio,
-      // logo abaixo, e pelo mesmo motivo.
-      //
-      // "purchase" é uma fonte sem prazo: carimbá-la colaria o Pro na conta
-      // para sempre, e o botão "tirar coach" deixaria de surtir efeito. Mas
-      // não carimbar NADA seria igualmente ruim — a conta ficaria com
-      // `tier: "premium"` e nenhuma origem, que é a definição exata de premium
-      // legado, e o ramo 7 a sustentaria para sempre do mesmo jeito.
-      //
-      // O carimbo é o que permite a limpeza mais abaixo apagá-lo no dia em que
-      // a capacidade acabar.
-      mudanca.premiumSource = "profissional";
-    } else if (soPeloDocumento !== "free") {
-      // Se sustenta sozinha: é o legado, e vira compra de uma vez por todas.
+    } else if (ehPremiumLegado(user)) {
+      // Premium que nenhuma outra fonte explica: é o legado, e vira compra de
+      // uma vez por todas.
       mudanca.premiumSource = "purchase";
+    } else if (user.assinaturaStatus || user.cortesiaAte) {
+      // NÃO carimba: as duas têm prazo próprio (`assinaturaAte`, `cortesiaAte`)
+      // e o motor as derruba sozinho no vencimento. Um carimbo aqui seria uma
+      // segunda fonte, essa sem prazo nenhum.
+    } else if (temCapacidade(user, "coach") || temCapacidade(user, "nutri")) {
+      // Origem própria, para a limpeza abaixo poder apagá-la quando o painel
+      // for revogado ou a capacidade vencer.
+      mudanca.premiumSource = "profissional";
     } else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0) {
-      // Só é paga PORQUE alguém a banca. Origem própria, para não ser
-      // confundida com legado no dia em que o vínculo acabar.
+      // Só é paga PORQUE alguém a banca. Origem própria pelo mesmo motivo.
       mudanca.premiumSource = "patrocinio";
     }
   }
+
 
   // Carimbar origem também é mudança: sem contar aqui, o atalho de 12h abaixo
   // engoliria a escrita e a conta ficaria sem origem — foi assim que um

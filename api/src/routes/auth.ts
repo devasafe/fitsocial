@@ -11,6 +11,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { usernameSchema, normalizeUsername } from "../utils/username.js";
 import { isFounder, founderMessage } from "../services/founders.js";
 import { recomputeTier } from "../services/entitlement.js";
+import { registrarOrigem } from "../services/cupons.js";
 import { assertAccountUsable } from "../services/moderation.js";
 
 export const authRouter = Router();
@@ -26,6 +27,15 @@ const registerSchema = z.object({
   email: z.string().email("E-mail inválido"),
   password: z.string().min(8, "A senha precisa ter ao menos 8 caracteres"),
   username: z.string().optional(),
+  /**
+   * O cupom pelo qual a pessoa chegou. Opcional, e NUNCA barra o cadastro.
+   *
+   * Sem teto de tamanho apertado nem formato exigido aqui de propósito: se o
+   * código estiver errado, o cadastro segue e o cupom é ignorado. Recusar a
+   * conta por causa de uma letra trocada num campo opcional seria perder a
+   * pessoa e o parceiro de uma vez.
+   */
+  cupom: z.string().max(40).optional(),
 });
 
 const loginSchema = z.object({
@@ -36,7 +46,7 @@ const loginSchema = z.object({
 authRouter.post(
   "/register",
   asyncHandler(async (req, res) => {
-    const { name, email, password } = registerSchema.parse(req.body);
+    const { name, email, password, cupom } = registerSchema.parse(req.body);
 
     const exists = await User.findOne({ email });
     if (exists) {
@@ -61,6 +71,11 @@ authRouter.post(
       passwordHash: await hashPassword(password),
       ...(username ? { username } : {}),
     });
+
+    // ANTES do recompute: um cupom de meses grátis grava `cortesiaAte`, e o
+    // motor precisa ver isso para a pessoa já entrar com o Pro em vez de
+    // receber na segunda requisição.
+    if (cupom) await registrarOrigem(user, cupom);
 
     // O motor de direitos decide o plano, e ser fundador é um dos ramos dele.
     // Antes havia uma segunda escrita em `tier` aqui (`ensureFounderPremium`),

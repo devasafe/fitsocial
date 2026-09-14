@@ -27,6 +27,7 @@ import {
   iniciarAssinatura,
   processarWebhook,
 } from "../services/pagamentos/assinaturas.js";
+import { validarCupom } from "../services/cupons.js";
 
 export const billingRouter = Router();
 
@@ -181,7 +182,48 @@ billingRouter.get("/produtos", (_req, res) => {
 const checkoutSchema = z.object({
   produto: z.enum(PRODUTOS),
   ciclo: z.enum(CICLOS),
+  cupom: z.string().max(40).optional(),
 });
+
+/**
+ * O cupom vale? Consulta pura, para a tela responder enquanto se digita.
+ *
+ * Existe separada do checkout porque a pessoa precisa VER o desconto antes de
+ * ser levada para o gateway — descobrir o preço final só na página de
+ * pagamento é o tipo de surpresa que faz desistir.
+ *
+ * Autenticada porque a resposta depende de quem pergunta: um cupom já usado
+ * por esta pessoa é recusado para ela e válido para as outras.
+ */
+billingRouter.get(
+  "/cupom/:codigo",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 20, name: "validar-cupom" }),
+  asyncHandler(async (req, res) => {
+    const { produto, ciclo } = z
+      .object({ produto: z.enum(PRODUTOS).optional(), ciclo: z.enum(CICLOS).optional() })
+      .parse(req.query);
+
+    const v = await validarCupom(String(req.params.codigo), {
+      produto,
+      ciclo,
+      userId: req.user!._id,
+    });
+
+    res.json({
+      data: {
+        codigo: v.cupom.codigo,
+        descontoCentavos: v.descontoCentavos,
+        descontoFormatado: v.descontoCentavos > 0 ? emReais(v.descontoCentavos) : null,
+        mesesGratis: v.mesesGratis,
+        // Nunca o nome do parceiro nem a comissão dele: é combinação
+        // comercial, e não é da conta de quem está comprando.
+        temParceiro: Boolean(v.cupom.parceiro),
+      },
+      meta: {},
+    });
+  })
+);
 
 /**
  * Abre o pagamento e devolve para onde mandar a pessoa.
@@ -194,8 +236,13 @@ billingRouter.post(
   requireAuth,
   rateLimit({ windowMs: 60_000, max: 5, name: "checkout" }),
   asyncHandler(async (req, res) => {
-    const { produto, ciclo } = checkoutSchema.parse(req.body);
-    const { assinatura, urlDeCheckout } = await iniciarAssinatura(req.user!, produto, ciclo);
+    const { produto, ciclo, cupom } = checkoutSchema.parse(req.body);
+    const { assinatura, urlDeCheckout } = await iniciarAssinatura(
+      req.user!,
+      produto,
+      ciclo,
+      cupom
+    );
 
     res.status(201).json({
       data: {
@@ -203,6 +250,8 @@ billingRouter.post(
         produto,
         ciclo,
         valorCentavos: assinatura.precoCentavos,
+        descontoCentavos: assinatura.descontoCentavos ?? 0,
+        cupom: assinatura.cupom ?? null,
         urlDeCheckout,
       },
       meta: {},

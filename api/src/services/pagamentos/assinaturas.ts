@@ -9,6 +9,7 @@ import { recomputeTier } from "../entitlement.js";
 import { recontarAlunosDe } from "../patrocinio.js";
 import { CATALOGO, diasDoCiclo, emReais, type Ciclo, type Produto } from "./catalogo.js";
 import { getProvedorDePagamento, provedorPeloNome } from "./index.js";
+import { creditarParceiro, validarCupom } from "../cupons.js";
 import type { EventoNormalizado } from "./provider.js";
 
 // O que acontece com os direitos quando o dinheiro se move.
@@ -34,7 +35,8 @@ function emDias(dias: number, a = new Date()): Date {
 export async function iniciarAssinatura(
   user: UserDoc,
   produto: Produto,
-  ciclo: Ciclo
+  ciclo: Ciclo,
+  codigoDeCupom?: string | null
 ): Promise<{ assinatura: AssinaturaDoc; urlDeCheckout: string }> {
   const item = CATALOGO[produto];
 
@@ -43,6 +45,32 @@ export async function iniciarAssinatura(
     throw new HttpError(409, "Você já tem uma assinatura ativa. Cancele antes de trocar de plano.");
   }
 
+  // O cupom é revalidado AQUI, no servidor, mesmo que a tela já o tenha
+  // validado. Confiar na tela seria deixar o preço na mão de quem abre o
+  // console do navegador.
+  //
+  // Quando a pessoa não digita nada, vale o cupom pelo qual ela CHEGOU: é o que
+  // faz a parceria render sem exigir que ela lembre do código na hora de pagar.
+  let descontoCentavos = 0;
+  let cupom: string | null = null;
+  const pedido = codigoDeCupom || user.cupom;
+  if (pedido) {
+    try {
+      const v = await validarCupom(pedido, { produto, ciclo, userId: user._id });
+      descontoCentavos = v.descontoCentavos;
+      cupom = v.cupom.codigo;
+    } catch (e) {
+      // Cupom digitado à mão que não vale: o erro SOBE, senão a pessoa veria o
+      // preço cheio na tela seguinte sem entender por quê.
+      //
+      // Mas o cupom de origem que deixou de valer (venceu, esgotou) não pode
+      // impedir a compra: ela segue no preço cheio, que é o desfecho certo.
+      if (codigoDeCupom) throw e;
+    }
+  }
+
+  const precoCentavos = Math.max(100, item.precoCentavos[ciclo] - descontoCentavos);
+
   const provedor = getProvedorDePagamento();
   const assinatura = await Assinatura.create({
     user: user._id,
@@ -50,7 +78,9 @@ export async function iniciarAssinatura(
     ciclo,
     status: "pendente",
     provedor: provedor.nome,
-    precoCentavos: item.precoCentavos[ciclo],
+    precoCentavos,
+    descontoCentavos,
+    cupom,
   });
 
   try {
@@ -58,8 +88,8 @@ export async function iniciarAssinatura(
       referencia: assinatura._id.toString(),
       produto,
       ciclo,
-      valorCentavos: item.precoCentavos[ciclo],
-      descricao: `${item.nome} — ${ciclo} (${emReais(item.precoCentavos[ciclo])})`,
+      valorCentavos: precoCentavos,
+      descricao: `${item.nome} — ${ciclo} (${emReais(precoCentavos)})`,
       cliente: { id: user._id.toString(), nome: user.name, email: user.email },
     });
 
@@ -511,7 +541,23 @@ async function registrarCobranca(
     metodo: e.metodo,
     pagoEm: e.pagoEm,
     cupom: assinatura.cupom,
+    descontoCentavos: assinatura.descontoCentavos ?? 0,
   };
+
+  // A comissão do parceiro só é creditada quando o dinheiro ENTRA.
+  //
+  // Nem no checkout (que pode ser abandonado) nem numa cobrança que falhou ou
+  // foi estornada — pagar comissão sobre venda que não aconteceu é dinheiro
+  // saindo por engano, e reverter isso depois é conversa difícil com quem já
+  // recebeu.
+  //
+  // O valor é gravado AQUI, com a taxa vigente agora. Se a combinação com o
+  // parceiro mudar amanhã, esta linha continua valendo o que valia.
+  if (status === "paga" && assinatura.cupom) {
+    const valor = (e.valorCentavos ?? assinatura.precoCentavos) as number;
+    const { comissaoCentavos } = await creditarParceiro(assinatura.cupom, assinatura.user, valor);
+    campos.parceiroComissaoCentavos = comissaoCentavos;
+  }
 
   // `provedorCobrancaId` só é gravado quando EXISTE.
   //

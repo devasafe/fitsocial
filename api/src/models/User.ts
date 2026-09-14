@@ -183,6 +183,20 @@ const userSchema = new Schema(
     cortesiaAte: { type: Date, default: null },
 
     /**
+     * O cupom pelo qual esta pessoa CHEGOU. Fica na conta para sempre.
+     *
+     * Desnormalizado do `CupomUso` de propósito: a ficha do painel e o
+     * checkout leem isto em toda requisição, e a alternativa seria uma consulta
+     * a mais por linha de lista. A verdade continua sendo a coleção de usos.
+     *
+     * É o campo que sustenta a divisão de lucro com quem trouxe — sem ele, só
+     * daria para saber quem PAGOU com o cupom, e nunca quem veio por ele e
+     * ficou no grátis.
+     */
+    cupom: { type: String, default: null, uppercase: true, trim: true },
+    cupomEm: { type: Date, default: null },
+
+    /**
      * Quantos profissionais bancam o Pro desta pessoa agora.
      *
      * CONTADOR, e não booleano: alguém pode ter treinador E nutricionista, e
