@@ -260,6 +260,19 @@ export class AsaasProvider implements IProvedorDePagamento {
     }
   }
 
+  /** A assinatura ativa deste cliente, se houver. Ver o contrato. */
+  async assinaturaDoCliente(provedorClienteId: string): Promise<string | null> {
+    try {
+      const r = (await this.chamar(
+        `/subscriptions?customer=${encodeURIComponent(provedorClienteId)}&status=ACTIVE&limit=1`
+      )) as { data?: { id?: unknown }[] };
+      const id = r.data?.[0]?.id;
+      return typeof id === "string" && id ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
   async consultarAssinatura(
     provedorAssinaturaId: string
   ): Promise<{ status: string; validoAte: Date | null } | null> {

@@ -118,4 +118,16 @@ export interface IProvedorDePagamento {
   resolverOrigem?(
     provedorAssinaturaId: string
   ): Promise<{ referencia: string | null; provedorCheckoutId: string | null } | null>;
+
+  /**
+   * Qual assinatura deste cliente está de pé no gateway.
+   *
+   * O evento de checkout pago diz quem é o cliente, mas não qual assinatura
+   * nasceu dali — e é ela que o botão de cancelar precisa chamar. Sem esta
+   * consulta, quem assinasse não conseguiria cancelar até a primeira fatura
+   * ser capturada, o que no Asaas pode ser só no dia seguinte.
+   *
+   * Opcional, como `resolverOrigem`.
+   */
+  assinaturaDoCliente?(provedorClienteId: string): Promise<string | null>;
 }

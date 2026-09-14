@@ -287,6 +287,33 @@ export async function aplicarEvento(
   switch (e.tipo) {
     case "pagamento.aprovado":
     case "assinatura.renovada": {
+      // A captura da PRIMEIRA fatura confirma o ciclo que o checkout já
+      // concedeu — ela não compra outro.
+      //
+      // Sem esta guarda, quem assinasse ganharia dois ciclos: um do
+      // `CHECKOUT_PAID` e outro quando o Asaas capturasse a fatura no dia
+      // seguinte. Trinta dias pagos virariam sessenta, em toda venda.
+      //
+      // "Primeira" é definido pelo livro-razão, e não por uma data: se ainda
+      // não existe cobrança PAGA desta assinatura, o dinheiro que está
+      // entrando agora é o do ciclo corrente. Da segunda em diante é
+      // renovação, e aí soma.
+      const jaPagouAntes = await Cobranca.exists({
+        assinatura: assinatura._id,
+        status: "paga",
+      });
+      const cicloCorrenteJaVale =
+        assinatura.status === "ativa" && assinatura.validoAte && assinatura.validoAte > new Date();
+
+      if (!jaPagouAntes && cicloCorrenteJaVale) {
+        await registrarCobranca(assinatura, e, "paga");
+        // O acesso é reaplicado com o MESMO prazo: se o checkout tivesse
+        // deixado a conta inadimplente no meio do caminho, isto a recoloca em
+        // dia sem estender nada.
+        await aplicarAcesso(assinatura, assinatura.validoAte!);
+        break;
+      }
+
       const dias = diasDoCiclo(assinatura.ciclo as Ciclo);
       const ate = emDias(dias, await direitoQueAindaVale(assinatura));
 
@@ -345,13 +372,48 @@ export async function aplicarEvento(
     }
 
     case "checkout.pago": {
-      // NÃO libera nada, de propósito.
+      // LIBERA o acesso, e a primeira versão deste código não liberava.
       //
-      // "Concluiu o checkout" não é "o dinheiro entrou": quem libera acesso é
-      // `pagamento.aprovado`, e ele vem logo atrás com o valor real. Tratar
-      // este evento como pagamento liberaria acesso por uma tentativa de
-      // cartão que ainda pode ser recusada. O que ele faz de útil é carimbar
-      // os ids, e isso já aconteceu acima.
+      // O raciocínio de antes era "concluiu o checkout não é o dinheiro
+      // entrou — quem libera é o pagamento aprovado, que vem logo atrás". A
+      // segunda metade da frase é falsa no Asaas, e só se descobre pagando:
+      // numa assinatura de cartão ele NÃO captura na hora. Ele cria a
+      // assinatura já ATIVA, guarda o cartão tokenizado e agenda a primeira
+      // fatura para o vencimento — que, num checkout aberto à noite, é o dia
+      // seguinte. Medido: cartão aceito às 21h, fatura `PENDING` com
+      // vencimento no dia seguinte.
+      //
+      // Esperar a captura, então, significa a pessoa pagar e ficar até um dia
+      // inteiro sem o que comprou. Isso não é rigor, é defeito.
+      //
+      // O que este evento realmente significa é: o cartão passou pela
+      // autorização, foi tokenizado, e a assinatura existe no gateway. É
+      // compromisso firmado. Se a captura falhar depois, `PAYMENT_OVERDUE`
+      // marca inadimplente e a carência de 7 dias corre — o caminho já existe
+      // e é o mesmo de quem deixa o cartão vencer no terceiro mês.
+      const dias = diasDoCiclo(assinatura.ciclo as Ciclo);
+      const ate = emDias(dias, await direitoQueAindaVale(assinatura));
+
+      assinatura.status = "ativa";
+      assinatura.inicioEm = assinatura.inicioEm ?? new Date();
+      assinatura.validoAte = ate;
+      assinatura.renovaEm = ate;
+
+      // O evento de checkout diz quem é o cliente, mas não qual assinatura
+      // nasceu dali — e é ela que o botão de cancelar chama. Sem perguntar
+      // agora, quem acabou de assinar não conseguiria cancelar até a primeira
+      // fatura ser capturada, o que pode ser só no dia seguinte.
+      if (!assinatura.provedorAssinaturaId && assinatura.provedorClienteId) {
+        const p = provedorPeloNome(provedor);
+        const id = await p?.assinaturaDoCliente?.(assinatura.provedorClienteId);
+        if (id) assinatura.provedorAssinaturaId = id;
+      }
+
+      // NÃO registra `Cobranca`: nada foi capturado ainda, e o livro-razão só
+      // pode ter linha de dinheiro que entrou. Ela nasce no evento de
+      // pagamento, que é quem sabe o valor líquido.
+      await assinatura.save();
+      await aplicarAcesso(assinatura, ate);
       break;
     }
 

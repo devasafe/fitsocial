@@ -63,6 +63,12 @@ class ProvedorDeMentira implements IProvedorDePagamento {
     return null;
   }
 
+  /** A assinatura ativa de um cliente, como o gateway responderia. */
+  assinaturasPorCliente = new Map<string, string>();
+  async assinaturaDoCliente(clienteId: string) {
+    return this.assinaturasPorCliente.get(clienteId) ?? null;
+  }
+
   /** O que o gateway responde quando se pergunta de onde veio uma assinatura. */
   origens = new Map<string, { referencia: string | null; provedorCheckoutId: string | null }>();
   perguntasDeOrigem = 0;
@@ -450,7 +456,7 @@ describe("checkout hospedado: a assinatura do gateway só nasce ao pagar", () =>
     expect(dublê.perguntasDeOrigem).toBe(0);
   });
 
-  it("CHECKOUT_PAID sozinho NÃO libera acesso", async () => {
+  it("CHECKOUT_PAID libera o acesso e aproveita o id do cliente", async () => {
     const { u, a } = await abrirCheckout();
 
     await webhook({
@@ -460,11 +466,14 @@ describe("checkout hospedado: a assinatura do gateway só nasce ao pagar", () =>
       eventoId: "e-chk-pago",
     });
 
-    // "Concluiu o checkout" não é "o dinheiro entrou" — o cartão ainda pode
-    // ser recusado. Quem libera é o pagamento confirmado.
-    expect((await Assinatura.findById(a._id))!.status).toBe("pendente");
-    expect((await contaDe(u.id)).plan).toBe("free");
-    // Mas o id do cliente foi aproveitado.
+    // Este teste já afirmou o CONTRÁRIO — que o checkout pago não liberava
+    // nada, porque "concluiu o checkout não é o dinheiro entrou, e o pagamento
+    // aprovado vem logo atrás". A segunda metade se mostrou falsa quando a
+    // primeira compra de verdade foi feita: o Asaas não captura na hora numa
+    // assinatura de cartão, ele agenda a fatura para o vencimento. Esperar por
+    // ela deixava quem pagou até um dia inteiro sem o que comprou.
+    expect((await Assinatura.findById(a._id))!.status).toBe("ativa");
+    expect((await contaDe(u.id)).plan).toBe("pro");
     expect((await Assinatura.findById(a._id))!.provedorClienteId).toBe("cus_9");
   });
 
@@ -733,5 +742,104 @@ describe("um evento que falha no meio não pode deixar meia verdade", () => {
     expect(conta.plan).toBe("free");
     expect(conta.assinaturaAte ?? null).toBeNull();
     expect((await Assinatura.findById(a._id))!.status).toBe("pendente");
+  });
+});
+
+describe("o checkout pago libera na hora, mas não paga duas vezes", () => {
+  async function abrir(produto = "pro", ciclo = "mensal") {
+    const u = await registrar();
+    await request(app).post("/billing/checkout").set(auth(u.token)).send({ produto, ciclo });
+    return { u, a: (await Assinatura.findOne({ user: u.id }))! };
+  }
+
+  it("libera o acesso no CHECKOUT_PAID, sem esperar a captura", async () => {
+    const { u, a } = await abrir();
+    dublê.assinaturasPorCliente.set("cus_do_checkout", "sub_nascida_do_checkout");
+
+    await webhook({
+      tipo: "checkout.pago",
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      provedorClienteId: "cus_do_checkout",
+      eventoId: "chk-1",
+    });
+
+    // No Asaas a primeira fatura só é capturada no vencimento — esperar por
+    // ela deixaria quem pagou até um dia sem o que comprou.
+    expect((await contaDe(u.id)).plan).toBe("pro");
+    const depois = (await Assinatura.findById(a._id))!;
+    expect(depois.status).toBe("ativa");
+    // E o id do gateway já fica carimbado, senão cancelar no mesmo dia falharia.
+    expect(depois.provedorAssinaturaId).toBe("sub_nascida_do_checkout");
+  });
+
+  it("quem assina consegue cancelar no MESMO dia, antes de a fatura ser capturada", async () => {
+    const { u, a } = await abrir();
+    dublê.assinaturasPorCliente.set("cus_2", "sub_2");
+    await webhook({
+      tipo: "checkout.pago",
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      provedorClienteId: "cus_2",
+      eventoId: "chk-2",
+    });
+
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    expect(r.status).toBe(200);
+    expect(dublê.cancelamentos).toContain("sub_2");
+  });
+
+  it("a captura da PRIMEIRA fatura confirma o ciclo, não compra outro", async () => {
+    const { u, a } = await abrir();
+    await webhook({
+      tipo: "checkout.pago",
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      eventoId: "chk-3",
+    });
+    const aoAssinar = (await Assinatura.findById(a._id))!.validoAte!;
+
+    // No dia seguinte o Asaas captura e manda o pagamento confirmado.
+    await webhook({
+      referencia: a._id.toString(),
+      provedorCobrancaId: "pay_primeira",
+      valorCentavos: 2990,
+      liquidoCentavos: 2882,
+      eventoId: "pay-1",
+      ocorridoEm: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const depois = (await Assinatura.findById(a._id))!;
+    // Trinta dias não podem virar sessenta em toda venda.
+    expect(depois.validoAte!.getTime()).toBe(aoAssinar.getTime());
+    // Mas a cobrança entra no livro-razão, que é onde o dinheiro é contado.
+    const cobrancas = await Cobranca.find({ assinatura: a._id, status: "paga" });
+    expect(cobrancas).toHaveLength(1);
+    expect(cobrancas[0]!.liquidoCentavos).toBe(2882);
+    expect((await contaDe(u.id)).plan).toBe("pro");
+  });
+
+  it("a RENOVAÇÃO, essa sim, soma um ciclo", async () => {
+    const { a } = await abrir();
+    await webhook({
+      tipo: "checkout.pago",
+      provedorCheckoutId: `chk_${a._id.toString()}`,
+      eventoId: "chk-4",
+    });
+    await webhook({
+      referencia: a._id.toString(),
+      provedorCobrancaId: "pay_mes_1",
+      eventoId: "pay-m1",
+      ocorridoEm: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const apos1 = (await Assinatura.findById(a._id))!.validoAte!;
+
+    await webhook({
+      referencia: a._id.toString(),
+      provedorCobrancaId: "pay_mes_2",
+      eventoId: "pay-m2",
+      ocorridoEm: new Date(Date.now() + 120_000).toISOString(),
+    });
+
+    const apos2 = (await Assinatura.findById(a._id))!.validoAte!;
+    expect(apos2.getTime()).toBeGreaterThan(apos1.getTime());
   });
 });
