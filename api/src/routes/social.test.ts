@@ -502,3 +502,107 @@ describe("Rede social", () => {
     expect(empty.body.users).toEqual([]);
   });
 });
+
+describe("apagar comentário", () => {
+  // Três pessoas: a dona do post, quem comentou, e alguém de fora.
+  let dona = { token: "", id: "" };
+  let quemComentou = { token: "", id: "" };
+  let estranho = { token: "", id: "" };
+  let postId = "";
+
+  async function comentar(token: string, texto: string) {
+    const r = await request(app)
+      .post(`/social/posts/${postId}/comments`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ text: texto });
+    return r.body.comment.id as string;
+  }
+
+  const contagem = async () => {
+    const r = await request(app)
+      .get(`/social/posts/${postId}`)
+      .set("Authorization", `Bearer ${dona.token}`);
+    return (r.body.post ?? r.body).commentCount as number;
+  };
+
+  beforeAll(async () => {
+    dona = await registerUser("Dona", "dona.post@test.com", "donapost");
+    quemComentou = await registerUser("Quem", "quem.comentou@test.com", "quemcom");
+    estranho = await registerUser("Estranho", "estranho@test.com", "estranho");
+    const p = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${dona.token}`)
+      .send({ text: "foto do treino" });
+    postId = (p.body.post ?? p.body).id;
+  });
+
+  it("quem escreveu apaga o próprio comentário", async () => {
+    const id = await comentar(quemComentou.token, "me arrependi disso");
+    expect(await contagem()).toBe(1);
+
+    const r = await request(app)
+      .delete(`/social/posts/${postId}/comments/${id}`)
+      .set("Authorization", `Bearer ${quemComentou.token}`);
+
+    expect(r.status).toBe(200);
+    // A contagem volta junto: é o que faltava e deixava a foto mentindo.
+    expect(r.body.data.commentCount).toBe(0);
+    expect(await contagem()).toBe(0);
+  });
+
+  it("o dono do post apaga comentário de outra pessoa", async () => {
+    const id = await comentar(quemComentou.token, "comentário chato");
+
+    const r = await request(app)
+      .delete(`/social/posts/${postId}/comments/${id}`)
+      .set("Authorization", `Bearer ${dona.token}`);
+
+    // Quem cuida do que fica embaixo da própria foto é quem a publicou.
+    expect(r.status).toBe(200);
+    expect(await contagem()).toBe(0);
+  });
+
+  it("quem não é nem autor nem dono do post NÃO apaga", async () => {
+    const id = await comentar(quemComentou.token, "isso fica");
+
+    const r = await request(app)
+      .delete(`/social/posts/${postId}/comments/${id}`)
+      .set("Authorization", `Bearer ${estranho.token}`);
+
+    expect(r.status).toBe(403);
+    expect(await contagem()).toBe(1);
+  });
+
+  it("comentário de OUTRO post não se apaga por aqui", async () => {
+    const outro = await request(app)
+      .post("/social/posts")
+      .set("Authorization", `Bearer ${dona.token}`)
+      .send({ text: "outra foto" });
+    const outroId = (outro.body.post ?? outro.body).id;
+    const doOutro = await request(app)
+      .post(`/social/posts/${outroId}/comments`)
+      .set("Authorization", `Bearer ${quemComentou.token}`)
+      .send({ text: "comentário do outro post" });
+
+    // Sem esta checagem, o id de um comentário alheio apagaria ele — e a
+    // checagem de dono teria olhado o post errado.
+    const r = await request(app)
+      .delete(`/social/posts/${postId}/comments/${doOutro.body.comment.id}`)
+      .set("Authorization", `Bearer ${dona.token}`);
+
+    expect(r.status).toBe(404);
+  });
+
+  it("comentário que não existe é 404, não 500", async () => {
+    const r = await request(app)
+      .delete(`/social/posts/${postId}/comments/${new mongoose.Types.ObjectId().toString()}`)
+      .set("Authorization", `Bearer ${dona.token}`);
+    expect(r.status).toBe(404);
+  });
+
+  it("sem sessão, 401", async () => {
+    const id = await comentar(quemComentou.token, "qualquer coisa");
+    const r = await request(app).delete(`/social/posts/${postId}/comments/${id}`);
+    expect(r.status).toBe(401);
+  });
+});

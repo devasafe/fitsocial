@@ -12,11 +12,12 @@ import {
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { getComments, createComment, type Comment } from "../api/social";
+import { getComments, createComment, deleteComment, type Comment } from "../api/social";
 import { PostCard } from "../components/PostCard";
 import { Avatar } from "../components/Avatar";
 import { Txt } from "../components/ui";
 import { colors, radius, spacing, type as typeScale } from "../theme";
+import { confirmDialog, notify } from "../lib/notify";
 import type { AppStackParams } from "../navigation/types";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
@@ -38,13 +39,48 @@ function timeAgo(iso: string): string {
 export function PostDetailScreen() {
   const route = useRoute<RouteProp<AppStackParams, "PostDetail">>();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { post } = route.params;
+  /** O dono do post apaga qualquer comentário; cada um apaga o seu. */
+  const souDonoDoPost = user?.id === post.author.id;
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [apagando, setApagando] = useState<string | null>(null);
+
+  /**
+   * Apaga com confirmacao.
+   *
+   * Confirmar porque não há como desfazer, e o toque errado num item de lista
+   * é o erro mais comum de todos. A lista é atualizada na hora, sem recarregar:
+   * o servidor devolve a contagem nova junto.
+   */
+  function pedirParaApagar(comentario: Comment) {
+    const meu = comentario.author.id === user?.id;
+    confirmDialog(
+      meu ? "Apagar seu comentário?" : "Apagar este comentário?",
+      meu
+        ? "Ele sai da publicação para todo mundo, e não tem como desfazer."
+        : `O comentário de ${comentario.author.name} sai da sua publicação. Não tem como desfazer.`,
+      () => void apagar(comentario.id),
+      "Apagar"
+    );
+  }
+
+  async function apagar(commentId: string) {
+    if (!token) return;
+    setApagando(commentId);
+    try {
+      await deleteComment(token, post.id, commentId);
+      setComments((antes) => antes.filter((c) => c.id !== commentId));
+    } catch (e) {
+      notify("Não deu para apagar", (e as Error).message);
+    } finally {
+      setApagando(null);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -105,24 +141,50 @@ export function PostDetailScreen() {
             </Txt>
           ) : null
         }
-        renderItem={({ item }) => (
-          <View style={styles.comment}>
-            <Avatar uri={item.author.avatarUrl} name={item.author.name} size={36} />
-            <View style={styles.commentBody}>
-              <View style={styles.commentTop}>
-                <Txt variant="label" color={colors.text}>
-                  {item.author.name}
-                </Txt>
-                <Txt variant="caption" color={colors.text3}>
-                  {timeAgo(item.createdAt)}
+        renderItem={({ item }) => {
+          const podeApagar = item.author.id === user?.id || souDonoDoPost;
+          return (
+            <View style={styles.comment}>
+              <Avatar uri={item.author.avatarUrl} name={item.author.name} size={36} />
+              <View style={styles.commentBody}>
+                <View style={styles.commentTop}>
+                  {/* Nome e hora agrupados: o `space-between` do estilo tem
+                      dois filhos, e um terceiro solto jogaria a hora para o
+                      meio da linha. */}
+                  <View style={styles.commentQuem}>
+                    <Txt variant="label" color={colors.text}>
+                      {item.author.name}
+                    </Txt>
+                    <Txt variant="caption" color={colors.text3}>
+                      {timeAgo(item.createdAt)}
+                    </Txt>
+                  </View>
+                  {podeApagar ? (
+                    /* Discreto e à direita: é uma saída, não uma ação que se
+                       oferece. Quem procura acha; quem está lendo não tropeça.
+                       `hitSlop` porque o alvo do texto sozinho é pequeno. */
+                    <TouchableOpacity
+                      onPress={() => pedirParaApagar(item)}
+                      disabled={apagando === item.id}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      {apagando === item.id ? (
+                        <ActivityIndicator size="small" color={colors.text3} />
+                      ) : (
+                        <Txt variant="caption" color={colors.text3}>
+                          apagar
+                        </Txt>
+                      )}
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <Txt variant="body" style={styles.commentText}>
+                  {item.text}
                 </Txt>
               </View>
-              <Txt variant="body" style={styles.commentText}>
-                {item.text}
-              </Txt>
             </View>
-          </View>
-        )}
+          );
+        }}
       />
 
       <View style={styles.inputRow}>
@@ -166,6 +228,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
   },
+  commentQuem: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   commentTop: {
     flexDirection: "row",
     alignItems: "center",

@@ -33,6 +33,7 @@ import { musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { normalizarWod, blocoPrincipal } from "../services/crossfit.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { rateLimit } from "../middleware/rateLimit.js";
+import { reconciliarPost } from "../services/contadores.js";
 
 export const socialRouter = Router();
 socialRouter.use(requireAuth);
@@ -897,6 +898,61 @@ socialRouter.post(
 
     await comment.populate("author", "name avatarUrl");
     res.status(201).json({ comment: serializeComment(comment) });
+  })
+);
+
+/**
+ * Apaga um comentário.
+ *
+ * Pode quem escreveu, o dono do post, e o admin. São três motivos diferentes:
+ * quem escreveu se arrependeu; o dono do post cuida do que fica embaixo da
+ * foto dele; o admin modera.
+ *
+ * Apaga de VERDADE, e não oculta. `hidden` existe para a moderação em massa
+ * (esconder tudo de uma conta banida sem perder o que ela escreveu), e é uma
+ * decisão de quem administra. Quem apaga o próprio comentário está pedindo que
+ * ele deixe de existir — deixá-lo no banco marcado como oculto seria guardar
+ * o que a pessoa pediu para tirar.
+ */
+socialRouter.delete(
+  "/posts/:id/comments/:commentId",
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    assertObjectId(req.params.commentId);
+
+    const [post, comment] = await Promise.all([
+      Post.findById(req.params.id),
+      Comment.findById(req.params.commentId),
+    ]);
+    if (!post || post.deletedAt) throw new HttpError(404, "Post não encontrado");
+    if (!comment) throw new HttpError(404, "Comentário não encontrado");
+    // O comentário tem de ser DESTE post: sem esta checagem, o id de um
+    // comentário de outro post apagaria ele, e a checagem de dono abaixo
+    // olharia o post errado.
+    if (!comment.post.equals(post._id)) throw new HttpError(404, "Comentário não encontrado");
+
+    const euEscrevi = comment.author.equals(req.user!._id);
+    const meuPost = post.author.equals(req.user!._id);
+    const souAdmin = req.user!.role === "admin";
+    if (!euEscrevi && !meuPost && !souAdmin) {
+      throw new HttpError(403, "Você não pode apagar este comentário.");
+    }
+
+    await comment.deleteOne();
+
+    // RECONTA, em vez de `commentCount -= 1`.
+    //
+    // O decremento por delta é o que faltava aqui e deixou o contador crescer
+    // para sempre; e mesmo tendo, ele erraria com os comentários ocultos, que
+    // a lista esconde e o contador contava. Recontar chega no número certo
+    // venha de onde vier.
+    await reconciliarPost(post._id);
+
+    const atualizado = await Post.findById(post._id).select("commentCount");
+    res.json({
+      data: { apagado: true, commentCount: atualizado?.commentCount ?? 0 },
+      meta: {},
+    });
   })
 );
 

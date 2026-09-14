@@ -192,6 +192,19 @@ export function getComments(token: string, postId: string) {
   return apiFetch<{ comments: Comment[] }>(`/social/posts/${postId}/comments`, { token });
 }
 
+/**
+ * Apaga um comentario. Pode quem escreveu, o dono do post, e o admin.
+ *
+ * Devolve a contagem nova, para a tela nao ter de recarregar o post so para
+ * saber quanto ficou.
+ */
+export function deleteComment(token: string, postId: string, commentId: string) {
+  return apiFetch<{ data: { apagado: boolean; commentCount: number } }>(
+    `/social/posts/${postId}/comments/${commentId}`,
+    { method: "DELETE", token }
+  );
+}
+
 export function createComment(token: string, postId: string, text: string) {
   return apiFetch<{ comment: Comment }>(`/social/posts/${postId}/comments`, {
     method: "POST",
