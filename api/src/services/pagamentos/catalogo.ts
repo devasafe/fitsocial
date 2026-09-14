@@ -22,6 +22,15 @@ export interface ItemDoCatalogo {
   nome: string;
   /** O que a pessoa lê antes de decidir. */
   resumo: string;
+  /**
+   * O que vem junto, item a item.
+   *
+   * Mora AQUI, e não na tela, pelo mesmo motivo do preço: o APK instalado não
+   * se atualiza sozinho. Uma promessa comercial escrita dentro do aplicativo
+   * fica congelada na versão que a pessoa baixou, e passa a mentir no dia em
+   * que um gate mudar. Vindo do servidor, muda com um deploy.
+   */
+  beneficios: string[];
   precoCentavos: Record<Ciclo, number>;
   /**
    * O plano do CONSUMIDOR que este produto concede.
@@ -41,17 +50,32 @@ export interface ItemDoCatalogo {
 /**
  * O catálogo.
  *
- * O anual custa 10× o mensal — dois meses de graça, e é assim que ele é
- * vendido. Não é só desconto: com a taxa FIXA do Asaas (R$ 1,99 por cobrança),
- * uma mensalidade de R$ 29,90 perde 6,7% para a taxa, e o anual de R$ 269
- * perde 0,7%. O desconto de dois meses se paga em parte só com isso — e o
- * resto vem de não depender de doze cobranças darem certo.
+ * O anual custa 9× o mensal — TRÊS meses de graça, e é assim que ele é
+ * vendido. Vale para os quatro produtos, e o número não é aproximado: 29,90 × 12
+ * = 358,80 contra 269,00 anuais, exatamente três mensalidades de diferença.
+ * Quem mexer nos preços mantém a proporção, ou o "3 meses grátis" da tela —
+ * que é calculado, não escrito — passa a dizer outra coisa.
+ *
+ * A justificativa mudou quando a cobrança virou cartão (a recorrência do Asaas
+ * não aceita outro método). Com 2,99% + R$ 0,49 por cobrança, doze mensalidades
+ * de R$ 29,90 pagam R$ 16,56 de taxa e o anual de R$ 269 paga R$ 8,53 — cerca
+ * de oito reais de diferença, não o abismo que a taxa fixa do PIX sugeria. O
+ * que sustenta o desconto agora é o outro motivo, e ele é o mais forte: o anual
+ * não depende de doze cobranças darem certo. Cartão recusado é a causa número
+ * um de cancelamento involuntário, e cada renovação é uma chance de perder
+ * alguém que queria ficar.
  */
 export const CATALOGO: Record<Produto, ItemDoCatalogo> = {
   pro: {
     produto: "pro",
     nome: "Pro",
     resumo: "Sua evolução inteira, recordes, calendário do ano e a IA ajustando seu plano.",
+    beneficios: [
+      "Sua evolução sem o limite de 7 dias",
+      "Seus recordes e todo o histórico deles",
+      "O calendário do ano inteiro",
+      "A IA ajusta seu treino e sua dieta quando você pedir",
+    ],
     precoCentavos: { mensal: 2990, anual: 26900 },
     plano: "pro",
     capacidades: [],
@@ -61,6 +85,12 @@ export const CATALOGO: Record<Produto, ItemDoCatalogo> = {
     produto: "pro_coach",
     nome: "Pro Coach",
     resumo: "O painel de treinador, com até 30 alunos — e o Pro completo para você.",
+    beneficios: [
+      "Tudo do Pro, para você",
+      "Painel de treinador, com até 30 alunos",
+      "Você monta e ajusta o treino de cada um",
+      "Seus alunos ganham o Pro enquanto você os acompanha",
+    ],
     precoCentavos: { mensal: 7990, anual: 71900 },
     plano: "pro",
     capacidades: ["coach"],
@@ -70,6 +100,12 @@ export const CATALOGO: Record<Produto, ItemDoCatalogo> = {
     produto: "pro_nutri",
     nome: "Pro Nutri",
     resumo: "O painel de nutricionista, com até 30 pacientes — e o Pro completo para você.",
+    beneficios: [
+      "Tudo do Pro, para você",
+      "Painel de nutricionista, com até 30 pacientes",
+      "Você monta e ajusta a dieta de cada um",
+      "Seus pacientes ganham o Pro enquanto você os acompanha",
+    ],
     precoCentavos: { mensal: 7990, anual: 71900 },
     plano: "pro",
     capacidades: ["nutri"],
@@ -79,6 +115,12 @@ export const CATALOGO: Record<Produto, ItemDoCatalogo> = {
     produto: "pro_plus",
     nome: "Pro+",
     resumo: "Os dois painéis, treino e nutrição, com até 30 acompanhados em cada.",
+    beneficios: [
+      "Tudo do Pro, para você",
+      "Os dois painéis: treinador e nutricionista",
+      "Até 30 acompanhados em cada um",
+      "Quem você acompanha ganha o Pro",
+    ],
     precoCentavos: { mensal: 11990, anual: 107900 },
     plano: "pro_plus",
     capacidades: ["coach", "nutri"],

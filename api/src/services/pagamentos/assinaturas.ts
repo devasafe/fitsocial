@@ -88,6 +88,108 @@ export async function iniciarAssinatura(
   }
 }
 
+/**
+ * Cancela a cobrança recorrente. NÃO tira o acesso.
+ *
+ * Quem cancela comprou aquele ciclo e fica com ele até o fim — por isso nada
+ * aqui encosta em `assinaturaAte`. O que muda é só o futuro: o gateway para de
+ * cobrar o cartão.
+ *
+ * Se o gateway recusar, NADA é marcado e o erro sobe. O contrário seria pior
+ * que não ter botão: a pessoa veria "assinatura cancelada" na tela e o cartão
+ * continuaria sendo cobrado todo mês, sem ela ter como descobrir por quê.
+ */
+export async function cancelarAssinatura(user: UserDoc): Promise<AssinaturaDoc> {
+  const assinatura = await Assinatura.findOne({
+    user: user._id,
+    // "cancelada" entra na busca para o cancelamento ser IDEMPOTENTE.
+    //
+    // Sem ela, o segundo toque no botão — ou a tentativa depois de uma rede
+    // ruim — respondia 404 "Você não tem uma assinatura para cancelar" a quem
+    // tinha acabado de cancelar.
+    //
+    // "pendente" NÃO entra, e é o oposto de um detalhe: no checkout hospedado
+    // a assinatura do gateway só nasce quando o cartão passa, então uma
+    // pendente nunca tem `provedorAssinaturaId`. Cancelá-la marcaria
+    // "cancelada" aqui sem avisar ninguém lá — e o caso é comum: a pessoa paga,
+    // o webhook demora, ela volta ao app, vê "pendente", cancela, recebe 200, e
+    // segundos depois o cartão está matriculado na recorrência. É exatamente o
+    // desfecho que o parágrafo acima diz evitar.
+    status: { $in: ["ativa", "inadimplente", "cancelada"] },
+  }).sort({ createdAt: -1 });
+
+  if (!assinatura) throw new HttpError(404, "Você não tem uma assinatura para cancelar.");
+  // Já cancelada: devolve o mesmo resultado em vez de erro.
+  if (assinatura.status === "cancelada") return assinatura;
+
+  if (!assinatura.provedorAssinaturaId) {
+    // Uma assinatura ativa SEM id do gateway não deveria existir — quem a
+    // ativou foi um evento de pagamento, e ele traz o id. Se acontecer, é
+    // estado inconsistente, e marcar "cancelada" aqui esconderia uma cobrança
+    // que continua de pé.
+    console.error(
+      `[pagamentos] assinatura ${String(assinatura._id)} está ${assinatura.status} sem id do gateway`
+    );
+    throw new HttpError(409, "Sua assinatura ainda está sendo confirmada. Tente em instantes.");
+  }
+
+  const provedor = provedorPeloNome(assinatura.provedor as Provedor);
+  if (!provedor) throw new HttpError(502, "Não foi possível cancelar agora. Tente de novo.");
+  try {
+    await provedor.cancelarAssinatura(assinatura.provedorAssinaturaId, true);
+  } catch (e) {
+    // O detalhe do gateway fica no log, como no checkout: a mensagem deles
+    // fala de conta e de integração, e nada disso é da conta de quem clicou.
+    console.error(
+      `[pagamentos] cancelamento falhou para a assinatura ${String(assinatura._id)}:`,
+      (e as Error).message
+    );
+    throw new HttpError(502, "Não foi possível cancelar agora. Tente de novo.");
+  }
+
+  assinatura.status = "cancelada";
+  assinatura.cancelaNoFimDoCiclo = true;
+  assinatura.canceladaEm = new Date();
+  await assinatura.save();
+
+  // "cancelada" ainda é um status que SUSTENTA o acesso enquanto `assinaturaAte`
+  // valer — o motor só para no vencimento. Quem cancelou não perde nada hoje.
+  user.set("assinaturaStatus", "cancelada");
+  await user.save();
+  await recomputeTier(user);
+
+  return assinatura;
+}
+
+/**
+ * A partir de quando contar o ciclo que acabou de ser pago.
+ *
+ * Renovação SOMA ao que ainda falta, em vez de reiniciar — quem paga adiantado
+ * não pode perder os dias que já tinha. E o "que ainda falta" não está só nesta
+ * assinatura: numa TROCA DE PLANO ele está no usuário.
+ *
+ * O caminho é o que o próprio produto manda seguir. `iniciarAssinatura` recusa
+ * quem já tem assinatura ativa com "Cancele antes de trocar de plano" — então
+ * a pessoa cancela e assina o plano novo, e a assinatura nova nasce com
+ * `validoAte` nulo. Olhando só para ela, um anual trocado no dia seguinte
+ * perdia 335 dias já pagos, e a `Assinatura` antiga ficava dizendo 2027
+ * enquanto o `User` dizia 2026 — duas verdades opostas para o suporte
+ * desempatar na hora de reembolsar.
+ *
+ * Não há risco de crédito indevido depois de estorno: `derrubarAcesso` já
+ * empurra `assinaturaAte` para agora, e o que já passou não entra na conta.
+ */
+async function direitoQueAindaVale(assinatura: AssinaturaDoc): Promise<Date> {
+  const agora = new Date();
+  const candidatos = [agora];
+  if (assinatura.validoAte) candidatos.push(assinatura.validoAte);
+
+  const user = await User.findById(assinatura.user).select("assinaturaAte");
+  if (user?.assinaturaAte) candidatos.push(user.assinaturaAte);
+
+  return new Date(Math.max(...candidatos.map((d) => d.getTime())));
+}
+
 /** Liga a assinatura aos direitos do usuário, sem nunca tocar em `tier`. */
 async function aplicarAcesso(assinatura: AssinaturaDoc, ate: Date): Promise<void> {
   const item = CATALOGO[assinatura.produto as Produto];
@@ -186,13 +288,7 @@ export async function aplicarEvento(
     case "pagamento.aprovado":
     case "assinatura.renovada": {
       const dias = diasDoCiclo(assinatura.ciclo as Ciclo);
-      // Renovação SOMA ao que ainda falta, em vez de reiniciar: quem paga
-      // adiantado não pode perder os dias que já tinha.
-      const base =
-        assinatura.validoAte && assinatura.validoAte > new Date()
-          ? assinatura.validoAte
-          : new Date();
-      const ate = emDias(dias, base);
+      const ate = emDias(dias, await direitoQueAindaVale(assinatura));
 
       assinatura.status = "ativa";
       assinatura.inicioEm = assinatura.inicioEm ?? new Date();

@@ -334,7 +334,7 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
           <AppStack.Screen
             name="Subscription"
             component={SubscriptionScreen}
-            options={{ headerShown: true, title: "Premium", ...headerStyle }}
+            options={{ headerShown: true, title: "Planos", ...headerStyle }}
           />
           <AppStack.Screen
             name="CheckIn"

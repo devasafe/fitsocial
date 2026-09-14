@@ -8,10 +8,25 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User, publicUser } from "../models/User.js";
-import { Assinatura, PROVEDORES, type Provedor } from "../models/Assinatura.js";
+import {
+  Assinatura,
+  PROVEDORES,
+  type AssinaturaDoc,
+  type Provedor,
+} from "../models/Assinatura.js";
 import { aplicarEventoDeCompra, recomputeTier } from "../services/entitlement.js";
-import { CATALOGO, CICLOS, PRODUTOS, emReais } from "../services/pagamentos/catalogo.js";
-import { iniciarAssinatura, processarWebhook } from "../services/pagamentos/assinaturas.js";
+import {
+  CATALOGO,
+  CICLOS,
+  PRODUTOS,
+  emReais,
+  itemDoCatalogo,
+} from "../services/pagamentos/catalogo.js";
+import {
+  cancelarAssinatura,
+  iniciarAssinatura,
+  processarWebhook,
+} from "../services/pagamentos/assinaturas.js";
 
 export const billingRouter = Router();
 
@@ -135,11 +150,21 @@ billingRouter.get("/produtos", (_req, res) => {
   res.json({
     data: PRODUTOS.map((p) => {
       const item = CATALOGO[p];
+      const economia = Math.max(0, item.precoCentavos.mensal * 12 - item.precoCentavos.anual);
       return {
         produto: item.produto,
         nome: item.nome,
         resumo: item.resumo,
+        beneficios: item.beneficios,
         precoCentavos: item.precoCentavos,
+        // Quanto o anual economiza, calculado aqui e não na tela: é a mesma
+        // regra do preço — conta feita no aplicativo fica congelada na versão
+        // instalada e passa a mentir quando o catálogo muda.
+        economiaAnualCentavos: economia,
+        // Quantas mensalidades o anual economiza, arredondado para baixo. É o
+        // "3 meses grátis" da tela — calculado, para não virar mentira no dia
+        // em que alguém mexer no preço e esquecer do texto.
+        mesesGratisNoAnual: Math.floor(economia / item.precoCentavos.mensal),
         precoFormatado: {
           mensal: emReais(item.precoCentavos.mensal),
           anual: emReais(item.precoCentavos.anual),
@@ -185,6 +210,24 @@ billingRouter.post(
   })
 );
 
+/** O formato que a tela de assinatura lê. Um lugar só, para as duas rotas. */
+function comoAssinatura(a: AssinaturaDoc) {
+  return {
+    id: a._id.toString(),
+    produto: a.produto,
+    nome: itemDoCatalogo(a.produto)?.nome ?? a.produto,
+    ciclo: a.ciclo,
+    status: a.status,
+    valorCentavos: a.precoCentavos,
+    valorFormatado: emReais(a.precoCentavos),
+    validoAte: a.validoAte ?? null,
+    renovaEm: a.renovaEm ?? null,
+    // Cancelar não tira o acesso na hora: quem cancelou comprou aquele ciclo,
+    // e ele vale até o fim.
+    cancelaNoFimDoCiclo: a.cancelaNoFimDoCiclo,
+  };
+}
+
 /** A assinatura corrente desta pessoa, se houver. */
 billingRouter.get(
   "/assinatura",
@@ -195,22 +238,29 @@ billingRouter.get(
       status: { $in: ["ativa", "inadimplente", "cancelada"] },
     }).sort({ createdAt: -1 });
 
-    if (!a) return res.json({ data: null, meta: {} });
+    res.json({ data: a ? comoAssinatura(a) : null, meta: {} });
+  })
+);
 
-    res.json({
-      data: {
-        id: a._id.toString(),
-        produto: a.produto,
-        ciclo: a.ciclo,
-        status: a.status,
-        valorCentavos: a.precoCentavos,
-        validoAte: a.validoAte,
-        renovaEm: a.renovaEm,
-        // Cancelar não tira o acesso na hora: quem cancelou comprou aquele
-        // ciclo, e ele vale até o fim.
-        cancelaNoFimDoCiclo: a.cancelaNoFimDoCiclo,
-      },
-      meta: {},
-    });
+/**
+ * Cancelar a renovação.
+ *
+ * Existe junto com o botão de assinar, e não depois: publicar um caminho de
+ * entrada sem caminho de saída é entregar uma armadilha — a pessoa põe o cartão
+ * e só consegue tirar falando com alguém.
+ *
+ * NÃO pede senha, ao contrário de excluir a conta (`auth.ts`), e a diferença é
+ * deliberada: excluir apaga dados para sempre, cancelar não tira nada de
+ * ninguém — o acesso segue até o fim do ciclo já pago e dá para assinar de novo
+ * no mesmo minuto. Cancelar tem de ser tão fácil quanto contratar; pedir senha
+ * aqui seria fricção do lado errado.
+ */
+billingRouter.delete(
+  "/assinatura",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 5, name: "cancelar-assinatura" }),
+  asyncHandler(async (req, res) => {
+    const a = await cancelarAssinatura(req.user!);
+    res.json({ data: comoAssinatura(a), meta: {} });
   })
 );

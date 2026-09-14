@@ -144,6 +144,18 @@ export function ConfiguracoesScreen() {
           onPress={() => nav.navigate("EditProfile")}
         />
         <Linha titulo="E-mail" detalhe={user?.email ?? ""} />
+        {/* A única porta para os planos que não é um paywall.
+            Sem ela, quem quer assinar — um treinador atrás do painel, por
+            exemplo — só chegaria lá esbarrando num aviso de bloqueio. */}
+        <Linha
+          titulo="Planos e assinatura"
+          detalhe={
+            (user?.plan ?? (user?.tier === "premium" ? "pro" : "free")) === "free"
+              ? "Plano grátis"
+              : "Acesso completo"
+          }
+          onPress={() => nav.navigate("Subscription")}
+        />
         <Linha titulo="Alterar senha" onPress={() => nav.navigate("AlterarSenha")} />
         <Linha
           titulo="Excluir minha conta"

@@ -51,7 +51,14 @@ class ProvedorDeMentira implements IProvedorDePagamento {
   normalizarEvento(corpo: unknown): EventoNormalizado {
     return corpo as EventoNormalizado;
   }
-  async cancelarAssinatura(): Promise<void> {}
+  /** O que foi cancelado no gateway, e se ele deve recusar. */
+  cancelamentos: string[] = [];
+  falharAoCancelar = false;
+
+  async cancelarAssinatura(id: string): Promise<void> {
+    if (this.falharAoCancelar) throw new Error("gateway fora do ar");
+    this.cancelamentos.push(id);
+  }
   async consultarAssinatura() {
     return null;
   }
@@ -539,5 +546,155 @@ describe("o estorno derruba o plano, e não só a capacidade", () => {
     // Nulo: a fonte desta conta é a assinatura, que tem prazo. Um carimbo aqui
     // seria uma segunda fonte, sem prazo nenhum, e ela nunca mais cairia.
     expect(conta.premiumSource ?? null).toBeNull();
+  });
+});
+
+describe("cancelar a assinatura", () => {
+  async function assinar(produto = "pro_coach") {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto, ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+    await webhook({
+      referencia: a._id.toString(),
+      provedorAssinaturaId: "sub_para_cancelar",
+      eventoId: `pg-${a._id.toString()}`,
+    });
+    return { u, a };
+  }
+
+  it("cancela no gateway e MANTÉM o acesso até o fim do ciclo", async () => {
+    const { u, a } = await assinar();
+
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    expect(r.status).toBe(200);
+    expect(r.body.data.status).toBe("cancelada");
+    expect(r.body.data.cancelaNoFimDoCiclo).toBe(true);
+    // Quem cancela comprou aquele ciclo: ele vale até o fim.
+    const conta = await contaDe(u.id);
+    expect(conta.plan).toBe("pro");
+    expect(conta.get("pro.coach.ativo")).toBe(true);
+    expect((await Assinatura.findById(a._id))!.canceladaEm).toBeTruthy();
+    // E o gateway foi mesmo avisado — senão o cartão seguiria sendo cobrado.
+    expect(dublê.cancelamentos).toContain("sub_para_cancelar");
+  });
+
+  it("se o gateway recusa, NADA é marcado como cancelado", async () => {
+    const { u, a } = await assinar("pro");
+    dublê.falharAoCancelar = true;
+
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    expect(r.status).toBe(502);
+    // O desfecho pior possível seria a tela dizer "cancelada" e o cartão
+    // continuar sendo cobrado, sem a pessoa ter como descobrir por quê.
+    expect((await Assinatura.findById(a._id))!.status).toBe("ativa");
+    expect((await contaDe(u.id)).get("assinaturaStatus")).toBe("ativa");
+  });
+
+  it("quem não assinou não tem o que cancelar", async () => {
+    const u = await registrar();
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+    expect(r.status).toBe(404);
+  });
+
+  it("depois de cancelar, dá para assinar de novo", async () => {
+    const { u } = await assinar("pro");
+    await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    const r = await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro_plus", ciclo: "anual" });
+
+    // O 409 de "já tem assinatura ativa" não pode prender quem já cancelou.
+    expect(r.status).toBe(201);
+  });
+});
+
+describe("os buracos do cancelamento", () => {
+  it("uma assinatura PENDENTE não pode ser cancelada sem o gateway saber", async () => {
+    // A corrida comum: a pessoa paga na tela do Asaas, o webhook demora, ela
+    // volta ao app e toca em cancelar. Antes disto ela recebia 200, a tela
+    // dizia "cancelada", e segundos depois o cartão entrava na recorrência.
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+    expect(a.provedorAssinaturaId).toBeFalsy();
+
+    const r = await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    expect(r.status).toBe(404);
+    expect((await Assinatura.findById(a._id))!.status).toBe("pendente");
+    expect(dublê.cancelamentos).toHaveLength(0);
+
+    // E o pagamento que estava a caminho continua valendo.
+    await webhook({ referencia: a._id.toString(), eventoId: "atrasado" });
+    expect((await contaDe(u.id)).plan).toBe("pro");
+  });
+
+  it("cancelar duas vezes devolve o mesmo resultado, não um 404", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+    await webhook({
+      referencia: a._id.toString(),
+      provedorAssinaturaId: "sub_idem",
+      eventoId: "pg-idem",
+    });
+
+    const um = await request(app).delete("/billing/assinatura").set(auth(u.token));
+    const dois = await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    expect(um.status).toBe(200);
+    // Duplo-toque, ou uma segunda tentativa depois de rede ruim, não pode
+    // dizer a quem acabou de cancelar que ele nunca teve assinatura.
+    expect(dois.status).toBe(200);
+    expect(dois.body.data.status).toBe("cancelada");
+    // E o gateway foi avisado UMA vez só.
+    expect(dublê.cancelamentos).toEqual(["sub_idem"]);
+  });
+
+  it("trocar de plano depois de cancelar NÃO joga fora os dias já pagos", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "anual" });
+    const anual = (await Assinatura.findOne({ user: u.id }))!;
+    await webhook({
+      referencia: anual._id.toString(),
+      provedorAssinaturaId: "sub_anual",
+      eventoId: "pg-anual",
+    });
+
+    const restavam = (await contaDe(u.id)).assinaturaAte!;
+    await request(app).delete("/billing/assinatura").set(auth(u.token));
+
+    // É o caminho que o próprio 409 recomenda: "Cancele antes de trocar".
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro_coach", ciclo: "mensal" });
+    const nova = (await Assinatura.findOne({ user: u.id, produto: "pro_coach" }))!;
+    await webhook({
+      referencia: nova._id.toString(),
+      provedorAssinaturaId: "sub_coach",
+      eventoId: "pg-coach",
+    });
+
+    const depois = (await contaDe(u.id)).assinaturaAte!;
+    // Um ano pago no dia anterior não pode virar trinta dias.
+    expect(depois.getTime()).toBeGreaterThan(restavam.getTime());
+    expect((await contaDe(u.id)).get("pro.coach.ativo")).toBe(true);
   });
 });

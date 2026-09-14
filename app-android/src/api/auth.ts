@@ -8,6 +8,15 @@ export interface AppUser {
   avatarUrl: string;
   bio: string;
   tier: "free" | "premium";
+  /**
+   * O plano de verdade. `tier` é a versão de dois estados que o APK antigo lê.
+   *
+   * Opcional porque um servidor mais velho que este aplicativo não o mandaria —
+   * e porque o app já rodou em produção sem ele.
+   */
+  plan?: "free" | "pro" | "pro_plus";
+  /** As capacidades profissionais, para saber se mostra o painel. */
+  pro?: { coach: boolean; nutri: boolean };
   onboardingComplete: boolean;
   // Amigo fundador (premium de presente) + mensagem pessoal, quando aplicável.
   isFounder?: boolean;
