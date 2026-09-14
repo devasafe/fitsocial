@@ -484,3 +484,60 @@ describe("checkout hospedado: a assinatura do gateway só nasce ao pagar", () =>
     expect((await contaDe(outra.u.id)).plan).toBe("pro");
   });
 });
+
+describe("o estorno derruba o plano, e não só a capacidade", () => {
+  it("quem comprou e estornou volta a ser free", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+
+    await webhook({
+      referencia: a._id.toString(),
+      eventoId: "c1",
+      ocorridoEm: new Date(Date.now() - 60_000).toISOString(),
+    });
+    expect((await contaDe(u.id)).plan).toBe("pro");
+
+    await webhook({
+      referencia: a._id.toString(),
+      eventoId: "c2",
+      tipo: "estorno",
+      ocorridoEm: new Date().toISOString(),
+    });
+
+    const depois = await contaDe(u.id);
+    // O dinheiro voltou: o acesso cai na hora, e a conta NÃO pode ficar com um
+    // carimbo de origem que a sustente para sempre depois disso.
+    expect(depois.plan).toBe("free");
+    expect(depois.tier).toBe("free");
+    expect(depois.premiumSource ?? null).toBeNull();
+
+    // E a requisição seguinte, que é o que o app faz, mantém o veredito.
+    await request(app).get("/auth/me").set(auth(u.token));
+    expect((await contaDe(u.id)).plan).toBe("free");
+  });
+
+  it("uma conta com assinatura ativa nunca é carimbada como compra avulsa", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "mensal" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+    await webhook({ referencia: a._id.toString(), eventoId: "s1" });
+
+    // O carimbo só aparecia no request SEGUINTE à compra, quando o `tier`
+    // premium já estava gravado e a conta passava a parecer um premium legado.
+    await request(app).get("/auth/me").set(auth(u.token));
+    await request(app).get("/auth/me").set(auth(u.token));
+
+    const conta = await contaDe(u.id);
+    expect(conta.plan).toBe("pro");
+    // Nulo: a fonte desta conta é a assinatura, que tem prazo. Um carimbo aqui
+    // seria uma segunda fonte, sem prazo nenhum, e ela nunca mais cairia.
+    expect(conta.premiumSource ?? null).toBeNull();
+  });
+});

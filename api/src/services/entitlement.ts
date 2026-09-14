@@ -241,14 +241,28 @@ export async function recomputeTier(user: UserDoc): Promise<void> {
 
     if (isFounder(user.email)) {
       mudanca.premiumSource = "founder";
-    } else if (soPeloDocumento !== "free") {
-      // Se sustenta sozinha: é o legado, e vira compra de uma vez por todas.
-      mudanca.premiumSource = "purchase";
     } else if (user.assinaturaStatus) {
       // NÃO carimba. A assinatura já tem ramo próprio, com `assinaturaAte`
       // para expirar. Carimbar "purchase" aqui criaria uma SEGUNDA fonte, essa
       // sem prazo nenhum — e a conta ficaria paga para sempre depois de o
       // estorno ou o vencimento derrubarem a assinatura.
+      //
+      // ESTA CLÁUSULA VEM ANTES DA DE LEGADO, e a ordem é o conserto.
+      //
+      // `soPeloDocumento` zera os campos da assinatura, mas não zera o `tier`
+      // que a compra JÁ GRAVOU — e não pode zerar, senão o legado de verdade
+      // deixaria de ser reconhecido. O efeito era que toda conta paga virava
+      // indistinguível de um premium legado no request seguinte à compra,
+      // levava o carimbo "purchase", e daí o ramo 4b de `calcularPlan` a
+      // sustentava para sempre: `premiumUntil` é nulo numa conta de
+      // assinatura, e prazo nulo quer dizer "sem prazo".
+      //
+      // Resultado com a ordem antiga: estornar o pagamento derrubava a
+      // assinatura e a capacidade, e a pessoa continuava Pro. Testado em
+      // "quem comprou e estornou volta a ser free".
+    } else if (soPeloDocumento !== "free") {
+      // Se sustenta sozinha: é o legado, e vira compra de uma vez por todas.
+      mudanca.premiumSource = "purchase";
     } else if (novoPlan !== "free" && (user.vinculosPatrocinados ?? 0) > 0) {
       // Só é paga PORQUE alguém a banca. Origem própria, para não ser
       // confundida com legado no dia em que o vínculo acabar.
