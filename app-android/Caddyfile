@@ -5,8 +5,21 @@
 	try_files {path} /index.html
 	file_server
 
-	# Cache longo para os assets com hash no nome; o index nunca e cacheado.
+	# Cache longo para os assets com hash no nome. O nome muda a cada build,
+	# entao eles podem ser imutaveis.
 	@hashed path_regexp \.[0-9a-f]{8,}\.(js|css|woff2?|png|jpg|svg)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
-	header /index.html Cache-Control "no-cache"
+
+	# E o HTML NUNCA cacheado.
+	#
+	# O matcher tem de ser "tudo que NAO e asset com hash", e nao
+	# `header /index.html`: aquele casa o CAMINHO PEDIDO, e ninguem pede
+	# /index.html -- pedem "/" ou uma rota da SPA, que o try_files resolve
+	# para o index internamente. O resultado era a raiz voltando SEM
+	# Cache-Control nenhum, o navegador decidindo sozinho, e quem ja tinha
+	# aberto o site ficando preso na versao antiga: o HTML velho aponta para
+	# o bundle velho, que continua no ar por ser imutavel. Deploy feito,
+	# codigo no ar, e a pessoa vendo o de ontem -- sem nada que explique.
+	@html not path_regexp \.[0-9a-f]{8,}\.(js|css|woff2?|png|jpg|svg)$
+	header @html Cache-Control "no-cache"
 }

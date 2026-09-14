@@ -445,7 +445,12 @@ function CampoDeCupom({
         activeOpacity={0.7}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Txt variant="label" color={colors.text2}>
+        {/* Ver o comentário em RegisterScreen: cinza discreto passava batido. */}
+        <Txt
+          variant="bodyStrong"
+          color={colors.lime}
+          style={{ textDecorationLine: "underline" }}
+        >
           Tenho um cupom
         </Txt>
       </TouchableOpacity>

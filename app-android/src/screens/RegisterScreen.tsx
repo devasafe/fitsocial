@@ -120,7 +120,17 @@ export function RegisterScreen({ navigation }: Props) {
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={styles.cupomLink}
           >
-            <Txt variant="label" color={colors.text2}>
+            {/* Verde e sublinhado, e não cinza discreto.
+                A primeira versão era texto cinza pequeno no meio do
+                formulário, e passava batido — quem recebeu um cupom de um
+                parceiro procura por ele e não pode não achar. Discreto vale
+                para o que é opcional e ninguém está procurando; aqui é o
+                contrário. */}
+            <Txt
+              variant="bodyStrong"
+              color={colors.lime}
+              style={{ textDecorationLine: "underline" }}
+            >
               Tenho um cupom
             </Txt>
           </TouchableOpacity>
