@@ -13,7 +13,21 @@
 		Referrer-Policy "no-referrer"
 	}
 
-	@hashed path_regexp \.[0-9a-zA-Z_-]{8,}\.(js|css|woff2?)$
+	# Cache longo para os assets com hash no nome; o HTML nunca.
+	#
+	# O matcher do HTML tem de ser "tudo que NAO e asset com hash", e nao
+	# `header /index.html`: aquele casa o CAMINHO PEDIDO, e ninguem pede
+	# /index.html -- pedem "/", que o try_files resolve para o index
+	# internamente. A raiz voltava SEM Cache-Control nenhum, o navegador
+	# decidia sozinho, e quem ja tinha aberto o painel ficava preso na versao
+	# antiga: o HTML velho aponta para o bundle velho, que continua no ar por
+	# ser imutavel. Deploy feito, botao no ar, e a pessoa nao achando o botao.
+	#
+	# Era o mesmo defeito do Caddyfile do app, consertado antes -- e este
+	# ficou para tras justamente por serem dois arquivos.
+	@hashed path_regexp [.-][0-9a-zA-Z_-]{8,}\.(js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|map)$
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
-	header /index.html Cache-Control "no-cache"
+
+	@html not path_regexp [.-][0-9a-zA-Z_-]{8,}\.(js|css|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|map)$
+	header @html Cache-Control "no-cache"
 }
