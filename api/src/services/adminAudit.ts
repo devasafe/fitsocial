@@ -35,14 +35,34 @@ const CAMPOS_PERMITIDOS = new Set([
   "parceiro",
   "comissao",
   "revogadoEm",
+  // A cópia do documento no CRUD de coleções. É o que permite desfazer um
+  // apagar, e sem ela a ferramenta não deveria existir.
+  "documento",
 ]);
 
 function filtrar(obj: Record<string, unknown> | null | undefined) {
   if (!obj) return null;
   const out: Record<string, unknown> = {};
+  const descartados: string[] = [];
   for (const [k, v] of Object.entries(obj)) {
     if (CAMPOS_PERMITIDOS.has(k)) out[k] = v;
+    else descartados.push(k);
   }
+
+  // O descarte SILENCIOSO desta allowlist já custou três vezes: assinatura,
+  // cupom e a cópia do documento do CRUD. Em todas, o diff da auditoria
+  // gravou `null` e ninguém notou até precisar dele para explicar o que
+  // aconteceu com uma conta.
+  //
+  // O aviso só sai fora de produção, e é de propósito: ele serve para quem
+  // está escrevendo a chamada nova, no momento em que ela ainda não funciona.
+  // Em produção, um campo desconhecido é ruído que já não dá para consertar.
+  if (descartados.length && process.env.NODE_ENV !== "production") {
+    console.warn(
+      `[auditoria] campos descartados do diff (adicione a CAMPOS_PERMITIDOS): ${descartados.join(", ")}`
+    );
+  }
+
   return Object.keys(out).length ? out : null;
 }
 

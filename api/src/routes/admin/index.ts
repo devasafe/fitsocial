@@ -8,6 +8,7 @@ import { adminUsersRouter } from "./users.js";
 import { adminMetricsRouter } from "./metrics.js";
 import { adminReportsRouter } from "./reports.js";
 import { adminCuponsRouter } from "./cupons.js";
+import { adminDadosRouter } from "./dados.js";
 
 export const adminRouter = Router();
 
@@ -33,3 +34,6 @@ adminRouter.use("/users", adminUsersRouter);
 adminRouter.use("/metrics", adminMetricsRouter);
 adminRouter.use("/reports", adminReportsRouter);
 adminRouter.use("/cupons", adminCuponsRouter);
+// Acesso direto as colecoes. Ver o comentario em dados.ts: existe porque o
+// Mongo nao esta exposto na internet, e nao deve estar.
+adminRouter.use("/dados", adminDadosRouter);

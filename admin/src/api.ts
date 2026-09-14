@@ -440,3 +440,66 @@ export const reativarCupom = (token: string, codigo: string, motivo: string) =>
     body: { motivo },
     token,
   });
+
+/* ---------- dados (CRUD das coleções) ---------- */
+
+export interface ColecaoResumo {
+  nome: string;
+  colecao: string;
+  documentos: number;
+}
+
+/** Um documento qualquer. A forma varia por coleção — é o ponto. */
+export type Documento = Record<string, unknown>;
+
+export const buscarColecoes = (token: string) =>
+  api<ColecaoResumo[]>("/admin/dados", { token });
+
+export const buscarDocumentos = (
+  token: string,
+  colecao: string,
+  opcoes: { q?: string; limit?: number; cursor?: string | null; ordem?: string } = {}
+) => {
+  const p = new URLSearchParams();
+  if (opcoes.q) p.set("q", opcoes.q);
+  if (opcoes.limit) p.set("limit", String(opcoes.limit));
+  if (opcoes.cursor) p.set("cursor", opcoes.cursor);
+  if (opcoes.ordem) p.set("ordem", opcoes.ordem);
+  return api<Documento[], { nextCursor: string | null; total: number }>(
+    `/admin/dados/${encodeURIComponent(colecao)}?${p.toString()}`,
+    { token }
+  );
+};
+
+/** Edita só os campos informados. O resto do documento fica como está. */
+export const editarDocumento = (
+  token: string,
+  colecao: string,
+  id: string,
+  campos: Documento,
+  motivo: string
+) =>
+  api<Documento>(`/admin/dados/${encodeURIComponent(colecao)}/${id}`, {
+    method: "PATCH",
+    body: { campos, motivo },
+    token,
+  });
+
+/**
+ * Apaga UM documento. A `confirmacao` é o id digitado de novo.
+ *
+ * Não existe apagar em massa de propósito: `deleteMany` com filtro errado é
+ * irreversível e leva milissegundos.
+ */
+export const apagarDocumento = (
+  token: string,
+  colecao: string,
+  id: string,
+  motivo: string,
+  confirmacao: string
+) =>
+  api<{ apagado: boolean; id: string }>(`/admin/dados/${encodeURIComponent(colecao)}/${id}`, {
+    method: "DELETE",
+    body: { motivo, confirmacao },
+    token,
+  });
