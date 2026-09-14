@@ -295,6 +295,20 @@ export async function aplicarEvento(
       assinatura.validoAte = ate;
       assinatura.renovaEm = ate;
       await registrarCobranca(assinatura, e, "paga");
+
+      // A assinatura é gravada ANTES de o acesso ser concedido, e a ordem não
+      // é estética.
+      //
+      // `aplicarAcesso` escreve no `User`. Se ela viesse primeiro e o `save()`
+      // da assinatura falhasse depois — um índice único violado, por exemplo —
+      // a pessoa ficaria com o acesso e a assinatura continuaria "pendente":
+      // duas verdades opostas, e o webhook devolvendo 200 como se nada tivesse
+      // acontecido. Aconteceu num teste contra o sandbox, e o efeito seguinte
+      // foi pior: o evento repetido creditou um ciclo EM CIMA do prazo que a
+      // tentativa falha já tinha gravado.
+      //
+      // Gravando a cobrança primeiro, ou as duas coisas valem, ou nenhuma.
+      await assinatura.save();
       await aplicarAcesso(assinatura, ate);
       break;
     }
@@ -497,6 +511,19 @@ export async function processarWebhook(
   } catch (err) {
     registro.set("resultado", "erro");
     registro.set("erro", String((err as Error).message).slice(0, 500));
+
+    // E no LOG também, não só no livro-razão.
+    //
+    // O webhook responde 200 mesmo quando o evento falha — tem de responder,
+    // senão o gateway reenvia em laço. O preço disso é que a falha fica
+    // invisível: um pagamento confirmado que não liberou nada não aparece em
+    // lugar nenhum que alguém olhe. Sem esta linha, descobrir por que uma
+    // assinatura não ativou exige ir ler `EventoDeCobranca` no banco — foi
+    // exatamente o que custou uma rodada inteira de investigação.
+    console.error(
+      `[pagamentos] evento ${evento.eventoId} (${evento.tipo}) falhou:`,
+      (err as Error).message
+    );
   }
   registro.set("processadoEm", new Date());
   await registro.save();

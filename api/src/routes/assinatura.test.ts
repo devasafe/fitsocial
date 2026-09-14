@@ -698,3 +698,40 @@ describe("os buracos do cancelamento", () => {
     expect((await contaDe(u.id)).get("pro.coach.ativo")).toBe(true);
   });
 });
+
+describe("um evento que falha no meio não pode deixar meia verdade", () => {
+  it("o acesso NÃO é concedido quando a assinatura não consegue ser gravada", async () => {
+    const u = await registrar();
+    await request(app)
+      .post("/billing/checkout")
+      .set(auth(u.token))
+      .send({ produto: "pro", ciclo: "anual" });
+    const a = (await Assinatura.findOne({ user: u.id }))!;
+
+    // Uma OUTRA assinatura já carimbada com o mesmo id do gateway. É o que o
+    // índice único recusa — e foi assim que o caso apareceu no sandbox.
+    const outro = await registrar();
+    await Assinatura.create({
+      user: outro.id,
+      produto: "pro",
+      ciclo: "mensal",
+      status: "ativa",
+      provedor: "asaas",
+      provedorAssinaturaId: "sub_repetida",
+      precoCentavos: 2990,
+    });
+
+    await webhook({
+      referencia: a._id.toString(),
+      provedorAssinaturaId: "sub_repetida",
+      eventoId: "e-colide",
+    });
+
+    // Nem acesso, nem assinatura ativa: ou as duas coisas valem, ou nenhuma.
+    // Antes, o `User` saía com o prazo gravado e a assinatura ficava pendente.
+    const conta = await contaDe(u.id);
+    expect(conta.plan).toBe("free");
+    expect(conta.assinaturaAte ?? null).toBeNull();
+    expect((await Assinatura.findById(a._id))!.status).toBe("pendente");
+  });
+});
