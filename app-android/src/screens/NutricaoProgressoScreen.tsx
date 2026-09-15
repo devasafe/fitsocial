@@ -199,6 +199,31 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
   const resumo = evolucao?.resumo ?? null;
   const vazio = resumo !== null && resumo.diasComRegistro === 0;
 
+  /**
+   * A contagem viaja no TÍTULO do bloco de macros, e não numa legenda embaixo.
+   *
+   * É o mesmo defeito da média aparecendo sozinha, vestido de outra roupa: quem
+   * registrou 5 de 30 dias e acertou nesses 5 vê a barra quase cheia, e a barra
+   * é lida ANTES da legenda. Não dá para consertar na matemática — soma contra
+   * soma e média contra média dão a mesma fração —, então o conserto é de
+   * enquadramento: o número de dias fica grudado na coisa que ele qualifica.
+   *
+   * Quando a pessoa registrou a janela inteira não há o que ressalvar, e o
+   * título volta a ser só "Macros do período".
+   *
+   * "Que você registrou" só é dito quando os dias do cálculo SÃO os dias
+   * registrados. Se alguém registrou em dias anteriores a ter dieta, esses dias
+   * ficam de fora da conta (sem meta não há o que comparar) e o título diz o
+   * que a conta de fato usou, em vez de creditar registros que não entraram.
+   */
+  const tituloDosMacros = (() => {
+    if (!macros || !resumo) return "";
+    const quantos = macros.dias === 1 ? "no dia" : `nos ${macros.dias} dias`;
+    if (macros.dias === resumo.diasNaJanela) return "Macros do período";
+    if (macros.dias === resumo.diasComRegistro) return `Macros ${quantos} que você registrou`;
+    return `Macros ${quantos} com registro e meta`;
+  })();
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {!embedded && <Txt variant="titleScreen">Evolução da nutrição</Txt>}
@@ -319,19 +344,18 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
             )}
           </Card>
 
-          {/* Macros do período: a mesma barra do diário, com a soma no lugar do
-              valor do dia. */}
+          {/* Macros: a mesma barra do diário, com a soma no lugar do valor do
+              dia — e o escopo no título, onde o olho passa antes da barra. */}
           {macros && (
             <Card level={1}>
-              <Txt variant="titleCard">Macros do período</Txt>
+              <Txt variant="titleCard">{tituloDosMacros}</Txt>
               <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
                 <MacroRow label="Proteína" v={macros.proteina.v} t={macros.proteina.t} />
                 <MacroRow label="Carbo" v={macros.carbo.v} t={macros.carbo.t} />
                 <MacroRow label="Gordura" v={macros.gordura.v} t={macros.gordura.t} />
               </View>
               <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s12 }}>
-                Soma {macros.dias === 1 ? "do dia" : `dos ${macros.dias} dias`} com registro e meta,
-                contra a soma das metas desses mesmos dias.
+                Soma do que você comeu contra a soma das metas desses mesmos dias.
               </Txt>
             </Card>
           )}
