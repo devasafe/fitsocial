@@ -82,8 +82,12 @@ import { describe, it, expect } from "vitest";
 import { janelaPermitida, metaDaJanela, JANELA_DO_GRATIS } from "./janela.js";
 import type { UserDoc } from "../models/User.js";
 
-const comPlano = (plan: string) => ({ plan, tier: "premium" }) as unknown as UserDoc;
-const gratis = () => ({ plan: "free", tier: "free" }) as unknown as UserDoc;
+// `calcularPlan` le `user.email` (via isFounder) antes de olhar o plano: sem
+// email o teste estoura com "Cannot read properties of undefined". Verificado
+// rodando o entitlement de verdade, nao deduzido.
+const comPlano = (plan: string) =>
+  ({ plan, tier: "premium", email: "quem@paga.com" }) as unknown as UserDoc;
+const gratis = () => ({ plan: "free", tier: "free", email: "gratis@teste.com" }) as unknown as UserDoc;
 
 describe("Até onde o plano deixa enxergar", () => {
   it("quem paga pede o que quiser", () => {
@@ -234,8 +238,8 @@ beforeEach(async () => {
 describe("O alvo que valia em cada dia", () => {
   it("dia anterior a qualquer dieta nao tem alvo", async () => {
     await Plan.create({
-      user, version: 1, summary: "", workout: null, diet: dieta(2000),
-      disclaimer: "", createdAt: new Date("2026-09-10T12:00:00Z"),
+      user, version: 1, summary: "plano", workout: null, diet: dieta(2000),
+      disclaimer: "aviso", createdAt: new Date("2026-09-10T12:00:00Z"),
     });
 
     const alvos = await alvosPorDia(user, ["2026-09-08", "2026-09-11"]);
@@ -246,12 +250,12 @@ describe("O alvo que valia em cada dia", () => {
 
   it("meta que mudou no meio da janela nao reescreve o passado", async () => {
     await Plan.create({
-      user, version: 1, summary: "", workout: null, diet: dieta(2000),
-      disclaimer: "", createdAt: new Date("2026-09-01T12:00:00Z"),
+      user, version: 1, summary: "plano", workout: null, diet: dieta(2000),
+      disclaimer: "aviso", createdAt: new Date("2026-09-01T12:00:00Z"),
     });
     await Plan.create({
-      user, version: 2, summary: "", workout: null, diet: dieta(1700),
-      disclaimer: "", createdAt: new Date("2026-09-10T12:00:00Z"),
+      user, version: 2, summary: "plano", workout: null, diet: dieta(1700),
+      disclaimer: "aviso", createdAt: new Date("2026-09-10T12:00:00Z"),
     });
 
     const alvos = await alvosPorDia(user, ["2026-09-05", "2026-09-10", "2026-09-12"]);
@@ -265,13 +269,13 @@ describe("O alvo que valia em cada dia", () => {
 
   it("plano sem dieta nao conta como troca de alvo", async () => {
     await Plan.create({
-      user, version: 1, summary: "", workout: null, diet: dieta(2000),
-      disclaimer: "", createdAt: new Date("2026-09-01T12:00:00Z"),
+      user, version: 1, summary: "plano", workout: null, diet: dieta(2000),
+      disclaimer: "aviso", createdAt: new Date("2026-09-01T12:00:00Z"),
     });
     // Prescricao de treino: cria versao nova e PRESERVA a dieta (routes/pro.ts).
     await Plan.create({
-      user, version: 2, summary: "", workout: { split: "AB", daysPerWeek: 2, sessions: [] },
-      diet: null, disclaimer: "", createdAt: new Date("2026-09-05T12:00:00Z"),
+      user, version: 2, summary: "plano", workout: { split: "AB", daysPerWeek: 2, sessions: [] },
+      diet: null, disclaimer: "aviso", createdAt: new Date("2026-09-05T12:00:00Z"),
     });
 
     expect((await alvosPorDia(user, ["2026-09-07"])).get("2026-09-07")?.kcal).toBe(2000);
@@ -279,8 +283,8 @@ describe("O alvo que valia em cada dia", () => {
 
   it("nao enxerga a dieta de outra pessoa", async () => {
     await Plan.create({
-      user: new mongoose.Types.ObjectId(), version: 1, summary: "", workout: null,
-      diet: dieta(3000), disclaimer: "", createdAt: new Date("2026-09-01T12:00:00Z"),
+      user: new mongoose.Types.ObjectId(), version: 1, summary: "plano", workout: null,
+      diet: dieta(3000), disclaimer: "aviso", createdAt: new Date("2026-09-01T12:00:00Z"),
     });
 
     expect((await alvosPorDia(user, ["2026-09-07"])).get("2026-09-07")).toBeNull();
