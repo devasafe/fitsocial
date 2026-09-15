@@ -365,7 +365,11 @@ socialRouter.post(
 
     // Depois da resposta: quem publicou não espera o push dos seguidores sair.
     // A janela de silêncio de cada um decide se ele recebe algo ou não.
-    void avisarSeguidoresDePost(req.user!._id, req.user!.name);
+    //
+    // O `.catch` não é decoração: promise disparada com `void` não tem quem a
+    // espere, e uma rejeição solta derruba o processo no Node 20. A função já
+    // engole o próprio erro; isto é a rede para quando alguém mexer nela.
+    void avisarSeguidoresDePost(req.user!._id, req.user!.name).catch(() => {});
   })
 );
 
@@ -893,7 +897,7 @@ socialRouter.post(
         title: `${req.user!.name} comentou no seu post`,
         body: text.slice(0, 120),
         data: { tela: "post", postId: post._id.toString() },
-      });
+      }).catch(() => {});
     }
 
     await comment.populate("author", "name avatarUrl");
