@@ -32,6 +32,7 @@ import {
 } from "../api";
 import { Calendario } from "../components/Calendario";
 import { Conversa } from "../components/Conversa";
+import { Nutricao } from "../components/Nutricao";
 import { Prescrever } from "../components/Prescrever";
 
 // O Recharts sozinho pesa mais que o resto do painel inteiro. Separado, a
@@ -393,6 +394,24 @@ export function Aluno({
         ))}
       </nav>
 
+      {/* A janela fica FORA das abas — não dentro da guarda `evolucao` — porque
+          serve as duas telas que dependem dela (Evolução e Nutrição), e as duas
+          usam o mesmo período por definição (comentário em `janela`, acima).
+          Antes ela vivia dentro do bloco de Evolução, então trocar para
+          Nutrição trocava de aba sem trocar de período em silêncio: o
+          nutricionista via 90 dias de treino e, ao mudar de aba, continuava
+          vendo "90 dias" no cabeçalho mas sem chip nenhum aceso para provar
+          isso. Uma barra só, no mesmo lugar, para as duas. */}
+      {(aba === "evolucao" || aba === "nutricao") && (
+        <div className="chips" role="group" aria-label="Janela de tempo" style={{ marginBottom: 16 }}>
+          {JANELAS.map((d) => (
+            <button key={d} aria-pressed={janela === d} onClick={() => setJanela(d)}>
+              {rotuloDaJanela(d)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* `exercicios`/`calendario` estruturalmente vêm juntos com esta aba —
           ela só existe quando `escopo.treinos` é verdadeiro, o mesmo `podeTreinos`
           que faz o backend incluir os dois. A checagem aqui é defensiva: dá ao
@@ -415,19 +434,6 @@ export function Aluno({
               </button>
             ))}
           </nav>
-
-          <div
-            className="chips"
-            role="group"
-            aria-label="Janela de tempo"
-            style={{ marginBottom: 16 }}
-          >
-            {JANELAS.map((d) => (
-              <button key={d} aria-pressed={janela === d} onClick={() => setJanela(d)}>
-                {rotuloDaJanela(d)}
-              </button>
-            ))}
-          </div>
 
           {modo === "cardio" && (
             <div className="duas-colunas">
@@ -619,6 +625,12 @@ export function Aluno({
       {aba === "treino" && (
         <div className="painel">
           <Prescrever token={token} alunoId={perfil.aluno.id} aoSalvar={carregar} />
+        </div>
+      )}
+
+      {aba === "nutricao" && (
+        <div className="painel">
+          <Nutricao token={token} alunoId={perfil.aluno.id} janela={janela} />
         </div>
       )}
 
