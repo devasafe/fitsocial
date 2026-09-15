@@ -55,6 +55,34 @@ function diaDaSemana(dia: string): string {
   return comoData(dia).toLocaleDateString("pt-BR", { weekday: "long" });
 }
 
+/**
+ * Uma linha do cabeçalho: o que é à esquerda, o número à direita.
+ *
+ * As três saem daqui para terem o mesmo peso de verdade — "igual peso" escrito
+ * três vezes à mão é igual peso até alguém mexer em uma delas.
+ */
+function LinhaDoResumo({
+  rotulo,
+  valor,
+  sufixo,
+}: {
+  rotulo: string;
+  valor: number | string;
+  sufixo?: string;
+}) {
+  return (
+    <View style={styles.linhaDoResumo}>
+      <Txt variant="label" color={colors.text2} style={{ flex: 1 }}>
+        {rotulo}
+      </Txt>
+      <Txt variant="metricMd" tabular>
+        {valor}
+        {sufixo ? <Txt variant="label" color={colors.text2}>{sufixo}</Txt> : null}
+      </Txt>
+    </View>
+  );
+}
+
 export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {}) {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
@@ -230,32 +258,42 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
 
       {!error && resumo !== null && !vazio && (
         <>
-          {/* Cabeçalho honesto: as duas informações têm o MESMO peso, lado a
-              lado, porque a média sozinha é a mentira. */}
+          {/* Cabeçalho honesto: três números do MESMO peso, no mesmo cartão, e
+              nenhum deles sozinho.
+
+              A média é a que mente sem os outros dois: uma média de 12 dias
+              apresentada como se fosse de 30 é exatamente o que esta tela
+              existe para não fazer. A contagem tira essa possibilidade.
+
+              E "dias dentro da meta" é a resposta quantitativa para "eu bati
+              minha meta?" — a pergunta que uma linha de referência no gráfico
+              responderia mentindo, porque a reta usa UM alvo e este número
+              compara cada dia contra o alvo que valia NAQUELE dia.
+
+              Empilhados em vez de lado a lado porque os três precisam do mesmo
+              tamanho de número: em três colunas, "2450" em `metricMd` não cabe
+              na largura de um celular de 360px e vaza do cartão. */}
           <Card level={1}>
-            <View style={styles.duasColunas}>
-              <View style={styles.coluna}>
-                <Txt variant="label" color={colors.text2}>
-                  Média por dia registrado
-                </Txt>
-                <Txt variant="metricMd" tabular style={{ marginTop: spacing.xs }}>
-                  {resumo.mediaKcal ?? "—"}
-                  <Txt variant="label" color={colors.text2}> kcal</Txt>
-                </Txt>
-              </View>
-              <View style={styles.coluna}>
-                <Txt variant="label" color={colors.text2}>
-                  Dias registrados
-                </Txt>
-                <Txt variant="metricMd" tabular style={{ marginTop: spacing.xs }}>
-                  {resumo.diasComRegistro}
-                  <Txt variant="label" color={colors.text2}> de {resumo.diasNaJanela}</Txt>
-                </Txt>
-              </View>
-            </View>
+            <LinhaDoResumo rotulo="Média por dia registrado" valor={resumo.mediaKcal ?? "—"} sufixo=" kcal" />
+            <LinhaDoResumo
+              rotulo="Dias registrados"
+              valor={resumo.diasComRegistro}
+              sufixo={` de ${resumo.diasNaJanela}`}
+            />
+            {/* Sem alvo nenhum na janela, esta linha some. "0 dias dentro da
+                meta" para quem não tem meta nenhuma leria como erro da pessoa,
+                e é só ausência de dieta. */}
+            {alvoVigente && (
+              <LinhaDoResumo rotulo="Dias dentro da meta" valor={resumo.diasDentroDoAlvo} />
+            )}
             <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s12 }}>
               A média é só dos dias em que houve registro. Os outros não entram na conta.
             </Txt>
+            {alvoVigente && (
+              <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.xs }}>
+                Cada dia é comparado com o alvo que valia naquele dia, e não com o de hoje.
+              </Txt>
+            )}
           </Card>
 
           {/* Gráfico: os dias vazios chegam como `null` e a linha quebra neles. */}
@@ -328,6 +366,11 @@ const styles = StyleSheet.create({
     gap: spacing.card,
   },
   chips: { gap: spacing.s8, paddingVertical: spacing.xs },
-  duasColunas: { flexDirection: "row", gap: spacing.md },
-  coluna: { flex: 1 },
+  linhaDoResumo: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
 });
