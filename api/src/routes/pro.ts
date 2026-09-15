@@ -48,7 +48,7 @@ import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } 
  * profissional com nome, e a pessoa deve parar se sentir dor.
  */
 const DISCLAIMER_DO_COACH =
-  "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e fale com ele.";
+  "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e procure quem escreveu.";
 
 /**
  * O aviso que acompanha uma dieta escrita por gente, e não pela IA.
@@ -58,7 +58,7 @@ const DISCLAIMER_DO_COACH =
  * algo por conta própria.
  */
 const DISCLAIMER_DO_NUTRI =
-  "Dieta prescrita pelo seu profissional. Antes de mudar algo por conta própria, fale com ele.";
+  "Dieta prescrita pelo seu profissional. Antes de mudar algo por conta própria, procure quem escreveu.";
 
 export const proRouter = Router();
 proRouter.use(requireAuth);

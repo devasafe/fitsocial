@@ -394,6 +394,25 @@ describe("GET /plans/hoje avisa o app: podeEditarDieta", () => {
     expect(r.body.meta.podeEditarDieta).toBe(false);
     expect(r.body.meta.podeEditarPlano).toBe(true);
   });
+
+  it("encerrar o vínculo devolve podeEditarDieta a true", async () => {
+    // `papeisAtivosDoAluno` tem o PRÓPRIO filtro `status: "ativo"`
+    // (vinculos.ts) — é código novo desta rodada, e diferente de
+    // `temProfissional`. O teste de encerramento mais acima passa por
+    // `temProfissional` (via `POST /plans/diet`); este cobre o outro caminho.
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    const linkId = await vincular(nutri.token, aluno.token);
+
+    const antes = await request(app).get("/plans/hoje").set(auth(aluno.token));
+    expect(antes.body.meta.podeEditarDieta).toBe(false);
+
+    const e = await request(app).delete(`/pro/acompanhamentos/${linkId}`).set(auth(aluno.token));
+    expect(e.status).toBe(200);
+
+    const depois = await request(app).get("/plans/hoje").set(auth(aluno.token));
+    expect(depois.body.meta.podeEditarDieta).toBe(true);
+  });
 });
 
 describe("o chat do coach IA respeita o nutricionista", () => {
