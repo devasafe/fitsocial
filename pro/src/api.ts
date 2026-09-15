@@ -178,9 +178,15 @@ export interface PerfilDoAluno {
    * aluno tem dois, e é essa lista que decide quais abas aparecem.
    */
   vinculos: { id: string; papel: "coach" | "nutri"; escopo: Escopo; desde: string }[];
-  constancia: { total: number; week: number; streak: number; lastCheckIn: string | null };
-  exercicios: ExercicioNaLista[];
-  calendario: DiaDoCalendario[];
+  /**
+   * Ausentes quando ninguém no vínculo abriu `escopo.treinos` — o backend
+   * omite os três juntos (`api/src/routes/pro.ts`) em vez de mandar zero:
+   * zero seria uma afirmação sobre a vida do aluno, ausência é "não me
+   * deixou ver". Opcionais aqui pelo mesmo motivo, e não undefined por acaso.
+   */
+  constancia?: { total: number; week: number; streak: number; lastCheckIn: string | null };
+  exercicios?: ExercicioNaLista[];
+  calendario?: DiaDoCalendario[];
 }
 
 export const buscarAluno = (token: string, id: string, dias = 90) =>

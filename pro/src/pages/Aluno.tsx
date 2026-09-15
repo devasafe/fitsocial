@@ -55,8 +55,13 @@ type Aba = "evolucao" | "treino" | "nutricao" | "dieta" | "conversa";
 function abasDoVinculo(papel: "coach" | "nutri", escopo: Escopo): [Aba, string][] {
   const abas: [Aba, string][] = [];
   if (papel === "coach") {
-    if (escopo.treinos) abas.push(["evolucao", "Evolução"]);
-    abas.push(["treino", "Prescrever treino"]);
+    // As duas exigem `escopo.treinos`: a rota de prescrição também é guardada
+    // com `{ parte: "treinos" }` (api/src/routes/pro.ts) — sem isto, o coach
+    // via aba que dá 403 ao salvar.
+    if (escopo.treinos) {
+      abas.push(["evolucao", "Evolução"]);
+      abas.push(["treino", "Prescrever treino"]);
+    }
   }
   if (papel === "nutri") {
     if (escopo.dieta) abas.push(["nutricao", "Nutrição"], ["dieta", "Prescrever dieta"]);
@@ -127,7 +132,9 @@ export function Aluno({
       // Mantém o exercício escolhido quando ele existe na janela nova; trocar
       // de janela não pode trocar o assunto embaixo do coach.
       setExercicio((atual) => {
-        const lista = r.data.exercicios;
+        // Ausente quando ninguém abriu `escopo.treinos` para esta pessoa —
+        // ausência de dado, não lista vazia por falta de treino.
+        const lista = r.data.exercicios ?? [];
         return lista.find((e) => e.slug === atual?.slug) ?? lista[0] ?? null;
       });
       setErro(null);
@@ -277,7 +284,7 @@ export function Aluno({
   const conversaLinkId =
     perfil.vinculos.find((v) => v.id === linkDaConversa)?.id ?? perfil.vinculo.id;
 
-  const dias = perfil.constancia.lastCheckIn
+  const dias = perfil.constancia?.lastCheckIn
     ? Math.floor((Date.now() - new Date(perfil.constancia.lastCheckIn).getTime()) / 86_400_000)
     : null;
 
@@ -349,25 +356,30 @@ export function Aluno({
         </div>
       </div>
 
-      <div className="cartoes" style={{ marginBottom: 16 }}>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.streak}</div>
-          <div className="rotulo">dias seguidos</div>
+      {/* Some inteiro, não mostra zero: ausência é "não me deixou ver", e
+          zero seria uma afirmação sobre a vida do aluno (mesma regra do
+          comentário em api/src/routes/pro.ts sobre omitir estes campos). */}
+      {perfil.constancia && (
+        <div className="cartoes" style={{ marginBottom: 16 }}>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.streak}</div>
+            <div className="rotulo">dias seguidos</div>
+          </div>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.week}</div>
+            <div className="rotulo">treinos na semana</div>
+          </div>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.total}</div>
+            <div className="rotulo">treinos no total</div>
+            {dias !== null && (
+              <div className="aviso">
+                {dias === 0 ? "treinou hoje" : `último há ${dias} ${dias === 1 ? "dia" : "dias"}`}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.week}</div>
-          <div className="rotulo">treinos na semana</div>
-        </div>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.total}</div>
-          <div className="rotulo">treinos no total</div>
-          {dias !== null && (
-            <div className="aviso">
-              {dias === 0 ? "treinou hoje" : `último há ${dias} ${dias === 1 ? "dia" : "dias"}`}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       <nav className="nav" style={{ flexDirection: "row", marginBottom: 16 }}>
         {unicas.map(([id, rotulo]) => (
@@ -381,7 +393,11 @@ export function Aluno({
         ))}
       </nav>
 
-      {aba === "evolucao" && (
+      {/* `exercicios`/`calendario` estruturalmente vêm juntos com esta aba —
+          ela só existe quando `escopo.treinos` é verdadeiro, o mesmo `podeTreinos`
+          que faz o backend incluir os dois. A checagem aqui é defensiva: dá ao
+          TypeScript o mesmo fato, em vez de assumir undefined como array vazio. */}
+      {aba === "evolucao" && perfil.exercicios && perfil.calendario && (
         <>
           <nav className="nav" style={{ flexDirection: "row", marginBottom: 12 }}>
             {(
