@@ -284,7 +284,13 @@ async function alunoDoProfissional(
 
   const { parte, preferido } = opts;
   const clientId = new mongoose.Types.ObjectId(id);
-  const links = await vinculosAtivos(clientId, req.user!._id);
+  // Ordenado por aceite, do mais antigo para o mais novo: `vinculosAtivos` não
+  // ordena, e sem isto o `links[0]` do fallback abaixo seguia a ordem natural
+  // do Mongo — arbitrária, e por isso o `vinculo` singular da ficha podia
+  // sair de qualquer um dos dois papéis de quem acompanha em dobro.
+  const links = (await vinculosAtivos(clientId, req.user!._id)).sort(
+    (a, b) => a.aceitoEm.getTime() - b.aceitoEm.getTime()
+  );
   const abre = (l: (typeof links)[number]) => (parte ? l.escopo?.[parte] === true : true);
 
   const link =
@@ -327,7 +333,13 @@ proRouter.get(
     // Seguir a janela dava ao coach uma tira de 13 semanas contra o ano inteiro
     // que o aluno vê — e, com a janela em "tudo", um `Math.min(0, 365)` que
     // pedia ZERO dias: calendário vazio justo em quem tem mais histórico.
-    const podeTreinos = link.escopo?.treinos === true;
+    //
+    // Pergunta é sobre a DUPLA, não sobre o `link` singular escolhido acima
+    // (que, sem `parte`, é só o vínculo mais antigo): quem é coach e nutri do
+    // mesmo aluno tem dois vínculos, e o de coach pode abrir treinos mesmo
+    // que o mais antigo dos dois seja o de nutri com treinos fechado. Checar
+    // só `link.escopo` escondia o treino de quem tinha acesso de verdade.
+    const podeTreinos = links.some((l) => l.escopo?.treinos === true);
 
     const [exercicios, calendario, datas] = podeTreinos
       ? await Promise.all([

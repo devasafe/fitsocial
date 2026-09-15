@@ -976,6 +976,12 @@ describe("o coach vê o mesmo que o aluno", () => {
 
     const perfil = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(p.token));
     expect(perfil.status).toBe(200);
+    // A pergunta do bloco de treino é sobre a DUPLA, não sobre qual dos dois
+    // vínculos calhou de vir primeiro: o vínculo de nutri (sem treinos) não
+    // pode apagar o bloco de treino de quem também é coach da mesma pessoa.
+    expect(perfil.body.data.exercicios).toBeDefined();
+    expect(perfil.body.data.calendario).toBeDefined();
+    expect(perfil.body.data.constancia).toBeDefined();
 
     const grupos = await request(app).get(`/pro/alunos/${aluno.id}/grupos`).set(auth(p.token));
     expect(grupos.status).toBe(200);
