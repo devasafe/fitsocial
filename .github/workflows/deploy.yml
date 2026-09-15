@@ -83,6 +83,23 @@ jobs:
           npm run typecheck
           npm test
 
+      # O `checar-cores` roda `node --experimental-strip-types`, que só existe no
+      # Node 22 — e o resto do pipeline é Node 20, como os Dockerfiles. Sem esta
+      # troca o passo abaixo morre com `node: bad option`, e foi o que aconteceu
+      # na primeira vez que ele rodou de verdade: os pushes anteriores só tinham
+      # mexido em `.github/` ou em `api/`, então o portão do app nunca tinha sido
+      # exercitado.
+      #
+      # A troca vale SÓ para o app, de propósito. A suíte da API continua no
+      # Node 20 porque é a versão que os containers rodam, e testar o portão mais
+      # importante numa versão diferente da produção seria perder fidelidade para
+      # ganhar uniformidade. O app não produz imagem aqui — o Dockerfile dele
+      # compila à parte, também em Node 20.
+      - uses: actions/setup-node@v4
+        if: steps.mudou.outputs.app == 'true'
+        with:
+          node-version: "22"
+
       # O Metro não checa tipo: um app que não compila passa pelo export do
       # Expo e chega quebrado em produção. Este é o único portão do app.
       - name: Typecheck do app
