@@ -259,3 +259,26 @@ describe("Token que morreu", () => {
     expect(await PushDevice.countDocuments({ user: dono.id })).toBe(0);
   });
 });
+
+describe("Aviso que sai depois da resposta", () => {
+  it("nao rejeita quando o banco falha no meio — rejeitar ali derruba o processo", async () => {
+    // `avisarSeguidoresDePost` e disparada com `void`, DEPOIS da resposta ir
+    // embora (routes/social.ts). Promise disparada assim nao tem quem a espere:
+    // se ela rejeitar, no Node 20 a rejeicao nao tratada derruba o processo, e
+    // a API reinicia por causa de um push de feed.
+    //
+    // Nao e hipotese. Foi assim que a suite quebrou no CI: o teste terminava,
+    // o mongo desconectava, e o `Follow.find` que ainda estava em voo rejeitava
+    // com "Operation interrupted because client was closed".
+    const alguem = new mongoose.Types.ObjectId();
+    const espiao = vi.spyOn(Follow, "find").mockReturnValue({
+      select: () => ({
+        limit: () => Promise.reject(new Error("Operation interrupted because client was closed")),
+      }),
+    } as never);
+
+    await expect(avisarSeguidoresDePost(alguem, "Asafe")).resolves.toBe(0);
+
+    espiao.mockRestore();
+  });
+});

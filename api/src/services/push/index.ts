@@ -129,25 +129,35 @@ export async function enviarPush(
  * infraestrutura.
  */
 export async function avisarSeguidoresDePost(autor: Id, nomeDoAutor: string): Promise<number> {
-  const seguidores = await Follow.find({ following: autor })
-    .select("follower")
-    .limit(TETO_DE_SEGUIDORES);
+  // Engole o próprio erro, como a `enviarPush` acima — e aqui não é só higiene.
+  // Esta função é disparada com `void`, DEPOIS de a resposta ir embora
+  // (routes/social.ts): não existe ninguém para esperar por ela. Uma rejeição
+  // solta assim é `unhandledRejection`, e no Node 20 isso derruba o processo.
+  // A API reiniciaria por causa de um push de feed que ninguém pediu.
+  try {
+    const seguidores = await Follow.find({ following: autor })
+      .select("follower")
+      .limit(TETO_DE_SEGUIDORES);
 
-  let enviados = 0;
-  for (const f of seguidores) {
-    // O contador é por pessoa: cada uma tem a sua marca de leitura, então cada
-    // uma tem um número diferente de publicações não vistas.
-    const naoVistas = await naoVistosNoFeed(f.follower);
-    const body =
-      naoVistas > 1
-        ? `${naoVistas} publicações novas de quem você segue`
-        : `${nomeDoAutor} publicou um treino`;
+    let enviados = 0;
+    for (const f of seguidores) {
+      // O contador é por pessoa: cada uma tem a sua marca de leitura, então cada
+      // uma tem um número diferente de publicações não vistas.
+      const naoVistas = await naoVistosNoFeed(f.follower);
+      const body =
+        naoVistas > 1
+          ? `${naoVistas} publicações novas de quem você segue`
+          : `${nomeDoAutor} publicou um treino`;
 
-    enviados += await enviarPush(f.follower, "posts_novos", {
-      title: env.appName,
-      body,
-      data: { tela: "feed" },
-    });
+      enviados += await enviarPush(f.follower, "posts_novos", {
+        title: env.appName,
+        body,
+        data: { tela: "feed" },
+      });
+    }
+    return enviados;
+  } catch (err) {
+    console.warn(`[push] não consegui avisar os seguidores: ${(err as Error).message}`);
+    return 0;
   }
-  return enviados;
 }
