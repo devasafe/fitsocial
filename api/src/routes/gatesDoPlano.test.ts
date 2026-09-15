@@ -186,6 +186,7 @@ describe("a evolução do grátis para nos últimos 7 dias", () => {
       "/evolucao/exercicios?dias=365",
       "/evolucao/grupos?dias=365",
       "/evolucao/cardio?dias=365",
+      "/nutrition/evolucao?dias=365",
     ]) {
       expect((await request(app).get(rota).set(auth(u.token))).status).toBe(200);
     }
