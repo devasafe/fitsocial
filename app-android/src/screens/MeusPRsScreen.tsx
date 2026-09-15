@@ -11,6 +11,7 @@ import { colors, spacing } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 /** O recorde que representa o exercício na lista. Os outros ficam de apoio. */
 const PRINCIPAL = ["carga_max", "best_time", "best_dist", "aulas", "horas"];
@@ -121,7 +122,7 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
                 Fran, Cindy, Murph — e quanto você melhorou em cada um.
               </Txt>
             </View>
-            <Txt variant="titleCard" color={colors.text3}>›</Txt>
+            <Icon name="chevronDireita" size={18} color={colors.text3} />
           </View>
         </Card>
       </TouchableOpacity>
@@ -139,13 +140,13 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
               um. O que o Pro abre é voltar aqui para consultar.
             </Txt>
             <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
-              Conhecer o Pro ›
+              Conhecer o Pro
             </Txt>
           </Card>
         </TouchableOpacity>
       ) : agrupados.length === 0 ? (
         <EmptyState
-          icon="🏆"
+          icon="trofeu"
           title="Nenhum recorde ainda"
           description="Registre um treino de força e seus recordes de carga e 1RM aparecem aqui."
           actionLabel="Registrar treino"
@@ -197,7 +198,7 @@ export function MeusPRsScreen(_props: { embedded?: boolean } = {}) {
                   O histórico completo faz parte do Pro. Suas conquistas continuam todas aqui.
                 </Txt>
                 <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.s8 }}>
-                  Conhecer o Pro ›
+                  Conhecer o Pro
                 </Txt>
               </Card>
             </TouchableOpacity>

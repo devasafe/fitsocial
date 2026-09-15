@@ -13,6 +13,7 @@ import { DesafiosScreen } from "./DesafiosScreen";
 import { LeaderboardScreen } from "./LeaderboardScreen";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 type Seg = "seguindo" | "explorar" | "desafios" | "ranking";
 
@@ -37,7 +38,7 @@ export function ComunidadeScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Txt variant="titleScreen">Comunidade</Txt>
           <TouchableOpacity onPress={() => nav.navigate("BuscarPessoas")} activeOpacity={0.7} hitSlop={8}>
-            <Txt variant="titleCard">🔍</Txt>
+            <Icon name="lupa" size={22} color={colors.text} accessibilityLabel="Buscar pessoas" />
           </TouchableOpacity>
         </View>
         <SegmentedControl

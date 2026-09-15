@@ -95,7 +95,7 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
       ) : items.length === 0 ? (
         tab === "mine" ? (
           <EmptyState
-            icon="🏁"
+            icon="bandeira"
             title="Nenhum desafio ainda"
             description="Crie um desafio para você e seus amigos, ou entre por um código de convite."
             actionLabel="Criar desafio"
@@ -103,7 +103,7 @@ export function DesafiosScreen(_props: { embedded?: boolean } = {}) {
           />
         ) : (
           <EmptyState
-            icon="🔎"
+            icon="lupa"
             title="Nada em aberto agora"
             description="Ainda não há desafios públicos. Que tal criar o primeiro?"
             actionLabel="Criar desafio"

@@ -1,7 +1,6 @@
 import React from "react";
 import {
   View,
-  Text,
   ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
@@ -23,6 +22,7 @@ import { EditDietScreen } from "../screens/EditDietScreen";
 import { ComunidadeScreen } from "../screens/ComunidadeScreen";
 import { ProgressoScreen } from "../screens/ProgressoScreen";
 import { CreatePostScreen } from "../screens/CreatePostScreen";
+import { TreinoConcluidoScreen } from "../screens/TreinoConcluidoScreen";
 import { EditarPostScreen } from "../screens/EditarPostScreen";
 import { EsqueciSenhaScreen } from "../screens/EsqueciSenhaScreen";
 import { RegisterCrossfitScreen } from "../screens/RegisterCrossfitScreen";
@@ -30,6 +30,7 @@ import { BenchmarksScreen } from "../screens/BenchmarksScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { useContadores } from "../context/ContadoresContext";
 import { BadgeSobreposto } from "../components/Badge";
+import { Icon, type NomeDeIcone } from "../components/Icon";
 import { PushSync } from "../components/PushSync";
 import { SubscriptionScreen } from "../screens/SubscriptionScreen";
 import { CheckInScreen } from "../screens/CheckInScreen";
@@ -45,6 +46,7 @@ import { ConfiguracoesScreen } from "../screens/ConfiguracoesScreen";
 import { AlterarSenhaScreen } from "../screens/AlterarSenhaScreen";
 import { ExcluirContaScreen } from "../screens/ExcluirContaScreen";
 import { RegistrarScreen } from "../screens/RegistrarScreen";
+import { TreinoDoDiaScreen } from "../screens/TreinoDoDiaScreen";
 import { RefeicaoPorFotoScreen } from "../screens/RefeicaoPorFotoScreen";
 import { RegisterActivityScreen } from "../screens/RegisterActivityScreen";
 import { RegisterEnduranceScreen } from "../screens/RegisterEnduranceScreen";
@@ -112,22 +114,30 @@ const headerStyle = {
 
 // Badge na aba: só a bolinha, sem número. Na barra inferior o número não muda
 // decisão nenhuma — ou tem coisa nova lá dentro, ou não tem.
-function IconeComunidade({ focused }: { focused: boolean }) {
+function IconeComunidade({ focused, color }: { focused: boolean; color: string }) {
   const { contadores } = useContadores();
   const novidades = contadores.feed + contadores.explore + contadores.desafios;
   return (
     <View>
-      <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>❒</Text>
+      <Icon name="pessoas" size={22} color={color} />
       {/* Some assim que a pessoa está na aba: ali ela já vê os badges por sub-visão. */}
       {!focused && <BadgeSobreposto valor={novidades} ponto />}
     </View>
   );
 }
 
-function tabIcon(emoji: string) {
-  return ({ focused }: { focused: boolean }) => (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.45 }}>{emoji}</Text>
-  );
+/**
+ * O ícone de uma aba.
+ *
+ * Eram glifos Unicode — `◆ ▲ ● ❒` — desenhados pelo sistema, com a cor vindo de
+ * uma opacidade em vez do token. A barra inferior é o primeiro pixel que
+ * qualquer pessoa vê do app, e era o lugar em que ele menos parecia nosso.
+ *
+ * `color` vem do navegador (`tabBarActiveTintColor`/`Inactive`), então ativo e
+ * inativo passam a ser cor de verdade, e não o mesmo desenho apagado.
+ */
+function tabIcon(name: NomeDeIcone) {
+  return ({ color }: { color: string }) => <Icon name={name} size={22} color={color} />;
 }
 
 // Botão central lima elevado — a única peça com brilho (brief §2.7). Não é aba:
@@ -159,7 +169,7 @@ function CenterTabButton({ onPress }: BottomTabBarButtonProps) {
         onPress={(e) => void abrirRegistro(e)}
         style={styles.centerFab}
       >
-        <Text style={styles.centerPlus}>+</Text>
+        <Icon name="mais" size={30} color={colors.onLime} strokeWidth={2.25} />
       </TouchableOpacity>
     </View>
   );
@@ -181,8 +191,8 @@ function MainTabs() {
         tabBarInactiveTintColor: colors.text2,
       }}
     >
-      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: "Hoje", tabBarIcon: tabIcon("◆") }} />
-      <Tab.Screen name="ProgressoTab" component={ProgressoScreen} options={{ title: "Progresso", tabBarIcon: tabIcon("▲") }} />
+      <Tab.Screen name="HomeTab" component={HomeScreen} options={{ title: "Hoje", tabBarIcon: tabIcon("casa") }} />
+      <Tab.Screen name="ProgressoTab" component={ProgressoScreen} options={{ title: "Progresso", tabBarIcon: tabIcon("grafico") }} />
       <Tab.Screen
         name="RegisterTab"
         component={EmptyTab}
@@ -197,9 +207,12 @@ function MainTabs() {
       <Tab.Screen
         name="ComunidadeTab"
         component={ComunidadeScreen}
-        options={{ title: "Comunidade", tabBarIcon: (p) => <IconeComunidade focused={p.focused} /> }}
+        options={{
+          title: "Comunidade",
+          tabBarIcon: (p) => <IconeComunidade focused={p.focused} color={p.color} />,
+        }}
       />
-      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Perfil", tabBarIcon: tabIcon("●") }} />
+      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: "Perfil", tabBarIcon: tabIcon("pessoa") }} />
     </Tab.Navigator>
   );
 }
@@ -244,6 +257,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
               title: "Refeição por foto",
               ...headerStyle,
             }}
+          />
+          <AppStack.Screen
+            name="TreinoDoDia"
+            component={TreinoDoDiaScreen}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Treino de hoje", ...headerStyle }}
           />
           <AppStack.Screen
             name="RegisterActivity"
@@ -299,6 +317,17 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="EditDiet"
             component={EditDietScreen}
             options={{ headerShown: true, title: "Editar dieta", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="TreinoConcluido"
+            component={TreinoConcluidoScreen}
+            options={{
+              ...transicaoDeFolha,
+              headerShown: false,
+              // Sem cabeçalho e sem gesto de voltar: o treino já está salvo, e
+              // voltar ao formulário só serviria para salvá-lo de novo.
+              gestureEnabled: false,
+            }}
           />
           <AppStack.Screen
             name="CreatePost"
@@ -490,5 +519,4 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  centerPlus: { fontSize: 30, lineHeight: 32, color: colors.onLime },
 });

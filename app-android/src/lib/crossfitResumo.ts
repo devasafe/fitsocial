@@ -146,7 +146,7 @@ export function legendaSugerida(
   rpe?: number | null,
   temPR = false
 ): string {
-  const partes = ["🏋️ Treino de CrossFit", ...linhasDoCard(wod, rpe)];
-  if (temPR) partes.push("🔥 Novo PR");
+  const partes = ["Treino de CrossFit", ...linhasDoCard(wod, rpe)];
+  if (temPR) partes.push("Novo PR");
   return partes.join("\n");
 }

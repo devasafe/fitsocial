@@ -13,6 +13,7 @@ import { getPost } from "../api/social";
 import { Skeleton } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -59,7 +60,7 @@ function SeloDoSistema() {
         borderColor: colors.line,
       }}
     >
-      <Txt variant="body">🛡</Txt>
+      <Icon name="escudo" size={18} color={colors.text2} />
     </View>
   );
 }
@@ -137,7 +138,7 @@ export function NotificacoesScreen() {
         <ErrorState message="Não foi possível carregar as notificações." onRetry={load} />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="🔔"
+          icon="sino"
           title="Nada novo por aqui"
           description="Quando alguém curtir, comentar, te seguir ou entrar no seu desafio, aparece aqui."
         />

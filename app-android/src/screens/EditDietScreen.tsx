@@ -9,6 +9,7 @@ import { Txt, Screen, Card, Button, Field, ErrorState } from "../components/ui";
 import { notify } from "../lib/notify";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 interface ItemForm {
   food: string;
@@ -172,9 +173,7 @@ export function EditDietScreen() {
                 <Field value={it.quantity} onChangeText={(t) => setItem(mi, ii, { quantity: t })} placeholder="100g" />
               </View>
               <TouchableOpacity onPress={() => removeItem(mi, ii)} hitSlop={8} style={{ paddingTop: 14 }}>
-                <Txt variant="titleCard" color={colors.text3}>
-                  ✕
-                </Txt>
+                <Icon name="fechar" size={18} color={colors.text3} accessibilityLabel="Remover item" />
               </TouchableOpacity>
             </View>
           ))}

@@ -19,6 +19,7 @@ import { Button, Txt, Screen, Card, Chip, ErrorState, Field } from "../component
 import { SkeletonLista } from "../components/Skeleton";
 import { colors, radius, spacing } from "../theme";
 import { MARCA } from "../marca";
+import { Icon } from "../components/Icon";
 
 // A tela de planos.
 //
@@ -618,10 +619,16 @@ function PlanoCard({
             um `.map` em `undefined` derrubaria a tela inteira em vez de mostrar
             um cartão sem a lista. */}
         {(produto.beneficios ?? []).map((b) => (
-          <View key={b} style={{ flexDirection: "row", gap: spacing.sm }}>
-            <Txt color={colors.lime} style={{ fontSize: 15, fontWeight: "800" }}>
-              ✓
-            </Txt>
+          <View key={b} style={{ flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" }}>
+            {/* O SVG tem altura própria; sem o empurrão ele ancora no topo da
+                linha de 22 e lê acima do centro óptico da primeira linha. */}
+            <Icon
+              name="check"
+              size={16}
+              color={colors.lime}
+              strokeWidth={2.25}
+              style={{ marginTop: 3 }}
+            />
             <Txt variant="body" style={{ flex: 1 }}>
               {b}
             </Txt>

@@ -22,6 +22,7 @@ import { EsperaLonga, PASSOS } from "../components/Espera";
 import { notify } from "../lib/notify";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
 
@@ -268,10 +269,8 @@ export function RefeicaoPorFotoScreen() {
                     style={[entrada, { flex: 1 }]}
                     placeholderTextColor={colors.text3}
                   />
-                  <TouchableOpacity onPress={() => remover(i.chave)} hitSlop={10}>
-                    <Txt variant="titleCard" color={colors.text3}>
-                      ✕
-                    </Txt>
+                  <TouchableOpacity onPress={() => remover(i.chave)} hitSlop={13}>
+                    <Icon name="fechar" size={18} color={colors.text3} accessibilityLabel="Remover alimento" />
                   </TouchableOpacity>
                 </View>
 

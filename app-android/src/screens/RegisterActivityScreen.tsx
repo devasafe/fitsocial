@@ -8,10 +8,10 @@ import { SuggestField, type Suggestion } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
 import { searchExercises, MUSCLE_GROUPS, type MuscleGroup, type ExerciseDef } from "../api/library";
 import { lastEntries, type LastEntry } from "../api/checkins";
-import { usePRCelebration } from "../components/PRCelebration";
-import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
-import { colors, spacing, radius, sportColor } from "../theme";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { colors, spacing, radius } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterActivity">;
 
@@ -137,11 +137,10 @@ function MusculoDoExercicio({
   );
 }
 
-export function RegisterActivityScreen({ route, navigation }: Props) {
+export function RegisterActivityScreen({ route }: Props) {
   const { sportId, prefill } = route.params;
   const { token } = useAuth();
-  const celebratePR = usePRCelebration();
-  const perguntarPrivacidade = usePerguntaDePrivacidade();
+  const concluirTreino = useConclusaoDeTreino();
   const [exercises, setExercises] = useState<ExerciseForm[]>(
     prefill && prefill.length ? prefill : [{ name: "", sets: [{ weightKg: "", reps: "" }] }]
   );
@@ -251,10 +250,7 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
         kind: "strength",
         payload: { variant, exercises: payloadExercises },
       });
-      celebratePR(res.meta.newPRs ?? []);
-      // Só aparece para quem ainda não escolheu; o treino já está salvo.
-      perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
+      concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -265,7 +261,7 @@ export function RegisterActivityScreen({ route, navigation }: Props) {
   return (
     <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
+        <SportIcon sportId={sportId} size={22} />
         <Txt variant="titleScreen">Novo treino</Txt>
       </View>
 

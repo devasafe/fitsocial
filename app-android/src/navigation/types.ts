@@ -23,6 +23,9 @@ export type AppStackParams = {
   EditWorkout: undefined;
   EditDiet: undefined;
   CheckIn: { session: Session };
+  /** Destino de todo treino salvo, em qualquer esporte. O treino já existe
+   *  quando esta rota abre — daí não haver caminho de volta ao formulário. */
+  TreinoConcluido: { activity: Activity; newPRs?: NewPR[] };
   CreatePost: { activity?: Activity; newPRs?: NewPR[] } | undefined;
   EditProfile: undefined;
   Configuracoes: undefined;
@@ -52,6 +55,9 @@ export type AppStackParams = {
   BuscarPessoas: undefined;
   // Registro de atividade multiesporte (Fase 2a/2b).
   Registrar: undefined;
+  /** O treino de hoje (ou a semana, ou a tela de encaixe de dias). É o que o
+   *  "+" abre para musculação, em vez do formulário em branco. */
+  TreinoDoDia: { sportId: string };
   RefeicaoPorFoto: { meal?: "cafe" | "almoco" | "lanche" | "janta" } | undefined;
   RegisterActivity: {
     sportId: string;

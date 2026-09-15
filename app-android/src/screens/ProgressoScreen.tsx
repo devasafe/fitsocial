@@ -120,7 +120,8 @@ function Resumo() {
         <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />
         {/* Zero aqui seria mentira para quem tem recordes e está no grátis. */}
         <MetricTile
-          value={recordesTrancados ? "🔒" : String(prs.length)}
+          value={String(prs.length)}
+          icon={recordesTrancados ? "cadeado" : undefined}
           label="recordes"
           style={{ flex: 1 }}
         />

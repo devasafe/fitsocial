@@ -2,6 +2,7 @@ import React from "react";
 import { View, StyleSheet } from "react-native";
 import type { Badge } from "../api/gamification";
 import { Txt } from "./ui";
+import { Icon, ehNomeDeIcone } from "./Icon";
 import { colors, radius, spacing } from "../theme";
 
 /** Grade de conquistas: destacadas quando ganhas, apagadas quando bloqueadas. */
@@ -18,7 +19,13 @@ export function Badges({ badges }: { badges: Badge[] }) {
       <View style={styles.grid}>
         {badges.map((b) => (
           <View key={b.id} style={[styles.badge, b.earned ? styles.earned : styles.locked]}>
-            <Txt style={[styles.emoji, !b.earned && styles.lockedEmoji]}>{b.emoji}</Txt>
+            {b.icon && ehNomeDeIcone(b.icon) ? (
+              <Icon name={b.icon} size={26} color={b.earned ? colors.lime : colors.text3} />
+            ) : (
+              // Servidor antigo, sem `icon`: o emoji continua sendo melhor que
+              // um buraco na grade.
+              <Txt style={[styles.emoji, !b.earned && styles.lockedEmoji]}>{b.emoji}</Txt>
+            )}
             <Txt
               variant="caption"
               color={b.earned ? colors.text : colors.text3}

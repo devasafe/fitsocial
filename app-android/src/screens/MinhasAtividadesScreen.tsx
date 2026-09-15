@@ -97,7 +97,7 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
               que é o que some primeiro quando alguém está desistindo.
             </Txt>
             <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
-              Conhecer o Pro ›
+              Conhecer o Pro
             </Txt>
           </Card>
         </TouchableOpacity>
@@ -120,7 +120,7 @@ export function MinhasAtividadesScreen(_props: { embedded?: boolean } = {}) {
         />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="🏋️"
+          icon="haltere"
           title="Nenhuma atividade ainda"
           description="Registre seu primeiro treino e ele aparece aqui, com métricas e histórico."
           actionLabel="Registrar treino"

@@ -24,6 +24,7 @@ import {
 } from "../api/challenges";
 import { colors, spacing, radius } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 type Props = NativeStackScreenProps<AppStackParams, "DesafioDetail">;
 
@@ -275,9 +276,12 @@ export function DesafioDetailScreen({ route }: Props) {
                     disabled={!challenge.isMember}
                     style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}
                   >
-                    <Txt variant="bodyStrong" color={p.likedByMe ? colors.danger : colors.text2}>
-                      {p.likedByMe ? "♥" : "♡"}
-                    </Txt>
+                    <Icon
+                      name="coracao"
+                      size={18}
+                      color={p.likedByMe ? colors.danger : colors.text2}
+                      preenchido={p.likedByMe}
+                    />
                     <Txt variant="label" tabular color={colors.text2}>
                       {p.likeCount}
                     </Txt>
@@ -287,9 +291,7 @@ export function DesafioDetailScreen({ route }: Props) {
                     activeOpacity={0.7}
                     style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 32 }}
                   >
-                    <Txt variant="bodyStrong" color={colors.text2}>
-                      💬
-                    </Txt>
+                    <Icon name="balao" size={18} color={colors.text2} />
                     <Txt variant="label" tabular color={colors.text2}>
                       {p.commentCount}
                     </Txt>

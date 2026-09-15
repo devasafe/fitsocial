@@ -8,6 +8,7 @@ import { notify } from "../lib/notify";
 import { getWaterDay, addWater, deleteWater, setWaterGoal, type WaterDay } from "../api/water";
 import { colors, spacing, radius } from "../theme";
 import { SkeletonTiles } from "../components/Skeleton";
+import { Icon } from "../components/Icon";
 
 const PRESETS = [200, 250, 500];
 
@@ -104,12 +105,17 @@ export function AguaScreen() {
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       {/* Navegação de data */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <TouchableOpacity onPress={() => setDate((d) => shift(d, -1))} hitSlop={10}>
-          <Txt variant="titleSection" color={colors.text2}>‹</Txt>
+        <TouchableOpacity onPress={() => setDate((d) => shift(d, -1))} hitSlop={11}>
+          <Icon name="chevronEsquerda" size={22} color={colors.text2} accessibilityLabel="Dia anterior" />
         </TouchableOpacity>
         <Txt variant="titleSection">{dateLabel(date)}</Txt>
-        <TouchableOpacity onPress={() => setDate((d) => shift(d, 1))} hitSlop={10} disabled={date === todayStr()}>
-          <Txt variant="titleSection" color={date === todayStr() ? colors.text3 : colors.text2}>›</Txt>
+        <TouchableOpacity onPress={() => setDate((d) => shift(d, 1))} hitSlop={11} disabled={date === todayStr()}>
+          <Icon
+            name="chevronDireita"
+            size={22}
+            color={date === todayStr() ? colors.text3 : colors.text2}
+            accessibilityLabel="Próximo dia"
+          />
         </TouchableOpacity>
       </View>
 
@@ -125,7 +131,7 @@ export function AguaScreen() {
         </View>
         <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: spacing.sm }}>
           <Txt variant="caption" color={colors.text3}>
-            {left > 0 ? `faltam ${left} ml` : "meta batida! 💧"}
+            {left > 0 ? `faltam ${left} ml` : "meta batida"}
           </Txt>
           <TouchableOpacity onPress={() => { setGoalDraft(String(goal)); setEditGoal((v) => !v); }} hitSlop={8}>
             <Txt variant="caption" color={colors.info}>

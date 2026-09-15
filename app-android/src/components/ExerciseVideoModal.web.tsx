@@ -2,6 +2,7 @@ import React from "react";
 import { Modal, View, Text, StyleSheet, TouchableOpacity, Dimensions } from "react-native";
 import { colors, radius, spacing } from "../theme";
 import type { VideoRef } from "../api/exerciseVideos";
+import { Icon } from "./Icon";
 
 interface Props {
   visible: boolean;
@@ -27,7 +28,7 @@ export function ExerciseVideoModal({ visible, video, exerciseName, onClose }: Pr
               {exerciseName}
             </Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.close}>✕</Text>
+              <Icon name="fechar" size={20} color={colors.text2} accessibilityLabel="Fechar" />
             </TouchableOpacity>
           </View>
           {video ? (
@@ -60,6 +61,5 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   title: { color: colors.text, fontWeight: "800", fontSize: 16, flex: 1, marginRight: spacing.md },
-  close: { color: colors.textMuted, fontSize: 18, fontWeight: "700" },
   empty: { color: colors.textMuted, paddingVertical: spacing.xl, textAlign: "center" },
 });

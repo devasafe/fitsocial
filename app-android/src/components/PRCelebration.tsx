@@ -8,6 +8,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Animated, Easing, Platform, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Txt } from "./ui";
+import { Icon } from "./Icon";
 import { prTypeLabel, prValueLabel } from "../api/prs";
 import type { NewPR } from "../api/activities";
 import { colors, radius, spacing, motion, sportColor } from "../theme";
@@ -40,9 +41,9 @@ function summarize(prs: NewPR[]): { title: string; line: string; delta: string |
   let delta: string | null = null;
   if (p.previousValue != null && LOAD_TYPES.has(p.type)) {
     const diff = Math.round((p.value - p.previousValue) * 10) / 10;
-    if (diff > 0) delta = `▲ +${diff} ${p.unit}`.trim();
+    if (diff > 0) delta = `+${diff} ${p.unit}`.trim();
   }
-  const title = prs.length > 1 ? `✦ ${prs.length} novos recordes` : "✦ Novo recorde";
+  const title = prs.length > 1 ? `${prs.length} novos recordes` : "Novo recorde";
   return { title, line: `${label}: ${value}`, delta };
 }
 
@@ -137,16 +138,22 @@ export function PRCelebrationProvider({ children }: { children: React.ReactNode 
               }}
             >
               <View style={{ flex: 1 }}>
-                <Txt variant="label" color={accent}>
-                  {info.title}
-                </Txt>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Icon name="faisca" size={14} color={accent} />
+                  <Txt variant="label" color={accent}>
+                    {info.title}
+                  </Txt>
+                </View>
                 <Txt variant="titleCard" style={{ marginTop: 2 }} numberOfLines={2}>
                   {info.line}
                 </Txt>
                 {info.delta ? (
-                  <Txt variant="label" color={colors.lime} tabular style={{ marginTop: 2 }}>
-                    {info.delta}
-                  </Txt>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                    <Icon name="subindo" size={13} color={colors.lime} />
+                    <Txt variant="label" color={colors.lime} tabular>
+                      {info.delta}
+                    </Txt>
+                  </View>
                 ) : null}
               </View>
             </View>

@@ -27,12 +27,12 @@ import { createActivity } from "../api/activities";
 import { blocoVazio, type Bloco, type PayloadDeCrossfit } from "../api/crossfit";
 import { comoNoQuadro, resultadoEmTexto, ehDescanso } from "../lib/crossfitResumo";
 import { anotarTreino } from "../lib/sugestoes";
-import { usePRCelebration } from "../components/PRCelebration";
-import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
 import { notify } from "../lib/notify";
-import { colors, radius, spacing, sportColor } from "../theme";
+import { colors, radius, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
+import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterCrossfit">;
 
@@ -60,11 +60,10 @@ function resumo(b: Bloco): string[] {
   return linhas;
 }
 
-export function RegisterCrossfitScreen({ route, navigation }: Props) {
+export function RegisterCrossfitScreen({ route }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
-  const celebratePR = usePRCelebration();
-  const perguntarPrivacidade = usePerguntaDePrivacidade();
+  const concluirTreino = useConclusaoDeTreino();
 
   const [blocos, setBlocos] = useState<Bloco[]>([]);
   const [box, setBox] = useState("");
@@ -160,9 +159,7 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
       );
 
       limparRascunho();
-      celebratePR(res.meta.newPRs ?? []);
-      perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
+      concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -175,7 +172,7 @@ export function RegisterCrossfitScreen({ route, navigation }: Props) {
   return (
     <Screen scroll underHeader>
       <View style={styles.cabecalho}>
-        <View style={[styles.ponto, { backgroundColor: sportColor(sportId) }]} />
+        <SportIcon sportId={sportId} size={22} />
         <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>
       </View>
 
@@ -340,7 +337,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   cabecalho: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.md },
-  ponto: { width: 12, height: 12, borderRadius: 6 },
   basicas: { marginBottom: spacing.md },
   bloco: { marginBottom: spacing.sm },
   previa: { marginBottom: spacing.md },

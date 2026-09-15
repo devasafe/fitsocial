@@ -36,6 +36,7 @@ import type { AppStackParams } from "../navigation/types";
 // arquivo de configuracao direto amarraria a tela ao formato dele.
 import Constants from "expo-constants";
 import { MARCA } from "../marca";
+import { Icon } from "../components/Icon";
 
 type Nav = NativeStackNavigationProp<AppStackParams>;
 
@@ -356,9 +357,7 @@ function Linha({
           </Txt>
         ) : null}
         {onPress ? (
-          <Txt variant="body" color={colors.text3}>
-            ›
-          </Txt>
+          <Icon name="chevronDireita" size={16} color={colors.text3} />
         ) : null}
       </View>
     </View>

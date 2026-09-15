@@ -8,6 +8,7 @@ import { colors, radius, spacing } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
 import { Txt, Card, Screen, ErrorState } from "../components/ui";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 export function TodayWorkoutScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
@@ -93,9 +94,7 @@ export function TodayWorkoutScreen() {
                 {session.exercises.length} exercícios
               </Txt>
             </View>
-            <Txt variant="metricMd" color={colors.text3} style={styles.chevron}>
-              ›
-            </Txt>
+              <Icon name="chevronDireita" size={20} color={colors.text3} style={{ marginLeft: spacing.s12 }} />
           </Card>
         </TouchableOpacity>
       ))}
@@ -113,6 +112,5 @@ const styles = StyleSheet.create({
   },
   content: { gap: spacing.card },
   card: { flexDirection: "row", alignItems: "center", borderRadius: radius.card },
-  chevron: { marginLeft: spacing.s12 },
   emptyText: { textAlign: "center", marginTop: spacing.sm },
 });

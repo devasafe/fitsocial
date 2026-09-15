@@ -19,6 +19,7 @@ import { Txt } from "../components/ui";
 import { colors, radius, spacing, type as typeScale } from "../theme";
 import { confirmDialog, notify } from "../lib/notify";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
 function timeAgo(iso: string): string {
@@ -203,9 +204,7 @@ export function PostDetailScreen() {
           activeOpacity={0.85}
           accessibilityLabel="Enviar comentário"
         >
-          <Txt variant="titleSection" color={colors.onLime} style={styles.sendText}>
-            ›
-          </Txt>
+          <Icon name="setaCima" size={22} color={colors.onLime} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -267,5 +266,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendDisabled: { opacity: 0.4 },
-  sendText: { marginTop: -3 },
 });

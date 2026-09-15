@@ -65,7 +65,7 @@ export const PASSOS = {
     "Entendendo seu objetivo…",
     "Montando seu treino…",
     "Ajustando sua dieta…",
-    "Bora evoluir 💪",
+    "Bora evoluir",
   ],
   dieta: ["Lendo sua ficha…", "Calculando as calorias…", "Montando as refeições…"],
   refeicao: ["Olhando o prato…", "Identificando os alimentos…", "Estimando as porções…"],
@@ -76,6 +76,6 @@ export const PASSOS = {
   ],
   foto: ["Preparando a foto…", "Enviando…"],
   /** Passagem: uma frase só, some sozinha. Não é espera, é cerimônia. */
-  comecarTreino: ["Bora treinar 💪"],
+  comecarTreino: ["Bora treinar"],
   publicando: ["Publicando…"],
 } as const;
