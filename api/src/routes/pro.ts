@@ -14,8 +14,10 @@ import { limiteDeAlunos } from "../services/entitlement.js";
 import {
   aceitarConvite,
   ajustarEscopo,
+  donoDaParte,
   encerrarVinculo,
   gerarConvite,
+  parteAberta,
   quantosAlunos,
   verConvite,
   vinculosAtivos,
@@ -272,34 +274,6 @@ const janelaDoAluno = z.preprocess(
   (v) => (v === "" || v == null ? undefined : v),
   z.coerce.number().int().min(0).max(3650).default(90)
 );
-
-/** O papel dono de cada parte do acompanhamento: treino é do coach, dieta é do nutri. */
-function donoDaParte(parte: "treinos" | "dieta"): PapelPro {
-  return parte === "treinos" ? "coach" : "nutri";
-}
-
-/**
- * Uma parte (treinos/dieta) está aberta para esta dupla?
- *
- * Quando existe vínculo do papel DONO daquela parte, é ele quem decide,
- * sozinho — mesmo que outro vínculo da mesma dupla (de outro papel) diga o
- * contrário. Só quando não existe vínculo do papel dono é que qualquer
- * vínculo decide, porque aí é a única leitura possível da vontade do aluno.
- *
- * Existe porque um `some`/`find` sobre TODOS os vínculos deixava o default
- * errado vencer: o vínculo de nutri nasce com `treinos: true` (ele não é dono
- * de treino, então o aluno nunca precisou decidir isso ali) e um `some`
- * achava esse `true` e reabria o treino mesmo depois do aluno desligar,
- * explicitamente, no cartão do treinador.
- */
-function parteAberta(
-  links: { papel: PapelPro; escopo?: { treinos?: boolean; dieta?: boolean } }[],
-  parte: "treinos" | "dieta"
-): boolean {
-  const doDono = links.filter((l) => l.papel === donoDaParte(parte));
-  const decisores = doDono.length > 0 ? doDono : links;
-  return decisores.some((l) => l.escopo?.[parte] === true);
-}
 
 /**
  * O aluno é meu, e ele abriu esta parte da vida dele para mim?
