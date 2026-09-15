@@ -55,8 +55,13 @@ async function convite(token: string, papel: "coach" | "nutri" = "coach", usos =
   return r.body.data.code as string;
 }
 
-async function vincular(coachToken: string, alunoToken: string, escopo = {}) {
-  const code = await convite(coachToken);
+async function vincular(
+  proToken: string,
+  alunoToken: string,
+  escopo = {},
+  papel: "coach" | "nutri" = "coach"
+) {
+  const code = await convite(proToken, papel);
   const r = await request(app)
     .post(`/pro/convites/${code}/aceitar`)
     .set(auth(alunoToken))
@@ -261,7 +266,7 @@ describe("o perfil do aluno", () => {
     expect(r.status).toBe(404);
   });
 
-  it("aluno que fechou os treinos dá 403 — diferente de não ter treinado", async () => {
+  it("aluno que fechou os treinos: a ficha abre, mas o treino não vem", async () => {
     const coach = await registrarProfissional();
     const aluno = await registrar();
     const linkId = await vincular(coach.token, aluno.token);
@@ -270,8 +275,17 @@ describe("o perfil do aluno", () => {
       .set(auth(aluno.token))
       .send({ treinos: false });
 
-    const r = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(coach.token));
-    expect(r.status).toBe(403);
+    const r = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(coach.token)).expect(200);
+
+    // O que o escopo protege continua protegido — e é isto que o teste guarda.
+    expect(r.body.data.exercicios).toBeUndefined();
+    expect(r.body.data.calendario).toBeUndefined();
+    expect(r.body.data.constancia).toBeUndefined();
+
+    // O que a ficha passa a dar é só identidade e vínculo: o coach já via o
+    // nome na lista de alunos, e clicar nele dava 403 — um beco sem saída.
+    expect(r.body.data.aluno.nome).toBeTruthy();
+    expect(r.body.data.vinculo.papel).toBe("coach");
   });
 
   it("depois de encerrado, o perfil fecha", async () => {
@@ -1033,15 +1047,18 @@ describe("o coach vê o mesmo que o aluno", () => {
     expect(curvaDoCoach.body.meta.menorEhMelhor).toBe(true);
   });
 
-  it("aluno que fechou os treinos fecha tudo junto, não só o perfil", async () => {
+  it("aluno que fechou os treinos fecha as rotas de dado — menos a ficha, que abre sem o treino", async () => {
     const { coach, aluno, linkId } = await comTreinos();
     await request(app)
       .patch(`/pro/acompanhamentos/${linkId}`)
       .set(auth(aluno.token))
       .send({ treinos: false });
 
+    // A ficha (`/pro/alunos/:id`) NÃO entra nesta lista de propósito: ela pede
+    // só vínculo, não escopo, e monta a resposta por bloco — coberto pelo
+    // teste "a ficha abre, mas o treino não vem". As rotas abaixo continuam
+    // atrás do escopo de `treinos` porque servem dado de treino puro.
     for (const rota of [
-      `/pro/alunos/${aluno.id}`,
       `/pro/alunos/${aluno.id}/grupos`,
       `/pro/alunos/${aluno.id}/conquistas`,
       `/pro/alunos/${aluno.id}/exercicios/supino_reto`,

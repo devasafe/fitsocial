@@ -263,28 +263,30 @@ const janelaDoAluno = z.preprocess(
 );
 
 /**
- * O aluno é meu, e ele abriu os treinos?
+ * O aluno é meu, e ele abriu esta parte da vida dele para mim?
  *
- * Estava repetido em cada rota do perfil; com quatro cópias, é questão de tempo
- * até uma delas esquecer a checagem de escopo — e aí um profissional veria o
- * que o aluno fechou.
+ * Sem `parte`, a pergunta é só "o aluno é meu": é o caso da ficha, que precisa
+ * abrir para qualquer profissional do aluno e mostrar o que o escopo permitir.
+ * Com `parte`, exige aquele escopo naquele vínculo.
+ *
+ * A escolha entre vínculos continua sendo a de antes, e pelo mesmo motivo: quem
+ * acompanha a mesma pessoa como treinador E como nutricionista tem dois
+ * vínculos ativos, com escopos diferentes. Pegar "um deles" negava acesso a
+ * quem tinha, de forma intermitente — o pior jeito de um bug de permissão
+ * aparecer.
  */
-async function alunoComTreinosAbertos(
+async function alunoDoProfissional(
   req: { user?: { _id: mongoose.Types.ObjectId }; params: Record<string, string> },
   id: string,
-  /** Papel PREFERIDO, não filtro: se não houver vínculo dele, devolve o que
-   *  houver, para o erro continuar dizendo a verdade a quem é nutri do aluno. */
-  preferido?: PapelPro
+  opts: { parte?: "treinos" | "dieta"; preferido?: PapelPro } = {}
 ) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(404, "Aluno não encontrado.");
 
+  const { parte, preferido } = opts;
   const clientId = new mongoose.Types.ObjectId(id);
-  // Uma consulta só, e a escolha feita aqui: quem acompanha a mesma pessoa como
-  // treinador E como nutricionista tem dois vínculos ativos, com escopos
-  // diferentes. Pegar "um deles" negava acesso a quem tinha, de forma
-  // intermitente — o pior jeito de um bug de permissão aparecer.
   const links = await vinculosAtivos(clientId, req.user!._id);
-  const abre = (l: (typeof links)[number]) => l.escopo?.treinos === true;
+  const abre = (l: (typeof links)[number]) => (parte ? l.escopo?.[parte] === true : true);
+
   const link =
     links.find((l) => l.papel === preferido && abre(l)) ??
     links.find(abre) ??
@@ -292,23 +294,28 @@ async function alunoComTreinosAbertos(
     links[0];
 
   if (!link) throw new HttpError(404, "Este não é seu aluno.");
-  if (!abre(link)) throw new HttpError(403, "Este aluno não abriu os treinos para você.");
-  return { link, clientId };
+  if (!abre(link)) {
+    const oQue = parte === "dieta" ? "a dieta" : "os treinos";
+    throw new HttpError(403, `Este aluno não abriu ${oQue} para você.`);
+  }
+  return { link, links, clientId };
 }
 
 /**
  * O aluno por dentro: o que ele autorizou, e nada além.
  *
- * A rota devolve 403 quando o escopo de treinos está fechado, em vez de
- * devolver a página vazia — a diferença entre "não treinou" e "não me deixou
- * ver" é exatamente o que o profissional precisa saber.
+ * Abre para qualquer profissional vinculado ao aluno — mesmo sem nenhum
+ * escopo aberto, ele precisa ver quem é a pessoa. Cada bloco (treinos, por
+ * ora) só vem quando o vínculo escolhido abriu aquele escopo; fechado, o
+ * campo fica AUSENTE, e não vazio — a diferença entre "não treinou" e "não me
+ * deixou ver" é exatamente o que o profissional precisa saber.
  */
 proRouter.get(
   "/alunos/:id",
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { link, links, clientId } = await alunoDoProfissional(req, String(req.params.id));
 
     const aluno = await User.findById(clientId).select("name username avatarUrl bio");
     if (!aluno) throw new HttpError(404, "Aluno não encontrado.");
@@ -320,11 +327,15 @@ proRouter.get(
     // Seguir a janela dava ao coach uma tira de 13 semanas contra o ano inteiro
     // que o aluno vê — e, com a janela em "tudo", um `Math.min(0, 365)` que
     // pedia ZERO dias: calendário vazio justo em quem tem mais histórico.
-    const [exercicios, calendario, datas] = await Promise.all([
-      exerciciosDoUsuario(clientId, dias),
-      calendarioDoUsuario(clientId, 365),
-      Activity.find({ user: clientId }).select("startedAt").sort({ startedAt: -1 }).limit(400),
-    ]);
+    const podeTreinos = link.escopo?.treinos === true;
+
+    const [exercicios, calendario, datas] = podeTreinos
+      ? await Promise.all([
+          exerciciosDoUsuario(clientId, dias),
+          calendarioDoUsuario(clientId, 365),
+          Activity.find({ user: clientId }).select("startedAt").sort({ startedAt: -1 }).limit(400),
+        ])
+      : [undefined, undefined, undefined];
 
     res.json({
       data: {
@@ -336,11 +347,25 @@ proRouter.get(
           bio: aluno.bio ?? "",
         },
         vinculo: { id: link._id.toString(), papel: link.papel, escopo: link.escopo, desde: link.aceitoEm },
-        // A mesma conta de sequência que o aluno vê na Home dele: os dois lados
-        // precisam ver o mesmo número, senão a conversa começa com discordância.
-        constancia: computeStats(datas.map((a) => ({ date: a.startedAt }))),
-        exercicios,
-        calendario,
+        // Todos os vínculos ativos desta dupla. `vinculo` continua sendo um
+        // deles, para não quebrar o painel que já está no ar; `vinculos` é o
+        // que permite a quem é coach E nutri do mesmo aluno ver as abas dos
+        // dois papéis.
+        vinculos: links.map((l) => ({
+          id: l._id.toString(),
+          papel: l.papel,
+          escopo: l.escopo,
+          desde: l.aceitoEm,
+        })),
+        // Ausentes quando o escopo não abre: ausência é "não me deixou ver", e
+        // zero seria uma afirmação sobre a vida do aluno.
+        ...(podeTreinos
+          ? {
+              constancia: computeStats(datas!.map((a) => ({ date: a.startedAt }))),
+              exercicios,
+              calendario,
+            }
+          : {}),
       },
       meta: { dias },
     });
@@ -359,7 +384,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const metrica = z.enum(METRICAS).default("carga_max").parse(req.query.metrica);
@@ -384,7 +409,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const esportes = await cardioDoUsuario(clientId, dias);
@@ -398,7 +423,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const metrica = z.enum(METRICAS_CARDIO).default("pace").parse(req.query.metrica);
@@ -424,7 +449,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
     void link;
 
     const dias = janelaDoAluno.parse(req.query.dias);
@@ -453,7 +478,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const { limit, cursor: bruto } = conquistasDoAlunoSchema.parse(req.query);
     const cursor = bruto ? decodeCursor(bruto) : null;
@@ -821,11 +846,14 @@ proRouter.put(
   "/alunos/:id/treino",
   requirePro("coach"),
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id), "coach");
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "treinos",
+      preferido: "coach",
+    });
     // Quem prescreve treino é o coach: o papel diz o que a pessoa faz, e não
-    // só em quem ela toca. O `"coach"` acima é o que garante que quem acompanha
-    // o mesmo aluno nos dois papéis caia no vínculo certo — e não leve um 403
-    // dizendo que ele não é o treinador de quem ele treina.
+    // só em quem ela toca. O `preferido: "coach"` acima é o que garante que
+    // quem acompanha o mesmo aluno nos dois papéis caia no vínculo certo — e
+    // não leve um 403 dizendo que ele não é o treinador de quem ele treina.
     if (link.papel !== "coach") throw new HttpError(403, "Só o treinador prescreve treino.");
 
     const { summary, workout, recado } = prescricaoSchema.parse(req.body);
