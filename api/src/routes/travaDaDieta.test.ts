@@ -35,6 +35,27 @@ const DIETA_GERADA = JSON.stringify({
   disclaimer: "Aviso.",
 });
 
+// `planDataSchema` (generate/adjust/import) exige as DUAS metades — diferente
+// de `dietDataSchema` (só `/plans/diet`), que é o que `DIETA_GERADA` acima
+// serve.
+const PLANO_GERADO = JSON.stringify({
+  summary: "Plano de teste",
+  workout: {
+    split: "Full body",
+    daysPerWeek: 3,
+    sessions: [
+      { day: "A", focus: "Geral", exercises: [{ name: "Agachamento", sets: 3, reps: "10", restSeconds: 60, notes: "" }] },
+    ],
+  },
+  diet: {
+    dailyCalories: 2000,
+    macros: { proteinG: 150, carbsG: 200, fatG: 60 },
+    meals: [{ name: "Café", timeHint: "07:00", items: [{ food: "Ovos", quantity: "3" }] }],
+    notes: "",
+  },
+  disclaimer: "Aviso.",
+});
+
 /** Dublê de IA: só a rota de geração de dieta fala com ela neste arquivo. */
 class EspiaoDeProvider implements AIProvider {
   readonly name = "espiao";
@@ -238,6 +259,93 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
     await criarPlano(aluno.id, { workout: TREINO_VALIDO, diet: DIETA_VALIDA });
 
     await request(app).delete("/plans/current/workout").set(auth(aluno.token)).expect(200);
+  });
+});
+
+describe("as outras portas que escrevem a dieta inteira (generate/adjust/import)", () => {
+  // `generatePlan`/`adjustPlan`/`importPlanFromText` devolvem as DUAS metades
+  // do plano (`PlanData` inclui `diet`), e só o treino passa por
+  // `preservarAgenda` depois do spread — a dieta entraria crua por cima da
+  // prescrição do nutricionista, sem que a palavra "diet" apareça na rota.
+  // Aqui a decisão de produto é recusar por inteiro (mesma simetria de
+  // `/generate` já recusar por inteiro para quem tem treinador): quem tem só
+  // nutricionista perde a geração de treino por IA também, porque não existe
+  // hoje um jeito de preservar metade da autoria de um `Plan`.
+  //
+  // O teste que importa aqui não é o status: é a dieta continuar sendo a do
+  // nutricionista (ou nada ter sido criado) DEPOIS da chamada — um teste que
+  // só olha 409 não pega alguém trocar a ordem das checagens e deixar o
+  // `Plan.create` rodar mesmo assim.
+
+  it("POST /plans/generate recusa por inteiro, e não cria plano nenhum", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token);
+
+    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(409);
+
+    expect(await Plan.countDocuments({ user: aluno.id })).toBe(0);
+  });
+
+  it("POST /plans/generate recusa e não toca na dieta já prescrita", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token);
+    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+
+    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(409);
+
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(atual!.version).toBe(1);
+    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
+    expect((atual!.diet as typeof DIETA_VALIDA).dailyCalories).toBe(DIETA_VALIDA.dailyCalories);
+  });
+
+  it("POST /plans/adjust recusa e não toca na dieta já prescrita", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token);
+    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+
+    await request(app).post("/plans/adjust").set(auth(aluno.token)).send({}).expect(409);
+
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(atual!.version).toBe(1);
+    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
+  });
+
+  it("POST /plans/import recusa e não toca na dieta já prescrita", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token);
+    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+
+    await request(app)
+      .post("/plans/import")
+      .set(auth(aluno.token))
+      .send({ text: "Treino: A - Agachamento 3x10. B - Supino 3x10. Faça 3 vezes por semana." })
+      .expect(409);
+
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(atual!.version).toBe(1);
+    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
+  });
+
+  it("aluno sem nenhum profissional continua gerando plano pela IA nas três", async () => {
+    const aluno = await registrar();
+    espiao.proximaResposta = PLANO_GERADO;
+
+    const g = await request(app).post("/plans/generate").set(auth(aluno.token)).send({});
+    expect(g.status).toBe(201);
+
+    const a = await request(app).post("/plans/adjust").set(auth(aluno.token)).send({});
+    expect(a.status).toBe(201);
+
+    const i = await request(app)
+      .post("/plans/import")
+      .set(auth(aluno.token))
+      .send({ text: "Treino: A - Agachamento 3x10. B - Supino 3x10. Faça 3 vezes por semana." });
+    expect(i.status).toBe(201);
   });
 });
 

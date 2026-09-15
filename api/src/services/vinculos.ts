@@ -363,6 +363,23 @@ export async function temProfissional(
   return link != null;
 }
 
+/**
+ * Os papéis de profissional que acompanham esta pessoa agora, num round-trip
+ * só ao banco.
+ *
+ * Existe para rota que precisa perguntar por MAIS de um papel na mesma
+ * resposta — duas chamadas de `temProfissional` em sequência seriam duas
+ * consultas onde uma resolve, e `GET /plans/hoje` é a Home, aberta em toda
+ * sessão.
+ */
+export async function papeisAtivosDoAluno(
+  clientId: mongoose.Types.ObjectId
+): Promise<Record<PapelPro, boolean>> {
+  const links = await ProfessionalLink.find({ client: clientId, status: "ativo" }).select("papel");
+  const papeis = new Set(links.map((l) => l.papel));
+  return { coach: papeis.has("coach"), nutri: papeis.has("nutri") };
+}
+
 /** O profissional pode ver esta parte da vida deste aluno? */
 export async function podeVer(
   clientId: mongoose.Types.ObjectId,

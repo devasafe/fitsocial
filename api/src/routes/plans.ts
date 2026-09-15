@@ -4,7 +4,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
 import { HttpError } from "../utils/httpError.js";
-import { temProfissional } from "../services/vinculos.js";
+import { temProfissional, papeisAtivosDoAluno } from "../services/vinculos.js";
 import { calcularPlan } from "../services/entitlement.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import {
@@ -195,6 +195,10 @@ plansRouter.post(
   asyncHandler(async (req, res) => {
     const user = req.user!;
     await recusarSeTemTreinador(user._id);
+    // `generatePlan` devolve as duas metades (`PlanData` inclui `diet`), e só o
+    // treino passa por `preservarAgenda` depois do spread — a dieta entraria
+    // crua. Quem tem nutricionista não recebe dieta daqui também.
+    await recusarSeTemNutricionista(user._id);
 
     const profileDoc = await Profile.findOne({ user: user._id });
     if (!profileDoc) {
@@ -239,6 +243,9 @@ plansRouter.post(
   asyncHandler(async (req, res) => {
     const user = req.user!;
     await recusarSeTemTreinador(user._id);
+    // `adjustPlan` reescreve o plano inteiro — incluindo a dieta, sem que
+    // ninguém tenha pedido a ela nada. Mesma trava do `/generate`.
+    await recusarSeTemNutricionista(user._id);
 
     if (user.tier !== "premium") {
       throw new HttpError(
@@ -288,6 +295,8 @@ plansRouter.post(
   asyncHandler(async (req, res) => {
     const user = req.user!;
     await recusarSeTemTreinador(user._id);
+    // `importPlanFromText` também devolve as duas metades — mesma trava.
+    await recusarSeTemNutricionista(user._id);
 
     // O mesmo gate do `/generate`: importar é a IA ESCREVENDO um plano novo, a
     // partir de um texto, e custa uma chamada de modelo igual à geração. Esta
@@ -417,6 +426,11 @@ plansRouter.get(
     const workout = (plan?.workout ?? null) as WorkoutData | null;
     const dia = montarPlanoDoDia(workout, alvo, sessaoCompleta);
 
+    // Um round-trip só para os dois papéis: esta é a Home, aberta em toda
+    // sessão, e duas chamadas de `temProfissional` em sequência seriam duas
+    // consultas onde uma resolve.
+    const papeis = await papeisAtivosDoAluno(req.user!._id);
+
     res.json({
       data: { ...dia, diaDaSemana: alvo, planVersion: plan?.version ?? null },
       meta: {
@@ -426,10 +440,10 @@ plansRouter.get(
         naoAgendadas: sessoesSemDia(workout),
         // Quem tem treinador não acrescenta sessão à prescrição. O app esconde o
         // botão com isto, em vez de deixar a pessoa digitar e tomar 409 no fim.
-        podeEditarPlano: !(await temProfissional(req.user!._id, "coach")),
+        podeEditarPlano: !papeis.coach,
         // Mesma ideia, para a dieta: aditivo — o APK instalado ignora o campo,
         // e o app novo desabilita o botão em vez de deixar a pessoa levar 409.
-        podeEditarDieta: !(await temProfissional(req.user!._id, "nutri")),
+        podeEditarDieta: !papeis.nutri,
         programacao: req.user!.get("settings.programacao") ?? null,
       },
     });
