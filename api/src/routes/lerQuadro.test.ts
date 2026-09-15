@@ -151,6 +151,24 @@ describe("Ler o quadro da aula", () => {
     expect(r.body.data.observacao).toContain("Não reconheci");
   });
 
+  it("observacao longa demais é encurtada, e não derruba o quadro inteiro", async () => {
+    // O prompt manda explicar o que não coube em bloco nenhum, e num quadro com
+    // alternativas essa explicação cresce. Recusar aqui jogava fora a leitura
+    // inteira da aula por causa do tamanho do rodapé — o mesmo defeito que
+    // derrubava a análise da foto de refeição.
+    modelo.resposta = JSON.stringify({
+      box: null,
+      tamanhoDoTime: 1,
+      blocos: [{ modo: "AMRAP 6'", movimentos: [{ nome: "Pull Up" }] }],
+      observacao: "Q".repeat(400),
+    });
+
+    const r = await ler(QUADRO_COLADO).expect(200);
+
+    expect(r.body.data.blocos).toHaveLength(1);
+    expect(r.body.data.observacao).toHaveLength(300);
+  });
+
   it("resposta fora do formato vira erro tratado", async () => {
     modelo.resposta = "claro! seu treino tem um aquecimento e um WOD legal";
 

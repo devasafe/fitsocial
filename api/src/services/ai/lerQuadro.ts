@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { env } from "../../config/env.js";
-import { getAIProvider, parseJson } from "./index.js";
+import { gerarEValidar, getAIProvider } from "./index.js";
+import { cortarEm } from "../../utils/texto.js";
 import { blocoSchema, type Bloco } from "../../models/crossfit.js";
 import { interpretarModo } from "../crossfit/interpretarModo.js";
 
@@ -38,8 +39,17 @@ export const leituraDoQuadroSchema = z.object({
   /** "Relay", "in pairs", "em dupla" no quadro → 2. Ausente → 1. */
   tamanhoDoTime: z.number().int().min(1).max(20).default(1),
   blocos: z.array(blocoSchema).max(24),
-  /** O que não deu para interpretar. Vazio quando leu tudo. */
-  observacao: z.string().max(300).default(""),
+  /**
+   * O que não deu para interpretar. Vazio quando leu tudo.
+   *
+   * CORTA, não recusa — mesmo motivo da observação da foto de refeição: o
+   * prompt manda explicar o que não coube em bloco nenhum, e recusar por
+   * excesso jogava fora a leitura inteira da aula por causa do rodapé.
+   */
+  observacao: z
+    .string()
+    .default("")
+    .transform((s) => cortarEm(s, 300)),
 });
 export type LeituraDoQuadro = z.infer<typeof leituraDoQuadroSchema>;
 
@@ -81,6 +91,8 @@ QUANDO O QUADRO OFERECE ALTERNATIVA ("OU", "OR", "escolha"): traga as DUAS como 
 
 O que não couber em bloco nenhum: deixe de fora e explique na observacao. É melhor um bloco a menos do que um bloco inventado.
 
+A "observacao" tem no máximo 300 caracteres. O que passar disso é cortado e a frase fica pela metade.
+
 Responda SOMENTE com JSON:
 {"box":null,"tamanhoDoTime":1,"blocos":[...],"observacao":""}`;
 
@@ -89,26 +101,32 @@ export async function lerQuadro(
   texto: string,
   opts: { userId?: string } = {}
 ): Promise<LeituraDoQuadro> {
-  const leitura = await getAIProvider().generate({
-    system: SYSTEM,
-    messages: [{ role: "user", content: `QUADRO DA AULA:\n\n${texto.trim()}` }],
-    jsonMode: true,
-    // Transcrição quer fidelidade, não invenção.
-    temperature: 0.1,
-    // Um quadro de aula inteiro vira oito blocos de JSON — muito mais saída
-    // que uma resposta de coach, e os 25s padrão não bastam. Descobri rodando
-    // o modelo de verdade: o mock respondia instantaneamente.
-    //
-    // 45s e não 60: o app desiste em 60s. Se o primeiro provedor gastasse 60
-    // aqui, a cadeia nem chegaria a tentar o segundo — o app já teria
-    // desistido, e a pessoa veria "o servidor demorou" num caso em que o
-    // segundo provedor resolveria em 6 segundos.
-    timeoutMs: 45_000,
-    feature: "wod_import",
-    userId: opts.userId,
-  });
-
-  const lido = parseJson(leitura, leituraDoQuadroSchema);
+  const lido = await gerarEValidar(
+    getAIProvider(),
+    {
+      system: SYSTEM,
+      messages: [{ role: "user", content: `QUADRO DA AULA:\n\n${texto.trim()}` }],
+      jsonMode: true,
+      // Transcrição quer fidelidade, não invenção.
+      temperature: 0.1,
+      // Um quadro de aula inteiro vira oito blocos de JSON — muito mais saída
+      // que uma resposta de coach, e os 25s padrão não bastam. Descobri rodando
+      // o modelo de verdade: o mock respondia instantaneamente.
+      //
+      // 45s e não 60: o app desiste em 60s. Se o primeiro provedor gastasse 60
+      // aqui, a cadeia nem chegaria a tentar o segundo — o app já teria
+      // desistido, e a pessoa veria "o servidor demorou" num caso em que o
+      // segundo provedor resolveria em 6 segundos.
+      //
+      // O mesmo raciocínio manda no orçamento de repetição do `gerarEValidar`:
+      // uma leitura que já demorou não ganha segunda chance, porque a segunda
+      // terminaria depois de o app ter desistido.
+      timeoutMs: 45_000,
+      feature: "wod_import",
+      userId: opts.userId,
+    },
+    leituraDoQuadroSchema
+  );
 
   // A estrutura sai daqui, não do modelo: mesma entrada, mesma leitura, sempre.
   return {

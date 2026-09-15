@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { env } from "../../config/env.js";
-import { getAIProvider, parseJson } from "./index.js";
+import { gerarEValidar, getAIProvider } from "./index.js";
 import { AIError } from "./provider.js";
 import { NUTRITION_KNOWLEDGE } from "./knowledgeBase.js";
+import { cortarEm } from "../../utils/texto.js";
 
 /* Estimar uma refeição a partir da foto do prato.
  *
@@ -28,11 +29,26 @@ export const itemDaFotoSchema = z.object({
   confianca: z.enum(["alta", "media", "baixa"]),
 });
 
+/** Teto de exibição da ressalva. Ver o porquê do corte em `analiseDaFotoSchema`. */
+const LIMITE_DA_OBSERVACAO = 200;
+
 export const analiseDaFotoSchema = z.object({
   /** Vazio quando não há comida na foto — e aí a tela diz isso, sem inventar. */
   itens: z.array(itemDaFotoSchema).max(15),
-  /** Uma frase sobre o que ficou incerto. Vazia quando não há ressalva. */
-  observacao: z.string().max(200).default(""),
+  /**
+   * Uma frase sobre o que ficou incerto. Vazia quando não há ressalva.
+   *
+   * CORTA, não recusa. O prompt manda o modelo explicar molho e óleo de
+   * preparo, e num prato cheio essa frase passa de 200 caracteres com
+   * facilidade — medido contra o Gemini, a média foi 214. Recusar aqui jogava
+   * fora a refeição inteira, com todos os alimentos corretamente
+   * identificados, por causa do tamanho do rodapé. E falhava justamente no
+   * prato complexo, que é onde a estimativa vale mais.
+   */
+  observacao: z
+    .string()
+    .default("")
+    .transform((s) => cortarEm(s, LIMITE_DA_OBSERVACAO)),
 });
 
 export type ItemDaFoto = z.infer<typeof itemDaFotoSchema>;
@@ -50,6 +66,7 @@ REGRAS:
 - Molhos, óleo de preparo e açúcar de bebida contam. Se suspeitar deles e não puder medir, diga na observacao.
 - Se a foto não tiver comida, devolva itens vazio e explique na observacao.
 - NÃO invente precisão: é melhor "media" com uma ressalva do que "alta" errado.
+- A "observacao" é UMA frase curta, de no máximo 200 caracteres. Diga a ressalva mais importante e pare; o que passar disso é cortado e a frase fica pela metade.
 
 Responda SOMENTE com JSON neste formato:
 {"itens":[{"nome":"arroz branco cozido","gramas":150,"kcal":193,"proteinaG":3.6,"carboG":42,"gorduraG":0.4,"confianca":"alta"}],"observacao":"Não dá para saber quanto de óleo foi no frango."}`;
@@ -67,18 +84,24 @@ export async function analisarRefeicao(
     ? `O que tem neste prato? A pessoa disse que é: ${opts.dica.trim()}`
     : "O que tem neste prato?";
 
-  const raw = await provider.generate({
-    system: SYSTEM,
-    messages: [{ role: "user", content: pergunta }],
-    imagem,
-    jsonMode: true,
-    // Estimativa quer consistência, não criatividade.
-    temperature: 0.2,
-    feature: "meal_photo",
-    userId: opts.userId,
-  });
+  const analise = await gerarEValidar(
+    provider,
+    {
+      system: SYSTEM,
+      messages: [{ role: "user", content: pergunta }],
+      imagem,
+      jsonMode: true,
+      // Estimativa quer consistência, não criatividade.
+      temperature: 0.2,
+      feature: "meal_photo",
+      userId: opts.userId,
+    },
+    analiseDaFotoSchema,
+    // A tela da foto espera 90s (app-android/src/api/nutrition.ts), e não 60s
+    // como o resto do app: analisar imagem é a chamada mais lenta que temos.
+    { orcamentoMs: 80_000 }
+  );
 
-  const analise = parseJson(raw, analiseDaFotoSchema);
   return { ...analise, itens: analise.itens.map(coerente) };
 }
 
