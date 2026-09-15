@@ -171,4 +171,4 @@ function extractReplyFallback(raw: string): string {
 }
 
 export const COACH_GREETING =
-  `E aí! 👋 Sou seu coach aqui no ${env.appName}. Como você está se sentindo com os treinos e a dieta? Pode desabafar comigo — se tá difícil, se bateu preguiça, se algo doeu, ou se tá voando. Bora ajustar juntos o que precisar. 💪`;
+  `E aí! Sou seu coach aqui no ${env.appName}. Como você está se sentindo com os treinos e a dieta? Pode desabafar comigo — se tá difícil, se bateu preguiça, se algo doeu, ou se tá voando. Bora ajustar juntos o que precisar.`;

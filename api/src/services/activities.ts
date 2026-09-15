@@ -138,7 +138,7 @@ export async function createActivity(
   let post: InstanceType<typeof Post> | null = null;
   if (input.shareToFeed) {
     const sport = getSport(input.sportId);
-    const text = input.caption?.trim() || `Treino de ${sport?.label ?? input.sportId} concluído 💪`;
+    const text = input.caption?.trim() || `Treino de ${sport?.label ?? input.sportId} concluído`;
     post = await Post.create({ author: userId, text, activity: activity._id });
   }
 

@@ -80,6 +80,6 @@ export async function runOnboardingTurn(
 
 /** Mensagem inicial do coach, mostrada antes do usuário digitar. */
 export const ONBOARDING_GREETING =
-  `Oi! Eu sou seu coach aqui no ${env.appName} 💪 Vou te fazer algumas perguntas rápidas pra montar seu treino e sua dieta sob medida. Pra começar: qual é seu principal objetivo hoje — perder gordura, ganhar massa, cuidar da saúde ou melhorar performance?`;
+  `Oi! Eu sou seu coach aqui no ${env.appName}. Vou te fazer algumas perguntas rápidas pra montar seu treino e sua dieta sob medida. Pra começar: qual é seu principal objetivo hoje — perder gordura, ganhar massa, cuidar da saúde ou melhorar performance?`;
 
 export type { ProfileData };
