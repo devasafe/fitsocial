@@ -579,3 +579,83 @@ export async function enviarFoto(token: string, linkId: string, file: File): Pro
   });
   return r.data;
 }
+
+/* ---------- nutrição ---------- */
+
+export interface AlvoDiario {
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+export interface DiaDeNutricao {
+  dia: string;
+  kcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  registros: number;
+  alvo: AlvoDiario | null;
+}
+
+export interface EvolucaoDeNutricao {
+  dias: DiaDeNutricao[];
+  resumo: {
+    diasComRegistro: number;
+    diasNaJanela: number;
+    mediaKcal: number | null;
+    diasDentroDoAlvo: number;
+  };
+}
+
+export interface MealItem {
+  food: string;
+  quantity: string;
+}
+
+export interface Meal {
+  name: string;
+  timeHint?: string;
+  items: MealItem[];
+}
+
+export interface Dieta {
+  dailyCalories: number;
+  macros: {
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+  };
+  meals: Meal[];
+  notes?: string;
+}
+
+export interface DietaDoAluno {
+  diet: Dieta | null;
+  version: number | null;
+  createdBy: string | null;
+  em: string | null;
+}
+
+export const buscarNutricao = (token: string, alunoId: string, dias = 30) =>
+  api<EvolucaoDeNutricao>(`/pro/alunos/${alunoId}/nutricao?dias=${dias}`, { token });
+
+export const buscarDieta = (token: string, alunoId: string) =>
+  api<DietaDoAluno>(`/pro/alunos/${alunoId}/dieta`, { token });
+
+export const prescreverDieta = (
+  token: string,
+  alunoId: string,
+  summary: string,
+  diet: Dieta,
+  recado?: string
+) =>
+  api<{ id: string; version: number; createdBy: string; mensagem: string }>(
+    `/pro/alunos/${alunoId}/dieta`,
+    {
+      method: "PUT",
+      body: { summary, diet, ...(recado?.trim() ? { recado: recado.trim() } : {}) },
+      token,
+    }
+  );
