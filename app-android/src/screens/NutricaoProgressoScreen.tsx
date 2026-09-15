@@ -305,16 +305,33 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
               valor={resumo.diasComRegistro}
               sufixo={` de ${resumo.diasNaJanela}`}
             />
-            {/* Sem alvo nenhum na janela, esta linha some. "0 dias dentro da
-                meta" para quem não tem meta nenhuma leria como erro da pessoa,
-                e é só ausência de dieta. */}
-            {alvoVigente && (
-              <LinhaDoResumo rotulo="Dias dentro da meta" valor={resumo.diasDentroDoAlvo} />
+            {/* Esta linha existe quando existe o CONJUNTO que a produz: dias
+                com registro E com meta. É a mesma base que o servidor usa para
+                contar `diasDentroDoAlvo` (`services/nutricao.ts`), e é por isso
+                que a guarda é o `macros`, e não o `alvoVigente`.
+
+                `alvoVigente` era alvo de QUALQUER dia da janela, com ou sem
+                registro. Quem teve dieta no começo da janela, ficou sem ela e
+                registrou só depois — plano expirado, que é comum — caía em
+                `alvoVigente` truthy com `diasDentroDoAlvo` zero, e lia "Dias
+                dentro da meta: 0" depois de ter registrado vinte dias. É o
+                mesmo zero-por-ausência-de-meta que esta linha já escondia,
+                voltando por uma porta que a condição não cobria — e é um zero
+                que a pessoa lê como falha dela.
+
+                O denominador vem junto pelo mesmo motivo dos outros dois
+                números: sozinho, "7" não diz de quantos. */}
+            {macros && (
+              <LinhaDoResumo
+                rotulo="Dias dentro da meta"
+                valor={resumo.diasDentroDoAlvo}
+                sufixo={` de ${macros.dias}`}
+              />
             )}
             <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s12 }}>
               A média é só dos dias em que houve registro. Os outros não entram na conta.
             </Txt>
-            {alvoVigente && (
+            {macros && (
               <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.xs }}>
                 Cada dia é comparado com o alvo que valia naquele dia, e não com o de hoje.
               </Txt>
