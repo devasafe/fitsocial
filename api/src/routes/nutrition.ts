@@ -166,6 +166,12 @@ const janelaDeNutricaoSchema = z.preprocess(
 /** A aderência à dieta ao longo do tempo. */
 nutritionRouter.get(
   "/evolucao",
+  // Mesmo teto da evolução de treino (`routes/evolucao.ts`): é a mesma tela de
+  // gráfico, com o mesmo custo de agregação por chamada. Fica só NESTA rota, e
+  // não no router: `/logs` e `/day` são gravação e leitura do diário, que a
+  // pessoa dispara em rajada ao preencher um dia, e não têm por que dividir uma
+  // cota com o gráfico.
+  rateLimit({ windowMs: 60_000, max: 60, name: "evolucao-nutricao" }),
   asyncHandler(async (req, res) => {
     const pedidos = janelaDeNutricaoSchema.parse(req.query.dias);
     const dias = janelaPermitida(req.user!, pedidos);
