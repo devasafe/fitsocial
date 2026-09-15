@@ -501,6 +501,33 @@ proRouter.get(
   })
 );
 
+/** A dieta que está valendo, e de quem ela é. */
+proRouter.get(
+  "/alunos/:id/dieta",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+
+    const plan = await Plan.findOne({ user: clientId }).sort({ version: -1 });
+
+    res.json({
+      data: {
+        diet: (plan?.diet as unknown) ?? null,
+        version: plan?.version ?? null,
+        // `createdBy` null é "foi a IA, ou o próprio aluno" — é o que distingue
+        // uma prescrição de um plano auto-atribuído.
+        createdBy: plan?.createdBy?.toString() ?? null,
+        em: plan?.createdAt?.toISOString() ?? null,
+      },
+      meta: {},
+    });
+  })
+);
+
 const conquistasDoAlunoSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   cursor: z.string().optional(),

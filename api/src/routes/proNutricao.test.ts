@@ -132,7 +132,7 @@ describe("GET /pro/alunos/:id/nutricao", () => {
     //
     // Nenhuma promoção de plano é precisa aqui: `vincular()` já bancou o aluno.
     // Aceitar o convite de um profissional com capacidade ativa dispara
-    // `recontarPatrocinios` (`services/vinculos.ts`), que soma
+    // `recontarPatrocinios` (`services/patrocinio.ts`), que soma
     // `vinculosPatrocinados` — e o ramo 6 de `calcularPlan`
     // (`services/entitlement.ts`) trata quem tem patrocínio como "pro". É por
     // isso que os dois lados já pedem a MESMA janela sem cortes: "quem paga é
@@ -144,5 +144,62 @@ describe("GET /pro/alunos/:id/nutricao", () => {
     const doAluno = await comoAluno.get("/nutrition/evolucao?dias=30").expect(200);
     const doPro = await comoNutri.get(`/pro/alunos/${alunoId}/nutricao?dias=30`).expect(200);
     expect(doPro.body.data).toEqual(doAluno.body.data);
+  });
+});
+
+describe("GET /pro/alunos/:id/dieta", () => {
+  let nutri: { token: string; id: string };
+  let nutriSemEscopo: { token: string; id: string };
+  let aluno: { token: string; id: string };
+  let alunoSemDieta: { token: string; id: string };
+  let alunoId: string;
+  let alunoSemDietaId: string;
+  let nutriId: mongoose.Types.ObjectId;
+  let comoNutri: ReturnType<typeof como>;
+  let comoNutriSemEscopo: ReturnType<typeof como>;
+
+  beforeEach(async () => {
+    nutri = await registrarProfissional("nutri");
+    nutriSemEscopo = await registrarProfissional("nutri");
+    aluno = await registrar();
+    alunoSemDieta = await registrar();
+    alunoId = aluno.id;
+    alunoSemDietaId = alunoSemDieta.id;
+    nutriId = new mongoose.Types.ObjectId(nutri.id);
+
+    await vincular(nutri.token, aluno.token, { dieta: true, treinos: false }, "nutri");
+    await vincular(nutri.token, alunoSemDieta.token, { dieta: true, treinos: false }, "nutri");
+    await vincular(nutriSemEscopo.token, aluno.token, { dieta: false, treinos: false }, "nutri");
+
+    comoNutri = como(nutri.token);
+    comoNutriSemEscopo = como(nutriSemEscopo.token);
+  });
+
+  it("devolve a dieta corrente e diz quem escreveu", async () => {
+    await Plan.create({
+      user: new mongoose.Types.ObjectId(alunoId), version: 1, summary: "plano",
+      workout: null, disclaimer: "aviso", createdBy: nutriId,
+      diet: { dailyCalories: 2000, macros: { proteinG: 150, carbsG: 200, fatG: 60 },
+              meals: [{ name: "Café", timeHint: "", items: [{ food: "Ovos", quantity: "2" }] }], notes: "" },
+    });
+
+    const r = await comoNutri.get(`/pro/alunos/${alunoId}/dieta`).expect(200);
+
+    expect(r.body.data.diet.dailyCalories).toBe(2000);
+    expect(r.body.data.version).toBe(1);
+    // Saber de quem é a dieta que está na tela: minha, de outro profissional,
+    // ou da IA de antes de eu chegar.
+    expect(r.body.data.createdBy).toBe(nutriId.toString());
+  });
+
+  it("aluno sem dieta devolve null, não 404", async () => {
+    // 404 diria "aluno não encontrado". Aqui o aluno existe e não tem dieta.
+    const r = await comoNutri.get(`/pro/alunos/${alunoSemDietaId}/dieta`).expect(200);
+    expect(r.body.data.diet).toBeNull();
+    expect(r.body.data.createdBy).toBeNull();
+  });
+
+  it("sem dieta aberta é 403", async () => {
+    await comoNutriSemEscopo.get(`/pro/alunos/${alunoId}/dieta`).expect(403);
   });
 });
