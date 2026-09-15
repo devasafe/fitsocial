@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import mongoose from "mongoose";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -9,6 +10,8 @@ import { FoodLog, foodLogCreateSchema } from "../models/FoodLog.js";
 import { Plan } from "../models/Plan.js";
 import { processImage } from "../services/media/image.js";
 import { analisarRefeicao, exigirModeloComVisao } from "../services/ai/refeicaoPorFoto.js";
+import { evolucaoDeNutricao } from "../services/nutricao.js";
+import { janelaPermitida, metaDaJanela } from "../services/janela.js";
 
 export const nutritionRouter = Router();
 nutritionRouter.use(requireAuth);
@@ -144,5 +147,29 @@ nutritionRouter.delete(
     const r = await FoodLog.deleteOne({ _id: req.params.id, user: req.user!._id });
     if (!r.deletedCount) throw new HttpError(404, "Registro não encontrado");
     res.json({ data: { deleted: true } });
+  })
+);
+
+/**
+ * Janela em dias. Diferente da evolução de treino, aqui NÃO existe "tudo":
+ * a resposta é um item por dia, e uma janela sem teto viraria um corpo de
+ * milhares de itens para desenhar um gráfico que cabe numa tela.
+ *
+ * `?dias=` vazio é tratado como ausente: `Number("")` é 0, e 0 escaparia do
+ * `min` em silêncio.
+ */
+const janelaDeNutricaoSchema = z.preprocess(
+  (v) => (v === "" || v == null ? undefined : v),
+  z.coerce.number().int().min(7).max(365).default(30)
+);
+
+/** A aderência à dieta ao longo do tempo. */
+nutritionRouter.get(
+  "/evolucao",
+  asyncHandler(async (req, res) => {
+    const pedidos = janelaDeNutricaoSchema.parse(req.query.dias);
+    const dias = janelaPermitida(req.user!, pedidos);
+    const data = await evolucaoDeNutricao(req.user!._id, dias);
+    res.json({ data, meta: metaDaJanela(pedidos, dias) });
   })
 );
