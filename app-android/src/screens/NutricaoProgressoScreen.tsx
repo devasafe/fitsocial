@@ -16,7 +16,7 @@
 // E o guardrail do projeto (docs/VISAO.md): nenhum texto aqui usa linguagem de
 // vergonha corporal nem pune quem não registrou. O convite pergunta o que a
 // pessoa comeu.
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, ScrollView, TouchableOpacity, useWindowDimensions } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -33,6 +33,7 @@ import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { Txt, Card, Chip, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
+import { diaDaSemana } from "../lib/semana";
 import { colors, spacing } from "../theme";
 
 /** O `meta` de janela das rotas com corte por plano. */
@@ -44,17 +45,6 @@ interface MetaDaJanela {
 
 const JANELAS = [7, 30, 90] as const;
 type Janela = (typeof JANELAS)[number];
-
-/** Meio-dia de propósito: parsear `yyyy-mm-dd` cru vira UTC e, no fuso de São
- *  Paulo, a data volta um dia — o convite falaria do dia errado. */
-function comoData(dia: string): Date {
-  return new Date(`${dia}T12:00:00`);
-}
-
-/** "domingo", "segunda-feira". */
-function diaDaSemana(dia: string): string {
-  return comoData(dia).toLocaleDateString("pt-BR", { weekday: "long" });
-}
 
 /**
  * Uma linha do cabeçalho: o que é à esquerda, o número à direita.
@@ -95,13 +85,31 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
+  /**
+   * Qual pedido é o que vale.
+   *
+   * `load` depende de `janela` e não cancela: tocar 7 e depois 90 dispara duas
+   * requisições, e sem isto quem escreve o estado é quem CHEGA por último, não
+   * quem foi PEDIDO por último. Se a de 7 demorar mais, a tela fica com o chip
+   * de 90 aceso sobre a série de 7 — exatamente a mentira que o `catch` abaixo
+   * foi escrito para evitar, entrando por outra porta.
+   *
+   * Um contador, e não um `AbortController`, porque `load` é reusado pelo
+   * `onRetry` e pelo `onAdded` do sheet: o que importa é descartar a resposta
+   * velha, não derrubar a conexão.
+   */
+  const pedido = useRef(0);
+
   const load = useCallback(async () => {
+    const meu = ++pedido.current;
     try {
       const r = await buscarEvolucaoDeNutricao(token!, janela);
+      if (meu !== pedido.current) return;
       setEvolucao(r.data);
       setMeta(r.meta);
       setError(false);
     } catch {
+      if (meu !== pedido.current) return;
       // Os dados da janela ANTERIOR não podem ficar na tela: o chip diria "90
       // dias" sobre a série de 7. E o cadeado tem que sumir junto, senão ele
       // afirma um corte de plano que esta resposta não trouxe.
@@ -109,7 +117,7 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
       setMeta(null);
       setError(true);
     } finally {
-      setLoading(false);
+      if (meu === pedido.current) setLoading(false);
     }
   }, [token, janela]);
 
@@ -246,7 +254,14 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
             label={`${d} dias`}
             icon={meta?.limitadoPor === "plano" ? "cadeado" : undefined}
             active={janela === d}
-            onPress={() => setJanela(d)}
+            // O `loading` liga aqui, e não só no `onRetry`: sem ele a série
+            // antiga fica parada sob o chip novo, e não dá para distinguir
+            // "carregando" de "é isso mesmo que tem nesta janela".
+            onPress={() => {
+              if (d === janela) return;
+              setLoading(true);
+              setJanela(d);
+            }}
           />
         ))}
       </ScrollView>
