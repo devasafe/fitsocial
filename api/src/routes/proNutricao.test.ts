@@ -7,7 +7,7 @@ import { User } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
 import { ProfessionalLink } from "../models/ProfessionalLink.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
-import { Plan } from "../models/Plan.js";
+import { Plan, type WorkoutData } from "../models/Plan.js";
 import { FoodLog } from "../models/FoodLog.js";
 import { ProMessage } from "../models/ProMessage.js";
 
@@ -274,9 +274,17 @@ describe("PUT /pro/alunos/:id/dieta", () => {
 
     const depois = await Plan.findOne({ user: alunoObjId }).sort({ version: -1 });
     expect((depois!.diet as { dailyCalories: number }).dailyCalories).toBe(1800);
+
+    // A v1 continua no banco, e continua sem dieta: é ela que o progresso de
+    // nutrição lê para saber que meta valia antes de hoje. `findById` busca o
+    // documento ANTIGO pelo id — é o que distingue `Plan.create` de um
+    // `save()` que só incrementaria a versão no lugar.
+    expect((await Plan.findById(antes!._id))!.diet).toBeNull();
+
     // O treino é metade independente do plano. Prescrever comida não é motivo
     // para apagar treino — nem a agenda de dias que o aluno montou.
     expect(depois!.workout).toEqual(antes!.workout);
+    expect((depois!.workout as WorkoutData).sessions[0]!.weekdays).toEqual([1, 4]);
   });
 
   it("avisa o aluno pela conversa que já existe", async () => {

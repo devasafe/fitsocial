@@ -50,6 +50,16 @@ import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } 
 const DISCLAIMER_DO_COACH =
   "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e fale com ele.";
 
+/**
+ * O aviso que acompanha uma dieta escrita por gente, e não pela IA.
+ *
+ * Mesmo motivo do `DISCLAIMER_DO_COACH`, mas sobre comida: quem responde pela
+ * dieta é um profissional com nome, e a pessoa deve procurá-lo antes de mudar
+ * algo por conta própria.
+ */
+const DISCLAIMER_DO_NUTRI =
+  "Dieta prescrita pelo seu profissional. Antes de mudar algo por conta própria, fale com ele.";
+
 export const proRouter = Router();
 proRouter.use(requireAuth);
 
@@ -1043,7 +1053,7 @@ proRouter.put(
       summary,
       workout: atual?.workout ?? null,
       diet,
-      disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
+      disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_NUTRI,
       createdBy: req.user!._id,
     });
 
