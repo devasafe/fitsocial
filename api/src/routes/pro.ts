@@ -34,7 +34,7 @@ import {
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { evolucaoDeNutricao } from "../services/nutricao.js";
 import { computeStats } from "../services/adherence.js";
-import { Plan, workoutSchema, type WorkoutData } from "../models/Plan.js";
+import { Plan, workoutSchema, dietSchema, type WorkoutData } from "../models/Plan.js";
 import { preservarAgenda } from "../services/agendaDeTreino.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
@@ -968,6 +968,97 @@ proRouter.put(
     void enviarPush(clientId, "mensagem_pro", {
       title: req.user!.name,
       body: "Atualizou o seu treino",
+      data: { tipo: "mensagem_pro", link: link._id.toString() },
+    });
+
+    res.status(201).json({
+      data: {
+        id: plan._id.toString(),
+        version: plan.version,
+        createdBy: req.user!._id.toString(),
+        mensagem: aviso._id.toString(),
+      },
+      meta: {},
+    });
+  })
+);
+
+const prescricaoDeDietaSchema = z.object({
+  summary: z.string().min(1).max(500),
+  diet: dietSchema,
+  /** O que o nutricionista quer dizer junto. Opcional: o aviso sai de qualquer jeito. */
+  recado: z.string().max(1000).optional(),
+});
+
+/** O aviso que o aluno recebe quando a dieta muda. Mesma forma do treino. */
+function mensagemDaDieta(
+  diet: { dailyCalories?: number; meals?: { name: string }[] },
+  summary: string,
+  recado?: string
+): string {
+  const forma = [
+    diet.dailyCalories ? `${diet.dailyCalories} kcal por dia` : "",
+    diet.meals?.length ? `${diet.meals.length} refeições` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const linhas = [forma ? `Atualizei sua dieta: ${forma}.` : "Atualizei sua dieta.", summary.trim()];
+  if (recado?.trim()) linhas.push(recado.trim());
+  return linhas.filter(Boolean).join("\n\n");
+}
+
+/**
+ * O nutricionista prescreve a dieta do aluno.
+ *
+ * Grava uma VERSÃO NOVA em vez de editar a atual, e aqui isso é requisito de
+ * outra feature: o progresso de nutrição resolve o alvo de cada dia pela versão
+ * do `Plan` ativa naquela data. Editar no lugar faria a meta de hoje ser
+ * aplicada retroativamente a dias que foram vividos com outra.
+ *
+ * Não toca no treino: ele é metade independente do plano, e prescrever comida
+ * não é motivo para apagar treino nem a agenda de dias que o aluno montou.
+ */
+proRouter.put(
+  "/alunos/:id/dieta",
+  requirePro("nutri"),
+  asyncHandler(async (req, res) => {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+    if (link.papel !== "nutri") throw new HttpError(403, "Só o nutricionista prescreve dieta.");
+
+    const { summary, diet, recado } = prescricaoDeDietaSchema.parse(req.body);
+
+    // Montado e cortado ANTES de gravar: `texto` tem teto de 2000 no modelo, e
+    // estourar a validação DEPOIS do plano existir faria o aluno receber dieta
+    // nova sem aviso nenhum.
+    const textoDoAviso = mensagemDaDieta(diet, summary, recado).slice(0, 2000);
+
+    const atual = await Plan.findOne({ user: clientId }).sort({ version: -1 });
+    const plan = await Plan.create({
+      user: clientId,
+      version: (atual?.version ?? 0) + 1,
+      summary,
+      workout: atual?.workout ?? null,
+      diet,
+      disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
+      createdBy: req.user!._id,
+    });
+
+    const aviso = await ProMessage.create({
+      link: link._id,
+      autor: req.user!._id,
+      texto: textoDoAviso,
+      plan: plan._id,
+    });
+
+    // Push é best-effort e fica fora do caminho quente: uma falha da Expo não
+    // pode fazer uma dieta já gravada parecer que não foi.
+    void enviarPush(clientId, "mensagem_pro", {
+      title: req.user!.name,
+      body: "Atualizou a sua dieta",
       data: { tipo: "mensagem_pro", link: link._id.toString() },
     });
 

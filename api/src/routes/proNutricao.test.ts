@@ -17,7 +17,10 @@ const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
 
 /** Um agente HTTP já autenticado, para ler os testes como no brief: `comoNutri.get(...)`. */
 function como(token: string) {
-  return { get: (path: string) => request(app).get(path).set(auth(token)) };
+  return {
+    get: (path: string) => request(app).get(path).set(auth(token)),
+    put: (path: string) => request(app).put(path).set(auth(token)),
+  };
 }
 
 let n = 0;
@@ -201,5 +204,107 @@ describe("GET /pro/alunos/:id/dieta", () => {
 
   it("sem dieta aberta é 403", async () => {
     await comoNutriSemEscopo.get(`/pro/alunos/${alunoId}/dieta`).expect(403);
+  });
+});
+
+describe("PUT /pro/alunos/:id/dieta", () => {
+  let nutri: { token: string; id: string };
+  let coach: { token: string; id: string };
+  let aluno: { token: string; id: string };
+  let alunoId: string;
+  let alunoObjId: mongoose.Types.ObjectId;
+  let linkNutriId: string;
+  let comoNutri: ReturnType<typeof como>;
+  let comoCoach: ReturnType<typeof como>;
+
+  const dieta = {
+    dailyCalories: 1800,
+    macros: { proteinG: 140, carbsG: 180, fatG: 50 },
+    meals: [{ name: "Almoço", timeHint: "12h", items: [{ food: "Frango", quantity: "150g" }] }],
+    notes: "",
+  };
+
+  beforeEach(async () => {
+    nutri = await registrarProfissional("nutri");
+    coach = await registrarProfissional("coach");
+    aluno = await registrar();
+    alunoId = aluno.id;
+    alunoObjId = new mongoose.Types.ObjectId(alunoId);
+
+    linkNutriId = await vincular(nutri.token, aluno.token, { dieta: true, treinos: false }, "nutri");
+
+    comoNutri = como(nutri.token);
+    comoCoach = como(coach.token);
+  });
+
+  it("cria VERSÃO NOVA e preserva o treino e a agenda", async () => {
+    // Um treino já prescrito, com dias da semana escolhidos pelo aluno — é o
+    // que a prescrição de dieta não pode apagar.
+    await Plan.create({
+      user: alunoObjId,
+      version: 1,
+      summary: "treino inicial",
+      workout: {
+        split: "AB",
+        daysPerWeek: 2,
+        sessions: [
+          {
+            day: "A — Peito",
+            focus: "Superior",
+            exercises: [{ name: "Supino reto", sets: 4, reps: "8-12", restSeconds: 90, notes: "" }],
+            weekdays: [1, 4],
+          },
+        ],
+      },
+      diet: null,
+      disclaimer: "aviso",
+    });
+
+    // A versão não é estética: o progresso de nutrição usa a versão do Plan para
+    // saber qual meta valia em cada dia. Editar no lugar apagaria o histórico
+    // de meta exatamente no caso em que ele mais importa.
+    const antes = await Plan.findOne({ user: alunoObjId }).sort({ version: -1 });
+
+    const r = await comoNutri
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "Ajustei para o seu volume de treino", diet: dieta })
+      .expect(201);
+
+    expect(r.body.data.version).toBe((antes?.version ?? 0) + 1);
+
+    const depois = await Plan.findOne({ user: alunoObjId }).sort({ version: -1 });
+    expect((depois!.diet as { dailyCalories: number }).dailyCalories).toBe(1800);
+    // O treino é metade independente do plano. Prescrever comida não é motivo
+    // para apagar treino — nem a agenda de dias que o aluno montou.
+    expect(depois!.workout).toEqual(antes!.workout);
+  });
+
+  it("avisa o aluno pela conversa que já existe", async () => {
+    await comoNutri
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "Ajustei a dieta", diet: dieta, recado: "Bebe mais água." })
+      .expect(201);
+
+    const msgs = await ProMessage.find({ link: linkNutriId }).sort({ createdAt: -1 });
+    expect(msgs[0]!.texto).toMatch(/1800 kcal/);
+    expect(msgs[0]!.texto).toMatch(/Bebe mais água/);
+  });
+
+  it("coach NÃO prescreve dieta", async () => {
+    // Quem responde pela comida é o nutricionista, mesmo que a pessoa também
+    // seja coach de alguém.
+    await comoCoach
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "x", diet: dieta })
+      .expect(403);
+  });
+
+  it("dieta inválida é recusada ANTES de gravar qualquer coisa", async () => {
+    const antes = await Plan.countDocuments({ user: alunoObjId });
+    await comoNutri
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "x", diet: { ...dieta, dailyCalories: 10 } })
+      .expect(400);
+    expect(await Plan.countDocuments({ user: alunoObjId })).toBe(antes);
   });
 });
