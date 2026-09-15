@@ -181,7 +181,7 @@ export function RefeicaoPorFotoScreen() {
       // o arroz sem perder o frango, e o histórico de recentes fica útil.
       for (const i of validos) {
         await logFood(token!, {
-          date: hoje(),
+          date: route.params?.data ?? hoje(),
           meal,
           name: i.nome.trim(),
           kcal: i.kcal,

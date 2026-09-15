@@ -58,7 +58,7 @@ export type AppStackParams = {
   /** O treino de hoje (ou a semana, ou a tela de encaixe de dias). É o que o
    *  "+" abre para musculação, em vez do formulário em branco. */
   TreinoDoDia: { sportId: string };
-  RefeicaoPorFoto: { meal?: "cafe" | "almoco" | "lanche" | "janta" } | undefined;
+  RefeicaoPorFoto: { meal?: "cafe" | "almoco" | "lanche" | "janta"; data?: string } | undefined;
   RegisterActivity: {
     sportId: string;
     // "Repetir último": pré-preenche os exercícios/séries a partir do último treino.

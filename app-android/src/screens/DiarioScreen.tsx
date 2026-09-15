@@ -150,7 +150,7 @@ export function DiarioScreen() {
         <Button
           title="Analisar uma foto do prato"
           variant="secondary"
-          onPress={() => nav.navigate("RefeicaoPorFoto", { meal })}
+          onPress={() => nav.navigate("RefeicaoPorFoto", { meal, data: date })}
           style={{ marginBottom: spacing.sm }}
         />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm }}>

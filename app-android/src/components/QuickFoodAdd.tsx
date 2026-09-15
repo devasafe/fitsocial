@@ -21,6 +21,14 @@ function todayStr(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/** "terça-feira", a partir de um `yyyy-mm-dd` cru. Meio-dia de propósito —
+ *  igual a `NutricaoProgressoScreen` — senão o parse cai em UTC e, no fuso de
+ *  São Paulo, a data volta um dia; duas grafias do mesmo dia na mesma tela
+ *  seriam piores que nenhuma. */
+function diaDaSemana(dia: string): string {
+  return new Date(`${dia}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" });
+}
+
 // Refeição sugerida pelo horário — reduz uma decisão.
 function defaultMeal(): Meal {
   const h = new Date().getHours();
@@ -126,7 +134,14 @@ export function QuickFoodAdd({
             }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Txt variant="titleSection">Registrar alimento</Txt>
+              <Txt variant="titleSection">
+                Registrar alimento
+                {/* Sem isto, quem abriu o convite de terça e some pro fundo
+                    depois do primeiro item (o card do convite não sobrevive ao
+                    `load()`) não tem mais nenhum sinal na tela de qual dia
+                    está gravando. */}
+                {data ? <Txt variant="titleSection" color={colors.text2}> · {diaDaSemana(data)}</Txt> : null}
+              </Txt>
               <TouchableOpacity onPress={onClose} hitSlop={8}>
                 <Txt variant="label" color={colors.text2}>
                   Concluir
@@ -139,7 +154,7 @@ export function QuickFoodAdd({
               variant="secondary"
               onPress={() => {
                 onClose();
-                nav.navigate("RefeicaoPorFoto", { meal });
+                nav.navigate("RefeicaoPorFoto", { meal, data });
               }}
             />
 
