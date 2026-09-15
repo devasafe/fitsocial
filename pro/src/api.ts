@@ -609,15 +609,15 @@ export interface EvolucaoDeNutricao {
   };
 }
 
-export interface MealItem {
+export interface ItemDaRefeicao {
   food: string;
   quantity: string;
 }
 
-export interface Meal {
+export interface RefeicaoDaDieta {
   name: string;
   timeHint?: string;
-  items: MealItem[];
+  items: ItemDaRefeicao[];
 }
 
 export interface Dieta {
@@ -627,7 +627,7 @@ export interface Dieta {
     carbsG: number;
     fatG: number;
   };
-  meals: Meal[];
+  meals: RefeicaoDaDieta[];
   notes?: string;
 }
 
