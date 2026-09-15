@@ -69,6 +69,17 @@ export function LineChart({
     };
     const y = (v: number | null) => {
       if (v == null) return null;
+      // Sem faixa (uma medida só, ou todas iguais) o valor vai para o MEIO.
+      //
+      // O `span || 1` acima evita a divisão por zero, mas a conta que sobra dá
+      // `frac = 0` — e o ponto era desenhado colado na base do plot. No
+      // primeiro dia de uso, a única medida da pessoa aparecia rente ao chão e
+      // o olho lia "baixo", enquanto o rótulo ao lado dizia o número certo: o
+      // desenho contradizia a legenda. Vale para o `HistoryScreen` também, onde
+      // dois treinos com a mesma carga viravam uma reta no fundo.
+      //
+      // Com min !== max nada muda: esta guarda nem é tocada.
+      if (max === min) return padT + plotH / 2;
       const frac = (v - min) / span;
       return padT + (menorEhMelhor ? frac : 1 - frac) * plotH;
     };
