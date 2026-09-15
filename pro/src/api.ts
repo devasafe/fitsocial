@@ -173,6 +173,11 @@ export interface DiaDoCalendario {
 export interface PerfilDoAluno {
   aluno: { id: string; nome: string; username: string | null; avatarUrl: string; bio: string };
   vinculo: { id: string; papel: "coach" | "nutri"; escopo: Escopo; desde: string };
+  /**
+   * Todos os vínculos ativos desta dupla — quem é coach E nutri do mesmo
+   * aluno tem dois, e é essa lista que decide quais abas aparecem.
+   */
+  vinculos: { id: string; papel: "coach" | "nutri"; escopo: Escopo; desde: string }[];
   constancia: { total: number; week: number; streak: number; lastCheckIn: string | null };
   exercicios: ExercicioNaLista[];
   calendario: DiaDoCalendario[];
