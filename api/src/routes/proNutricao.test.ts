@@ -130,12 +130,17 @@ describe("GET /pro/alunos/:id/nutricao", () => {
     // Regra do projeto: os dois lados chamam a MESMA função. Este teste é o que
     // quebra se alguém reimplementar o cálculo de um dos lados.
     //
-    // O painel não paga a janela do plano do aluno (não aplica `janelaPermitida`),
-    // então para pedir a MESMA janela dos dois lados o aluno precisa estar num
-    // plano pago aqui — senão o lado dele cortaria para 7 dias e o do painel não,
-    // e a comparação falharia por um motivo que não é o que este teste investiga.
-    await User.updateOne({ _id: alunoId }, { $set: { plan: "pro" } });
-
+    // Nenhuma promoção de plano é precisa aqui: `vincular()` já bancou o aluno.
+    // Aceitar o convite de um profissional com capacidade ativa dispara
+    // `recontarPatrocinios` (`services/vinculos.ts`), que soma
+    // `vinculosPatrocinados` — e o ramo 6 de `calcularPlan`
+    // (`services/entitlement.ts`) trata quem tem patrocínio como "pro". É por
+    // isso que os dois lados já pedem a MESMA janela sem cortes: "quem paga é
+    // o profissional, e o aluno tem o acompanhamento completo" (comentário de
+    // `recontarPatrocinios`). `User.updateOne({ plan: "pro" })` NÃO funcionaria
+    // aqui — `calcularPlan` nunca lê `user.plan` sozinho como prova, e o
+    // `recomputeTier` do `requireAuth` reescreveria o campo antes da próxima
+    // requisição.
     const doAluno = await comoAluno.get("/nutrition/evolucao?dias=30").expect(200);
     const doPro = await comoNutri.get(`/pro/alunos/${alunoId}/nutricao?dias=30`).expect(200);
     expect(doPro.body.data).toEqual(doAluno.body.data);
