@@ -87,9 +87,45 @@ async function alunoDoProfissional(
 
 - [ ] **Passo 1: escrever o teste que falha**
 
-Criar `api/src/routes/proEscopo.test.ts`. Abra `api/src/routes/pro.test.ts` (ou o arquivo de
-teste do painel que existir) e **copie dele o preâmbulo** — como se registra um profissional,
-como se concede a capacidade e como se cria um vínculo aceito. Não invente helpers novos.
+Criar `api/src/routes/proEscopo.test.ts`. Abra `api/src/routes/pro.test.ts` (1274 linhas) e
+**copie dele o preâmbulo**. Os helpers que você precisa já existem lá:
+
+- `registrar()` → `{ token, id }`
+- `registrarProfissional(papel, limite)` — libera a capacidade, como o script `pro:grant` faria
+- `convite(token, papel, usos)` → o código do convite
+- `vincular(coachToken, alunoToken, escopo)` → o id do vínculo
+
+**DUAS ARMADILHAS que eu já verifiquei, e que fariam os seus testes passar pelo motivo errado:**
+
+**1. `vincular()` só cria vínculo de COACH.** Ela chama `convite(coachToken)` com o papel
+padrão e não aceita papel nenhum. Um teste de nutricionista escrito em cima dela criaria um
+vínculo de coach e passaria por acaso.
+
+Antes de tudo, **estenda o helper em `pro.test.ts`**:
+
+```ts
+async function vincular(proToken: string, alunoToken: string, escopo = {}, papel: "coach" | "nutri" = "coach") {
+  const code = await convite(proToken, papel);
+  const r = await request(app)
+    .post(`/pro/convites/${code}/aceitar`)
+    .set(auth(alunoToken))
+    .send(escopo);
+  expect(r.status).toBe(201);
+  return r.body.data.id as string;
+}
+```
+
+O parâmetro entra **no fim e com padrão**, então nenhuma das chamadas existentes muda. Rode
+`npx vitest run src/routes/pro.test.ts` logo depois: os 1274 linhas de teste do painel do coach
+são a sua rede, e acusam na hora se a extensão quebrar algo.
+
+**2. O `beforeEach` de `pro.test.ts` NÃO limpa `FoodLog` nem `ProMessage`.** Os testes desta
+frente dependem dos dois — a série de nutrição lê `FoodLog`, a prescrição grava `ProMessage`.
+No `beforeEach` de **cada arquivo novo**, acrescente os dois ao `Promise.all` de limpeza. Sem
+isso você tem teste que passa sozinho e falha em conjunto.
+
+Lembre também que o escopo é granular: para o caso do nutricionista sem treinos, o aceite é
+`vincular(nutriToken, alunoToken, { dieta: true, treinos: false }, "nutri")`.
 
 Os casos:
 
