@@ -11,6 +11,7 @@ import type { AppStackParams } from "../navigation/types";
 import { notify } from "../lib/notify";
 import { logFood, MEAL_LABEL, type Meal } from "../api/nutrition";
 import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
+import { diaDaSemana } from "../lib/semana";
 import { colors, spacing, radius } from "../theme";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
@@ -19,14 +20,6 @@ function todayStr(): string {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-/** "terça-feira", a partir de um `yyyy-mm-dd` cru. Meio-dia de propósito —
- *  igual a `NutricaoProgressoScreen` — senão o parse cai em UTC e, no fuso de
- *  São Paulo, a data volta um dia; duas grafias do mesmo dia na mesma tela
- *  seriam piores que nenhuma. */
-function diaDaSemana(dia: string): string {
-  return new Date(`${dia}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long" });
 }
 
 // Refeição sugerida pelo horário — reduz uma decisão.
@@ -158,7 +151,21 @@ export function QuickFoodAdd({
               }}
             />
 
-            {/* Refeição */}
+            {/* Refeição.
+
+                O dia vem repetido aqui de propósito. Este sheet não tem
+                rolagem: ele empilha título, botão de foto, chips, recentes,
+                cinco campos e o botão dentro de um container
+                `justifyContent: "flex-end"`, então o que não cabe sai POR CIMA.
+                Num aparelho de 360x640, ou com o teclado aberto, a linha do
+                título é a PRIMEIRA a ser cortada — e é ela que carrega o
+                "· terça-feira", o único sinal de que a gravação não é em hoje.
+                Some justamente enquanto a pessoa digita. */}
+            {data ? (
+              <Txt variant="caption" color={colors.text2}>
+                Gravando em {diaDaSemana(data)}
+              </Txt>
+            ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
               {MEALS.map((m) => (
                 <Chip key={m} label={MEAL_LABEL[m]} active={meal === m} onPress={() => setMeal(m)} />
