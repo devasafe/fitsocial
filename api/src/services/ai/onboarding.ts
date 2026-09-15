@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getAIProvider, parseJson, type AIMessage, type AIProvider } from "./index.js";
+import { gerarEValidar, getAIProvider, type AIMessage, type AIProvider } from "./index.js";
 import { GOALS, SEXES, LEVELS, profileDataSchema, type ProfileData } from "../../models/Profile.js";
 import { env } from "../../config/env.js";
 
@@ -57,16 +57,18 @@ export async function runOnboardingTurn(
   userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<OnboardingTurn> {
-  const raw = await provider.generate({
-    system: SYSTEM_PROMPT,
-    messages,
-    jsonMode: true,
-    temperature: 0.6,
-    feature: "onboarding",
-    userId,
-  });
-
-  const turn = parseJson(raw, turnSchema);
+  const turn = await gerarEValidar(
+    provider,
+    {
+      system: SYSTEM_PROMPT,
+      messages,
+      jsonMode: true,
+      temperature: 0.6,
+      feature: "onboarding",
+      userId,
+    },
+    turnSchema
+  );
 
   // Só consideramos "completo" se a ficha realmente validar por inteiro.
   if (turn.complete) {

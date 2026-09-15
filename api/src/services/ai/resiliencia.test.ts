@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { z } from "zod";
 import { GeminiProvider } from "./gemini.js";
 import { OpenAICompatibleProvider } from "./openaiCompatible.js";
 import { FallbackProvider } from "./fallback.js";
-import { AIError } from "./provider.js";
+import { AIError, type AIProvider } from "./provider.js";
+import { gerarEValidar, parseJson } from "./index.js";
 import { setAiTelemetrySink, type AiCallRecord } from "./telemetry.js";
 
 // O caminho feliz do free tier leva de 14 a 20 segundos, e às vezes o serviço
@@ -243,6 +245,129 @@ describe("O que a pessoa lê", () => {
 
       expect(corpo.error).toBeTruthy();
       expect(corpo.error).not.toMatch(/gemini|groq|503|429|AIError/i);
+    }
+  });
+});
+
+describe("Resposta malformada", () => {
+  // Uma resposta que não vira JSON válido é acidente de geração, não defeito da
+  // chave: o modelo entra em loop de repetição e gruda pedaços do fim. Medido
+  // contra o Gemini, aconteceu 1 vez em 5 respostas. Isso nascia FORA do
+  // `chamarProvedor` e FORA do `FallbackProvider`, então não tinha segunda
+  // chance nenhuma — uma única resposta torta virava erro para a pessoa.
+  const schema = z.object({ itens: z.array(z.string()) });
+
+  class ModeloDeRoteiro implements AIProvider {
+    readonly name = "roteiro";
+    readonly aceitaImagem = true;
+    chamadas = 0;
+    constructor(private readonly respostas: string[]) {}
+    async generate(): Promise<string> {
+      const r = this.respostas[Math.min(this.chamadas, this.respostas.length - 1)];
+      this.chamadas++;
+      return r;
+    }
+  }
+
+  it("uma resposta corrompida ganha segunda chance, e a pessoa não vê erro", async () => {
+    const modelo = new ModeloDeRoteiro([
+      '{"itens":["arroz"' + 'de preparo."'.repeat(3),
+      '{"itens":["arroz","feijao"]}',
+    ]);
+
+    const saida = await gerarEValidar(modelo, PEDIDO, schema);
+
+    expect(saida.itens).toEqual(["arroz", "feijao"]);
+    expect(modelo.chamadas).toBe(2);
+  });
+
+  it("desiste na segunda e não fica insistindo com o modelo", async () => {
+    const modelo = new ModeloDeRoteiro(["nao sou json", "continuo nao sendo"]);
+
+    await expect(gerarEValidar(modelo, PEDIDO, schema)).rejects.toMatchObject({
+      name: "AIError",
+      kind: "formato",
+    });
+    expect(modelo.chamadas).toBe(2);
+  });
+
+  it("não pede de novo quando a segunda rodada não caberia no prazo do app", async () => {
+    // O app desiste em 60s (app-android/src/api/client.ts). Uma segunda rodada
+    // que passe disso não entrega nada: o cliente já abortou, e o Express não
+    // cancela o handler — a chamada termina, acerta, debita cota e o resultado
+    // é jogado fora. Pior que o erro rápido e específico de antes.
+    class ModeloLento implements AIProvider {
+      readonly name = "lento";
+      readonly aceitaImagem = false;
+      chamadas = 0;
+      async generate(): Promise<string> {
+        this.chamadas++;
+        await new Promise((r) => setTimeout(r, 40));
+        return "nao sou json";
+      }
+    }
+    const modelo = new ModeloLento();
+
+    await expect(
+      gerarEValidar(modelo, PEDIDO, schema, { orcamentoMs: 50 })
+    ).rejects.toMatchObject({ kind: "formato" });
+
+    expect(modelo.chamadas).toBe(1);
+  });
+
+  it("quota não ganha segunda chance — trocar de chave é trabalho da cadeia", async () => {
+    // Guarda de regressão: o jeito fácil de estragar isto é afrouxar a checagem
+    // de `kind` e passar a repetir quota, que é exatamente o erro que NÃO passa
+    // em três segundos.
+    class ModeloQueLanca implements AIProvider {
+      readonly name = "recusa";
+      readonly aceitaImagem = false;
+      chamadas = 0;
+      async generate(): Promise<string> {
+        this.chamadas++;
+        throw new AIError("limite diário", true, "quota");
+      }
+    }
+    const modelo = new ModeloQueLanca();
+
+    await expect(gerarEValidar(modelo, PEDIDO, schema)).rejects.toMatchObject({ kind: "quota" });
+    expect(modelo.chamadas).toBe(1);
+  });
+
+  it("a frase cortada termina em palavra inteira, com reticências", async () => {
+    // A tela mostra a observação inteira, sem numberOfLines (RefeicaoPorFoto).
+    // Terminar em "...feito com óle" parece defeito do app, não escolha nossa.
+    const { analiseDaFotoSchema } = await import("./refeicaoPorFoto.js");
+    const frase = "Nao da para saber quanto de oleo foi usado no preparo do frango grelhado " +
+      "e da farofa, e isso muda bastante o total de calorias do prato inteiro hoje servido aqui.";
+
+    const saida = analiseDaFotoSchema.parse({ itens: [], observacao: frase.repeat(2) });
+
+    expect(saida.observacao.length).toBeLessThanOrEqual(200);
+    expect(saida.observacao).toMatch(/…$/);
+    expect(saida.observacao).not.toMatch(/\s…$/);
+  });
+
+  it("o erro diz qual campo não bateu, para não depurar às cegas", async () => {
+    // Sem isto o log dizia só "não bateu com o formato esperado". Descobrir que
+    // o culpado era uma observação longa demais exigiu sondar o Gemini ao vivo.
+    try {
+      parseJson('{"itens":"arroz"}', schema);
+      expect.unreachable("devia ter lançado");
+    } catch (err) {
+      expect((err as AIError).kind).toBe("formato");
+      expect((err as Error).message).toMatch(/itens/);
+    }
+  });
+
+  it("o campo com problema aparece no log, mas o conteúdo não", async () => {
+    // Foto de refeição e conversa de coach são dado pessoal: o caminho do campo
+    // serve para depurar, o valor dele não.
+    try {
+      parseJson('{"itens":"bife com farofa e uma anotacao intima"}', schema);
+      expect.unreachable("devia ter lançado");
+    } catch (err) {
+      expect((err as Error).message).not.toMatch(/bife|farofa|intima/i);
     }
   });
 });

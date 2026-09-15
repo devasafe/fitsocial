@@ -130,6 +130,24 @@ describe("Estimar a refeição pela foto", () => {
     expect(r.body.data.observacao).toContain("Não vejo comida");
   });
 
+  it("observacao longa demais é encurtada, e não derruba a análise inteira", async () => {
+    // O prompt manda o modelo explicar o que ficou incerto sobre molho e óleo;
+    // num prato cheio essa frase passa de 200 caracteres com facilidade. Jogar
+    // fora seis alimentos corretamente identificados por causa do tamanho de um
+    // aviso é perder a refeição inteira pelo rodapé.
+    modelo.resposta = JSON.stringify({
+      itens: [
+        { nome: "arroz branco", gramas: 150, kcal: 193, proteinaG: 3.6, carboG: 42, gorduraG: 0.4, confianca: "alta" },
+      ],
+      observacao: "M".repeat(250),
+    });
+
+    const r = await enviar(await prato()).expect(200);
+
+    expect(r.body.data.itens).toHaveLength(1);
+    expect(r.body.data.observacao).toHaveLength(200);
+  });
+
   it("resposta fora do formato vira erro tratado, não 500", async () => {
     modelo.resposta = "claro! aqui vai: um prato bonito de comida";
 

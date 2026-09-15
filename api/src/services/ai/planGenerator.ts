@@ -1,4 +1,4 @@
-import { getAIProvider, parseJson, type AIProvider } from "./index.js";
+import { gerarEValidar, getAIProvider, type AIProvider } from "./index.js";
 import {
   TRAINING_KNOWLEDGE,
   NUTRITION_KNOWLEDGE,
@@ -129,24 +129,26 @@ REGRAS:
 Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
 ${DIETA_JSON_FORMAT}`;
 
-  const raw = await provider.generate({
-    system,
-    messages: [
-      {
-        role: "user",
-        content: `${buildUserPrompt(profile).replace(
-          "Gere o plano completo de treino e dieta para esta pessoa.",
-          "Gere apenas a dieta para esta pessoa. O treino dela vem de outra fonte."
-        )}`,
-      },
-    ],
-    jsonMode: true,
-    temperature: 0.5,
-    feature: "diet_generate",
-    userId,
-  });
-
-  return parseJson(raw, dietDataSchema);
+  return gerarEValidar(
+    provider,
+    {
+      system,
+      messages: [
+        {
+          role: "user",
+          content: `${buildUserPrompt(profile).replace(
+            "Gere o plano completo de treino e dieta para esta pessoa.",
+            "Gere apenas a dieta para esta pessoa. O treino dela vem de outra fonte."
+          )}`,
+        },
+      ],
+      jsonMode: true,
+      temperature: 0.5,
+      feature: "diet_generate",
+      userId,
+    },
+    dietDataSchema
+  );
 }
 
 /** Gera um plano (treino + dieta) validado a partir da ficha do usuário. */
@@ -155,16 +157,20 @@ export async function generatePlan(
   userId?: string,
   provider: AIProvider = getAIProvider()
 ): Promise<PlanData> {
-  const raw = await provider.generate({
-    system: buildSystemPrompt(),
-    messages: [{ role: "user", content: buildUserPrompt(profile) }],
-    jsonMode: true,
-    temperature: 0.5,
-    feature: "plan_generate",
-    userId,
-  });
+  const dados = await gerarEValidar(
+    provider,
+    {
+      system: buildSystemPrompt(),
+      messages: [{ role: "user", content: buildUserPrompt(profile) }],
+      jsonMode: true,
+      temperature: 0.5,
+      feature: "plan_generate",
+      userId,
+    },
+    planDataSchema
+  );
 
-  return normalizePlanData(parseJson(raw, planDataSchema));
+  return normalizePlanData(dados);
 }
 
 /**
@@ -192,16 +198,20 @@ Com base na adesão acima, gere uma NOVA VERSÃO do plano:
 - Se está treinando MENOS que o planejado, simplifique (reduza dias/volume) para caber na rotina real e evitar frustração.
 - Mantenha o mesmo formato JSON de plano. Explique o ajuste no campo "summary".`;
 
-  const raw = await provider.generate({
-    system: buildSystemPrompt(),
-    messages: [{ role: "user", content: userPrompt }],
-    jsonMode: true,
-    temperature: 0.5,
-    feature: "plan_adjust",
-    userId,
-  });
+  const dados = await gerarEValidar(
+    provider,
+    {
+      system: buildSystemPrompt(),
+      messages: [{ role: "user", content: userPrompt }],
+      jsonMode: true,
+      temperature: 0.5,
+      feature: "plan_adjust",
+      userId,
+    },
+    planDataSchema
+  );
 
-  return normalizePlanData(parseJson(raw, planDataSchema));
+  return normalizePlanData(dados);
 }
 
 /**
@@ -230,14 +240,18 @@ ${profileLine}
 Responda SOMENTE com um JSON válido neste formato (sem texto fora do JSON):
 ${PLAN_JSON_FORMAT}`;
 
-  const raw = await provider.generate({
-    system,
-    messages: [{ role: "user", content: `TEXTO DO PLANO DO USUÁRIO:\n\n${text}` }],
-    jsonMode: true,
-    temperature: 0.2,
-    feature: "plan_import",
-    userId,
-  });
+  const dados = await gerarEValidar(
+    provider,
+    {
+      system,
+      messages: [{ role: "user", content: `TEXTO DO PLANO DO USUÁRIO:\n\n${text}` }],
+      jsonMode: true,
+      temperature: 0.2,
+      feature: "plan_import",
+      userId,
+    },
+    planDataSchema
+  );
 
-  return normalizePlanData(parseJson(raw, planDataSchema));
+  return normalizePlanData(dados);
 }
