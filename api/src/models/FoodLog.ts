@@ -41,5 +41,10 @@ const foodLogSchema = new Schema(
   { timestamps: true }
 );
 
+// A janela do progresso filtra por pessoa E por intervalo de datas. Com os dois
+// índices soltos que existiam, uma janela de 30 dias varria todos os registros
+// da pessoa. O CLAUDE.md exige índice para toda query nova, e esta é a query.
+foodLogSchema.index({ user: 1, date: 1 });
+
 export type FoodLogDoc = HydratedDocument<InferSchemaType<typeof foodLogSchema>>;
 export const FoodLog = mongoose.model("FoodLog", foodLogSchema);

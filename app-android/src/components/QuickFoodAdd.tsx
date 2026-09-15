@@ -1,5 +1,7 @@
 // Registro rápido de alimento em bottom sheet — recentes em 1 toque + entrada manual.
-// Abre da Home (card de nutrição) sem sair da tela. Registra no dia de hoje.
+// Abre da Home (card de nutrição) sem sair da tela. Registra no dia de hoje por
+// padrão, ou no dia passado em `data` (convite de preencher ontem/anteontem, na
+// tela de evolução da nutrição).
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -9,6 +11,7 @@ import type { AppStackParams } from "../navigation/types";
 import { notify } from "../lib/notify";
 import { logFood, MEAL_LABEL, type Meal } from "../api/nutrition";
 import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents";
+import { diaDaSemana } from "../lib/semana";
 import { colors, spacing, radius } from "../theme";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
@@ -31,11 +34,15 @@ function defaultMeal(): Meal {
 export function QuickFoodAdd({
   visible,
   token,
+  data,
   onClose,
   onAdded,
 }: {
   visible: boolean;
   token: string;
+  /** Em que dia gravar. Ausente = hoje, que é o caso comum e o comportamento
+   *  que o resto do app já espera. */
+  data?: string;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -61,7 +68,7 @@ export function QuickFoodAdd({
       setSaving(true);
       try {
         await logFood(token, {
-          date: todayStr(),
+          date: data ?? todayStr(),
           meal,
           name: food.name,
           kcal: food.kcal,
@@ -84,7 +91,7 @@ export function QuickFoodAdd({
         setSaving(false);
       }
     },
-    [token, meal, onAdded]
+    [token, meal, data, onAdded]
   );
 
   function addManual() {
@@ -120,7 +127,14 @@ export function QuickFoodAdd({
             }}
           >
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Txt variant="titleSection">Registrar alimento</Txt>
+              <Txt variant="titleSection">
+                Registrar alimento
+                {/* Sem isto, quem abriu o convite de terça e some pro fundo
+                    depois do primeiro item (o card do convite não sobrevive ao
+                    `load()`) não tem mais nenhum sinal na tela de qual dia
+                    está gravando. */}
+                {data ? <Txt variant="titleSection" color={colors.text2}> · {diaDaSemana(data)}</Txt> : null}
+              </Txt>
               <TouchableOpacity onPress={onClose} hitSlop={8}>
                 <Txt variant="label" color={colors.text2}>
                   Concluir
@@ -133,11 +147,25 @@ export function QuickFoodAdd({
               variant="secondary"
               onPress={() => {
                 onClose();
-                nav.navigate("RefeicaoPorFoto", { meal });
+                nav.navigate("RefeicaoPorFoto", { meal, data });
               }}
             />
 
-            {/* Refeição */}
+            {/* Refeição.
+
+                O dia vem repetido aqui de propósito. Este sheet não tem
+                rolagem: ele empilha título, botão de foto, chips, recentes,
+                cinco campos e o botão dentro de um container
+                `justifyContent: "flex-end"`, então o que não cabe sai POR CIMA.
+                Num aparelho de 360x640, ou com o teclado aberto, a linha do
+                título é a PRIMEIRA a ser cortada — e é ela que carrega o
+                "· terça-feira", o único sinal de que a gravação não é em hoje.
+                Some justamente enquanto a pessoa digita. */}
+            {data ? (
+              <Txt variant="caption" color={colors.text2}>
+                Gravando em {diaDaSemana(data)}
+              </Txt>
+            ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
               {MEALS.map((m) => (
                 <Chip key={m} label={MEAL_LABEL[m]} active={meal === m} onPress={() => setMeal(m)} />

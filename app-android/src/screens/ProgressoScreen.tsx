@@ -10,6 +10,7 @@ import { SegmentedControl, type Segment } from "../components/SegmentedControl";
 import { HistoryScreen } from "./HistoryScreen";
 import { MeusPRsScreen } from "./MeusPRsScreen";
 import { MinhasAtividadesScreen } from "./MinhasAtividadesScreen";
+import { NutricaoProgressoScreen } from "./NutricaoProgressoScreen";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { listarExercicios, type ExercicioNaLista } from "../api/evolucao";
 import { listPRs, prTypeLabel, prValueLabel, type PersonalRecord } from "../api/prs";
@@ -34,6 +35,17 @@ const SEGMENTS: Segment<Seg>[] = [
   { key: "evolucao", label: "Evolução" },
   { key: "recordes", label: "Recordes" },
   { key: "atividades", label: "Atividades" },
+];
+
+// Nível de cima: o assunto. Treino já tem quatro sub-abas (acima); Nutrição
+// é a segunda. Separar aqui evita que um dia o CrossFit vire uma quinta ou
+// sexta pílula no SegmentedControl de treino — ele entra como modo do
+// gráfico dentro de Treino, sem mexer nesta lista.
+type Assunto = "treino" | "nutricao";
+
+const ASSUNTOS: Segment<Assunto>[] = [
+  { key: "treino", label: "Treino" },
+  { key: "nutricao", label: "Nutrição" },
 ];
 
 // Painel emocional simples: sequência (herói) + semana/total + total de recordes.
@@ -175,23 +187,37 @@ function Resumo() {
 
 export function ProgressoScreen() {
   const insets = useSafeAreaInsets();
+  const [assunto, setAssunto] = useState<Assunto>("treino");
   const [seg, setSeg] = useState<Seg>("resumo");
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.gutter }}>
         <Txt variant="titleScreen">Progresso</Txt>
         <SegmentedControl
-          segments={SEGMENTS}
-          value={seg}
-          onChange={setSeg}
+          segments={ASSUNTOS}
+          value={assunto}
+          onChange={setAssunto}
           style={{ marginTop: spacing.sm, marginBottom: spacing.sm }}
         />
+        {assunto === "treino" && (
+          <SegmentedControl
+            segments={SEGMENTS}
+            value={seg}
+            onChange={setSeg}
+            style={{ marginBottom: spacing.sm }}
+          />
+        )}
       </View>
       <View style={{ flex: 1 }}>
-        {seg === "resumo" && <Resumo />}
-        {seg === "evolucao" && <HistoryScreen embedded />}
-        {seg === "recordes" && <MeusPRsScreen embedded />}
-        {seg === "atividades" && <MinhasAtividadesScreen embedded />}
+        {assunto === "treino" && (
+          <>
+            {seg === "resumo" && <Resumo />}
+            {seg === "evolucao" && <HistoryScreen embedded />}
+            {seg === "recordes" && <MeusPRsScreen embedded />}
+            {seg === "atividades" && <MinhasAtividadesScreen embedded />}
+          </>
+        )}
+        {assunto === "nutricao" && <NutricaoProgressoScreen embedded />}
       </View>
     </View>
   );

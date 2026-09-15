@@ -20,6 +20,7 @@ import { analisarFoto, logFood, MEAL_LABEL, type ItemEstimado, type Meal } from 
 import { Screen, Txt, Button, Card, Chip } from "../components/ui";
 import { EsperaLonga, PASSOS } from "../components/Espera";
 import { notify } from "../lib/notify";
+import { diaDaSemana } from "../lib/semana";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import { Icon } from "../components/Icon";
@@ -175,13 +176,15 @@ export function RefeicaoPorFotoScreen() {
       return;
     }
 
+    const data = route.params?.data;
+
     setSalvando(true);
     try {
       // Um registro por alimento, e não um só "almoço": assim a pessoa apaga
       // o arroz sem perder o frango, e o histórico de recentes fica útil.
       for (const i of validos) {
         await logFood(token!, {
-          date: hoje(),
+          date: data ?? hoje(),
           meal,
           name: i.nome.trim(),
           kcal: i.kcal,
@@ -192,7 +195,14 @@ export function RefeicaoPorFotoScreen() {
           origem: "foto",
         });
       }
-      notify("Registrado", `${validos.length} ${validos.length === 1 ? "item" : "itens"} no ${MEAL_LABEL[meal].toLowerCase()}.`);
+      // O dia vai junto na confirmação: é a última chance de a pessoa perceber
+      // que gravou em terça achando que gravava em hoje, e a única que aparece
+      // depois de ela ter confirmado.
+      notify(
+        "Registrado",
+        `${validos.length} ${validos.length === 1 ? "item" : "itens"} no ${MEAL_LABEL[meal].toLowerCase()}` +
+          (data ? ` de ${diaDaSemana(data)}.` : ".")
+      );
       nav.goBack();
     } catch (err) {
       notify("Não deu para registrar", (err as Error).message);
@@ -204,6 +214,24 @@ export function RefeicaoPorFotoScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
+        {/* Em que dia isto vai entrar.
+
+            A data chega por `route.params` e vai até a gravação, mas sumia da
+            tela no caminho: o header do stack é fixo ("Refeição por foto") e o
+            corpo só mostrava os chips de refeição. Quem veio do convite de
+            terça fotografava, ajustava e confirmava sem nada na tela dizendo
+            terça — e escrever no dia errado só aparece dias depois, como um
+            buraco onde ela jurava ter registrado, sem como desfazer a não ser
+            caçando item por item no diário.
+
+            A grafia é a mesma do sheet de registro rápido (`lib/semana`): duas
+            grafias do mesmo dia no mesmo fluxo seriam piores que nenhuma. */}
+        {route.params?.data ? (
+          <Txt variant="caption" color={colors.text2}>
+            Gravando em {diaDaSemana(route.params.data)}
+          </Txt>
+        ) : null}
+
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
           {MEALS.map((m) => (
             <Chip key={m} label={MEAL_LABEL[m]} active={meal === m} onPress={() => setMeal(m)} />

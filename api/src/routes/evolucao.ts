@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { calcularPlan } from "../services/entitlement.js";
-import type { UserDoc } from "../models/User.js";
+import { janelaPermitida, metaDaJanela } from "../services/janela.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   METRICAS,
@@ -40,41 +40,6 @@ const janelaSchema = z.preprocess(
   (v) => (v === "" || v == null ? undefined : v),
   z.coerce.number().int().min(0).max(3650).default(90)
 );
-
-/**
- * Até onde o plano grátis enxerga o próprio passado.
- *
- * Uma semana é o bastante para a aba responder "como foi a semana" — que é o
- * que faz a pessoa voltar amanhã — e curta o bastante para a falta doer
- * justamente em quem já tem histórico. Quanto mais tempo de app, mais falta faz.
- */
-const JANELA_DO_GRATIS = 7;
-
-/**
- * A janela que esta pessoa pode pedir, cortada se for o caso.
- *
- * CORTA, e não recusa. Um 402 aqui faria o aplicativo instalado navegar para a
- * tela de assinatura a partir de uma tela de gráfico que nunca foi ligada a
- * isso — e a pessoa sairia do gráfico sem entender por quê. Cortado, o cliente
- * velho simplesmente mostra sete dias, e o novo lê `meta.limitadoPor` e desenha
- * o cadeado.
- *
- * Zero significa "tudo" na borda deste projeto, e por isso é o caso que mais
- * precisa de corte.
- */
-function janelaPermitida(user: UserDoc, pedidos: number): number {
-  if (calcularPlan(user) !== "free") return pedidos;
-  if (pedidos === 0) return JANELA_DO_GRATIS;
-  return Math.min(pedidos, JANELA_DO_GRATIS);
-}
-
-/** O `meta` das rotas de janela, dizendo se cortou e por quê. */
-function metaDaJanela(pedidos: number, dias: number) {
-  return {
-    dias,
-    ...(dias !== pedidos ? { diasPedidos: pedidos, limitadoPor: "plano" as const } : {}),
-  };
-}
 
 /** O slug vem da URL, e a borda é onde tudo é validado neste projeto. */
 const slugSchema = z.string().min(1).max(80);

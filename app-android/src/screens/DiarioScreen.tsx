@@ -11,6 +11,7 @@ import { colors, spacing, radius } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 import { Icon } from "../components/Icon";
+import { Bar, MacroRow } from "../components/MacroBar";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
 
@@ -28,15 +29,6 @@ function shift(date: string, days: number): string {
 function dateLabel(date: string): string {
   if (date === todayStr()) return "Hoje";
   return new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-}
-
-function Bar({ value, target }: { value: number; target: number }) {
-  const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0;
-  return (
-    <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.line, overflow: "hidden", marginTop: 4 }}>
-      <View style={{ width: `${pct}%`, height: 6, backgroundColor: colors.lime }} />
-    </View>
-  );
 }
 
 export function DiarioScreen() {
@@ -158,7 +150,7 @@ export function DiarioScreen() {
         <Button
           title="Analisar uma foto do prato"
           variant="secondary"
-          onPress={() => nav.navigate("RefeicaoPorFoto", { meal })}
+          onPress={() => nav.navigate("RefeicaoPorFoto", { meal, data: date })}
           style={{ marginBottom: spacing.sm }}
         />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginBottom: spacing.sm }}>
@@ -233,21 +225,5 @@ export function DiarioScreen() {
         })
       )}
     </Screen>
-  );
-}
-
-function MacroRow({ label, v, t }: { label: string; v: number; t: number }) {
-  return (
-    <View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Txt variant="label" color={colors.text2}>
-          {label}
-        </Txt>
-        <Txt variant="label" tabular color={colors.text2}>
-          {Math.round(v)} / {t} g
-        </Txt>
-      </View>
-      <Bar value={v} target={t} />
-    </View>
   );
 }
