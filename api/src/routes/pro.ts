@@ -32,6 +32,7 @@ import {
   serieDoExercicio,
 } from "../services/evolucao.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
+import { evolucaoDeNutricao } from "../services/nutricao.js";
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema, type WorkoutData } from "../models/Plan.js";
 import { preservarAgenda } from "../services/agendaDeTreino.js";
@@ -466,6 +467,37 @@ proRouter.get(
 
     const dias = janelaDoAluno.parse(req.query.dias);
     res.json({ data: await gruposDoUsuario(clientId, dias), meta: { dias } });
+  })
+);
+
+/**
+ * A aderência à dieta do aluno, ao longo do tempo.
+ *
+ * Mesma função que responde ao próprio dono em `/nutrition/evolucao` — o
+ * profissional vê o mesmo número que o aluno vê, e não uma segunda versão do
+ * cálculo que poderia discordar dele na frente dos dois.
+ *
+ * Sem gate de plano, como as demais rotas do painel: o profissional não paga a
+ * janela do aluno.
+ */
+proRouter.get(
+  "/alunos/:id/nutricao",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+
+    // `janelaDoAluno` aceita 0 como "tudo", mas `evolucaoDeNutricao` devolve UM
+    // ITEM POR DIA: com dias=0, a resposta viraria um corpo de milhares de
+    // itens para desenhar um gráfico que cabe numa tela. Aqui, 0 vira 365.
+    const pedidos = janelaDoAluno.parse(req.query.dias);
+    const dias = pedidos === 0 ? 365 : pedidos;
+
+    const data = await evolucaoDeNutricao(clientId, dias);
+    res.json({ data, meta: { dias } });
   })
 );
 
