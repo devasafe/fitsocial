@@ -1,0 +1,122 @@
+# Push na main deploya sozinho — depois de passar nos testes.
+#
+# Antes disto o Coolify não tinha gatilho nenhum: o push ia para o GitHub e o
+# código ficava parado até alguém disparar o deploy à mão pela API. Aconteceu
+# duas vezes de alguém achar que tinha subido e não ter subido.
+#
+# Um webhook do Coolify resolveria o gatilho, mas sem portão: qualquer push
+# entraria em produção sem rodar teste. O passo manual também não era portão —
+# ele só exigia que alguém LEMBRASSE. Aqui o portão existe de verdade: se a
+# suíte da API quebra ou o app não compila, o deploy não acontece.
+#
+# Três coisas que este arquivo faz e o webhook não faria:
+#  - deploya só as apps cujas pastas mudaram (dispensa `watch_paths` no Coolify);
+#  - garante a ORDEM: backend antes do app, que é a dependência real entre eles;
+#  - confirma pelo `commit` do deployment, porque `/health` responde 200 mesmo
+#    quando o build falha e o container antigo continua servindo.
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  # Para reprocessar um commit sem precisar de push vazio.
+  workflow_dispatch:
+
+# Dois deploys simultâneos na mesma app disputariam o mesmo container. Fila, e
+# sem cancelar o que já está no meio: cancelar um deploy pela metade é pior.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+env:
+  COOLIFY: https://deploy.satriz.club
+
+jobs:
+  entregar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Precisa do commit anterior para saber o que mudou.
+          fetch-depth: 2
+
+      - name: O que mudou neste push
+        id: mudou
+        run: |
+          anterior="${{ github.event.before }}"
+          # Primeiro push da branch, force-push ou disparo manual: não há
+          # anterior confiável, então trata tudo como alterado.
+          if [ -z "$anterior" ] || [ "$anterior" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$anterior^{commit}" 2>/dev/null; then
+            echo "sem base de comparacao — tratando tudo como alterado"
+            tudo=1
+            arquivos=""
+          else
+            tudo=0
+            arquivos=$(git diff --name-only "$anterior" "${{ github.sha }}")
+            echo "$arquivos"
+          fi
+          for par in api:api app-android:app admin:admin pro:pro; do
+            pasta=${par%%:*}; saida=${par##*:}
+            if [ "$tudo" = 1 ] || echo "$arquivos" | grep -q "^$pasta/"; then
+              echo "$saida=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$saida=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+          cat "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ---- portão
+
+      - name: Testes da API
+        if: steps.mudou.outputs.api == 'true'
+        working-directory: api
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      # O Metro não checa tipo: um app que não compila passa pelo export do
+      # Expo e chega quebrado em produção. Este é o único portão do app.
+      - name: Typecheck do app
+        if: steps.mudou.outputs.app == 'true'
+        working-directory: app-android
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run checar-cores
+
+      # ---- deploy
+
+      - name: Backend
+        if: steps.mudou.outputs.api == 'true'
+        run: ./.github/deploy.sh eaxgwx3ubwq84wdl7l7tm5v1 "FITSOCIAL BACKEND"
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+
+      # Depois do backend, de propósito: o app novo fala com rotas que só
+      # existem na API nova.
+      - name: Frontend
+        if: steps.mudou.outputs.app == 'true'
+        run: ./.github/deploy.sh vuvrmn4getxnl4ortfpvkesn "FITSOCIAL FRONTEND"
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+
+      - name: Admin
+        if: steps.mudou.outputs.admin == 'true'
+        run: ./.github/deploy.sh cccbjlgyufvodq3bvllkuotv "FITSOCIAL ADMIN"
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+
+      - name: Pro
+        if: steps.mudou.outputs.pro == 'true'
+        run: ./.github/deploy.sh qoerobkhyayb9c6aclmvmr7y "FITSOCIAL PRO"
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
