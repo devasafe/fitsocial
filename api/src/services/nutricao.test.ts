@@ -2,10 +2,15 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { Plan } from "../models/Plan.js";
-import { alvosPorDia } from "./nutricao.js";
+import { FoodLog } from "../models/FoodLog.js";
+import { alvosPorDia, evolucaoDeNutricao } from "./nutricao.js";
+import { chaveDoDia } from "../utils/dia.js";
 
 let mongod: MongoMemoryServer;
 const user = new mongoose.Types.ObjectId();
+
+/** O "hoje" do servidor, no mesmo fuso em que o FoodLog e gravado. */
+const r_hoje = () => chaveDoDia();
 
 const dieta = (kcal: number) => ({
   dailyCalories: kcal,
@@ -81,5 +86,68 @@ describe("O alvo que valia em cada dia", () => {
     });
 
     expect((await alvosPorDia(user, ["2026-09-07"])).get("2026-09-07")).toBeNull();
+  });
+});
+
+describe("A serie de dias", () => {
+  const registrar = (date: string, kcal: number) =>
+    FoodLog.create({ user, date, meal: "almoco", name: "arroz", kcal, proteinG: 10, carbsG: 20, fatG: 5 });
+
+  beforeEach(async () => {
+    await FoodLog.deleteMany({});
+  });
+
+  it("devolve um item por dia da janela, inclusive os vazios", async () => {
+    const r = await evolucaoDeNutricao(user, 7);
+    expect(r.dias).toHaveLength(7);
+    expect(r.resumo.diasNaJanela).toBe(7);
+  });
+
+  it("dia sem registro vem NULL, e nao zero", async () => {
+    // Zero e uma afirmacao sobre a comida; null e a ausencia de afirmacao. O
+    // grafico precisa da diferenca para nao dizer que a pessoa passou fome.
+    const r = await evolucaoDeNutricao(user, 7);
+    const vazio = r.dias[0]!;
+    expect(vazio.kcal).toBeNull();
+    expect(vazio.registros).toBe(0);
+  });
+
+  it("soma os registros do mesmo dia", async () => {
+    const hoje = r_hoje();
+    await registrar(hoje, 300);
+    await registrar(hoje, 200);
+
+    const r = await evolucaoDeNutricao(user, 7);
+    const dia = r.dias.find((d) => d.dia === hoje)!;
+
+    expect(dia.kcal).toBe(500);
+    expect(dia.proteinG).toBe(20);
+    expect(dia.registros).toBe(2);
+  });
+
+  it("a media ignora os dias vazios, e o resumo diz quantos foram", async () => {
+    await registrar(r_hoje(), 400);
+
+    const r = await evolucaoDeNutricao(user, 30);
+
+    // 400, e nao 400/30: a media de um dia apresentada como se fosse de trinta e
+    // a mentira que esta tela existe para evitar.
+    expect(r.resumo.mediaKcal).toBe(400);
+    expect(r.resumo.diasComRegistro).toBe(1);
+  });
+
+  it("media e null quando nao houve registro nenhum", async () => {
+    const r = await evolucaoDeNutricao(user, 7);
+    expect(r.resumo.mediaKcal).toBeNull();
+  });
+
+  it("nao mistura o diario de outra pessoa", async () => {
+    await FoodLog.create({
+      user: new mongoose.Types.ObjectId(), date: r_hoje(), meal: "almoco",
+      name: "alheio", kcal: 9999, proteinG: 0, carbsG: 0, fatG: 0,
+    });
+
+    const r = await evolucaoDeNutricao(user, 7);
+    expect(r.dias.every((d) => d.kcal === null)).toBe(true);
   });
 });

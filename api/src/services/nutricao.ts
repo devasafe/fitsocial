@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Plan } from "../models/Plan.js";
-import { chaveDoDia } from "../utils/dia.js";
+import { FoodLog } from "../models/FoodLog.js";
+import { chaveDoDia, ultimosDias } from "../utils/dia.js";
 
 /** A meta de um dia. Macros em inglês, como o resto do domínio de nutrição. */
 export interface AlvoDiario {
@@ -64,5 +65,99 @@ function alvoDe(diet: DietaDoPlano | null): AlvoDiario | null {
     proteinG: diet.macros?.proteinG ?? 0,
     carbsG: diet.macros?.carbsG ?? 0,
     fatG: diet.macros?.fatG ?? 0,
+  };
+}
+
+/** Um dia da janela. Os totais são `null` quando não houve registro nenhum. */
+export interface DiaDeNutricao {
+  dia: string;
+  kcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  registros: number;
+  alvo: AlvoDiario | null;
+}
+
+export interface EvolucaoDeNutricao {
+  dias: DiaDeNutricao[];
+  resumo: {
+    diasComRegistro: number;
+    diasNaJanela: number;
+    /** Média só dos dias COM registro. A tela nunca a mostra sozinha. */
+    mediaKcal: number | null;
+    diasDentroDoAlvo: number;
+  };
+}
+
+/** Quanto o consumo pode se afastar do alvo e ainda contar como acerto. */
+const TOLERANCIA = 0.1;
+
+/**
+ * A aderência da pessoa ao longo da janela.
+ *
+ * Quem monta o buraco é o servidor, e não a tela: senão cada cliente inventa a
+ * própria regra para o dia vazio, e o APK instalado inventaria uma diferente do
+ * painel do nutricionista.
+ */
+export async function evolucaoDeNutricao(
+  userId: mongoose.Types.ObjectId,
+  dias: number
+): Promise<EvolucaoDeNutricao> {
+  const datas = ultimosDias(dias);
+
+  // `date` é string yyyy-mm-dd, então a comparação lexicográfica é a cronológica
+  // — e o índice { user, date } atende este $match direto.
+  const linhas = await FoodLog.aggregate<{
+    _id: string; kcal: number; proteinG: number; carbsG: number; fatG: number; registros: number;
+  }>([
+    { $match: { user: userId, date: { $gte: datas[0], $lte: datas[datas.length - 1] } } },
+    {
+      $group: {
+        _id: "$date",
+        kcal: { $sum: "$kcal" },
+        proteinG: { $sum: "$proteinG" },
+        carbsG: { $sum: "$carbsG" },
+        fatG: { $sum: "$fatG" },
+        registros: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const porDia = new Map(linhas.map((l) => [l._id, l]));
+  const alvos = await alvosPorDia(userId, datas);
+
+  const serie: DiaDeNutricao[] = datas.map((dia) => {
+    const l = porDia.get(dia);
+    const alvo = alvos.get(dia) ?? null;
+    if (!l) {
+      return { dia, kcal: null, proteinG: null, carbsG: null, fatG: null, registros: 0, alvo };
+    }
+    return {
+      dia,
+      kcal: l.kcal,
+      proteinG: l.proteinG,
+      carbsG: l.carbsG,
+      fatG: l.fatG,
+      registros: l.registros,
+      alvo,
+    };
+  });
+
+  const comRegistro = serie.filter((d) => d.kcal !== null);
+  const dentro = comRegistro.filter(
+    (d) => d.alvo && Math.abs(d.kcal! - d.alvo.kcal) <= d.alvo.kcal * TOLERANCIA
+  );
+
+  return {
+    dias: serie,
+    resumo: {
+      diasComRegistro: comRegistro.length,
+      diasNaJanela: datas.length,
+      mediaKcal: comRegistro.length
+        ? Math.round(comRegistro.reduce((s, d) => s + d.kcal!, 0) / comRegistro.length)
+        : null,
+      diasDentroDoAlvo: dentro.length,
+    },
   };
 }
