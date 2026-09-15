@@ -19,15 +19,28 @@ interface DietaDoPlano {
 /**
  * Qual meta valia em cada dia pedido.
  *
- * O `Plan` é versionado: cada geração, reajuste, importação ou prescrição cria
- * uma versão nova. O alvo de um dia é o da última versão COM DIETA criada até o
- * fim daquele dia — comparar o passado inteiro contra a meta de hoje faria uma
- * troca de dieta pintar de vermelho dias que foram acertos.
+ * O alvo de um dia é o da última versão COM DIETA criada até o fim daquele dia
+ * — comparar o passado inteiro contra a meta de hoje faria uma troca de dieta
+ * pintar de vermelho dias que foram acertos.
  *
- * LIMITE CONHECIDO: `PUT /plans/current` edita a dieta NO LUGAR, sem criar
- * versão. Uma edição manual sobrescreve a meta histórica, e não há como
- * recuperá-la. Quando a prescrição de dieta do nutricionista for construída
- * (frente 3), ela precisa criar versão, como a de treino já faz.
+ * LIMITE CONHECIDO: DUAS rotas editam a dieta NO LUGAR, sem criar versão, e o
+ * histórico de meta que este cálculo lê não registra nenhuma delas:
+ *
+ *   - `PUT /plans/current` — edição manual do plano;
+ *   - `POST /plans/diet` (`routes/plans.ts`) — quando já existe plano, ele faz
+ *     `atual.diet = ...; atual.save()`. É o caminho MAIS USADO para passar a
+ *     ter dieta, e o mais silencioso: nem a versão sobe, nem o `createdAt` do
+ *     documento muda.
+ *
+ * A consequência concreta é o `createdAt` mentir sobre desde quando a meta
+ * existe. Um plano só de treino criado em 01/06 que ganha dieta em 14/09
+ * continua com `createdAt` de 01/06, então o alvo de hoje passa a ser atribuído
+ * a junho, julho e agosto inteiros — dias em que não havia dieta nenhuma, e que
+ * aparecem julgados contra uma meta que ninguém tinha.
+ *
+ * Fazer `/plans/diet` versionar mexe em `planLink.planVersion` e no lock
+ * otimista de `PUT /plans/current/agenda`: é decisão de produto, e está com o
+ * dono. Até lá, o limite fica documentado aqui em vez de escondido.
  */
 export async function alvosPorDia(
   userId: mongoose.Types.ObjectId,
@@ -35,13 +48,24 @@ export async function alvosPorDia(
 ): Promise<Map<string, AlvoDiario | null>> {
   const planos = await Plan.find({ user: userId, diet: { $ne: null } })
     .select("diet createdAt")
-    .sort({ createdAt: 1 })
+    // Ordena por `version`, e não por `createdAt`: os índices de `Plan` são
+    // { user } e { user, version }, então `createdAt` obrigaria a ordenar em
+    // memória. `version` é monotônico com `createdAt` — os cinco caminhos que
+    // criam plano fazem `(atual?.version ?? 0) + 1`. Quem define `desde`
+    // continua sendo o `createdAt`; só a ORDEM de leitura mudou.
+    .sort({ version: 1 })
     .lean();
 
   // Um par (dia em que passou a valer, alvo), já no fuso de São Paulo — o mesmo
   // fuso em que `FoodLog.date` é gravado, senão os dois desalinham na virada.
   const trocas = planos.map((p) => ({
-    desde: chaveDoDia(p.createdAt as Date),
+    // Plano sem `createdAt` (documento anterior ao `timestamps`, ou inserido
+    // por script/driver cru) vale DESDE SEMPRE. O padrão de `chaveDoDia` é
+    // `new Date()`: sem esta guarda, o plano passaria a valer "a partir de
+    // hoje", a janela inteira voltaria com `alvo: null` e a tela diria "0 dias
+    // dentro da meta" para quem registrou trinta — sem erro e sem log. Entre os
+    // dois erros possíveis, atribuir a meta a dias demais é o lado seguro.
+    desde: p.createdAt ? chaveDoDia(p.createdAt as Date) : "0000-00-00",
     alvo: alvoDe(p.diet as DietaDoPlano | null),
   }));
 
