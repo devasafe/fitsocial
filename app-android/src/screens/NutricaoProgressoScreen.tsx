@@ -29,6 +29,7 @@ import {
 } from "../api/nutricao";
 import { LineChart } from "../components/LineChart";
 import { MacroRow } from "../components/MacroBar";
+import { QuickFoodAdd } from "../components/QuickFoodAdd";
 import { Txt, Card, Chip, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { Skeleton, SkeletonCard } from "../components/Skeleton";
@@ -179,8 +180,16 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
     const anteontem = dias[dias.length - 3];
     const vazio =
       ontem && ontem.registros === 0 ? ontem : anteontem && anteontem.registros === 0 ? anteontem : null;
-    return vazio ? diaDaSemana(vazio.dia) : null;
+    return vazio ? { dia: vazio.dia, semana: diaDaSemana(vazio.dia) } : null;
   }, [dias]);
+
+  // Sheet do convite: abre o mesmo registro rápido da Home, mas gravando no dia
+  // de `convite` em vez de hoje. Guardado à parte (e não como um booleano que
+  // lê `convite` direto) porque o `load()` do primeiro item recalcula `convite`
+  // e, assim que o dia deixa de estar vazio, ele vira `null` — se o sheet lesse
+  // `convite` ao vivo, ele fecharia sozinho ou passaria a gravar em `todayStr()`
+  // no meio da sessão, com a pessoa ainda tentando adicionar o segundo item.
+  const [diaDoConvitePreenchendo, setDiaDoConvitePreenchendo] = useState<string | null>(null);
 
   // Máx de 460px (bom no web e no celular), descontando gutter da tela e padding
   // do cartão.
@@ -377,19 +386,30 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
             </Card>
           )}
 
-          {/* Convite. O toque é da Tarefa 9 — aqui só existem a condição e o
-              texto. Quando ela chegar, este cartão vira o gatilho do
-              `QuickFoodAdd` para o dia de `convite`; o gancho é este. */}
+          {/* Convite: abre o mesmo registro rápido da Home, gravando no dia
+              de `convite` em vez de hoje. Limitado a ontem/anteontem (a
+              condição já filtra isso lá em cima) — mais para trás vira
+              reconstrução de memória. */}
           {convite && (
-            <Card level={2}>
-              <Txt variant="titleCard">Faltou registrar {convite}. O que você comeu?</Txt>
-              <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-                Dá para preencher um dia que já passou a qualquer momento.
-              </Txt>
-            </Card>
+            <TouchableOpacity onPress={() => setDiaDoConvitePreenchendo(convite.dia)} activeOpacity={0.85}>
+              <Card level={2}>
+                <Txt variant="titleCard">Faltou registrar {convite.semana}. O que você comeu?</Txt>
+                <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
+                  Dá para preencher um dia que já passou a qualquer momento.
+                </Txt>
+              </Card>
+            </TouchableOpacity>
           )}
         </>
       )}
+
+      <QuickFoodAdd
+        visible={diaDoConvitePreenchendo !== null}
+        token={token!}
+        data={diaDoConvitePreenchendo ?? undefined}
+        onClose={() => setDiaDoConvitePreenchendo(null)}
+        onAdded={load}
+      />
 
       <View style={{ height: spacing.xl }} />
     </ScrollView>

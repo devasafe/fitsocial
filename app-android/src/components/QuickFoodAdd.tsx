@@ -1,5 +1,7 @@
 // Registro rápido de alimento em bottom sheet — recentes em 1 toque + entrada manual.
-// Abre da Home (card de nutrição) sem sair da tela. Registra no dia de hoje.
+// Abre da Home (card de nutrição) sem sair da tela. Registra no dia de hoje por
+// padrão, ou no dia passado em `data` (convite de preencher ontem/anteontem, na
+// tela de evolução da nutrição).
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
@@ -31,11 +33,15 @@ function defaultMeal(): Meal {
 export function QuickFoodAdd({
   visible,
   token,
+  data,
   onClose,
   onAdded,
 }: {
   visible: boolean;
   token: string;
+  /** Em que dia gravar. Ausente = hoje, que é o caso comum e o comportamento
+   *  que o resto do app já espera. */
+  data?: string;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -61,7 +67,7 @@ export function QuickFoodAdd({
       setSaving(true);
       try {
         await logFood(token, {
-          date: todayStr(),
+          date: data ?? todayStr(),
           meal,
           name: food.name,
           kcal: food.kcal,
@@ -84,7 +90,7 @@ export function QuickFoodAdd({
         setSaving(false);
       }
     },
-    [token, meal, onAdded]
+    [token, meal, data, onAdded]
   );
 
   function addManual() {
