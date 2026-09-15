@@ -221,7 +221,7 @@ proRouter.get(
 
         // Só quem abriu os treinos entra com número; para os outros, a lista
         // mostra o vínculo e diz que não há acesso, em vez de mentir zero.
-        const podeTreinos = link.escopo?.treinos === true;
+        const podeTreinos = parteAberta([link], "treinos");
         const [ultimo, naSemana] = podeTreinos
           ? await Promise.all([
               Activity.findOne({ user: cliente._id }).sort({ startedAt: -1 }).select("startedAt"),
@@ -273,18 +273,48 @@ const janelaDoAluno = z.preprocess(
   z.coerce.number().int().min(0).max(3650).default(90)
 );
 
+/** O papel dono de cada parte do acompanhamento: treino é do coach, dieta é do nutri. */
+function donoDaParte(parte: "treinos" | "dieta"): PapelPro {
+  return parte === "treinos" ? "coach" : "nutri";
+}
+
+/**
+ * Uma parte (treinos/dieta) está aberta para esta dupla?
+ *
+ * Quando existe vínculo do papel DONO daquela parte, é ele quem decide,
+ * sozinho — mesmo que outro vínculo da mesma dupla (de outro papel) diga o
+ * contrário. Só quando não existe vínculo do papel dono é que qualquer
+ * vínculo decide, porque aí é a única leitura possível da vontade do aluno.
+ *
+ * Existe porque um `some`/`find` sobre TODOS os vínculos deixava o default
+ * errado vencer: o vínculo de nutri nasce com `treinos: true` (ele não é dono
+ * de treino, então o aluno nunca precisou decidir isso ali) e um `some`
+ * achava esse `true` e reabria o treino mesmo depois do aluno desligar,
+ * explicitamente, no cartão do treinador.
+ */
+function parteAberta(
+  links: { papel: PapelPro; escopo?: { treinos?: boolean; dieta?: boolean } }[],
+  parte: "treinos" | "dieta"
+): boolean {
+  const doDono = links.filter((l) => l.papel === donoDaParte(parte));
+  const decisores = doDono.length > 0 ? doDono : links;
+  return decisores.some((l) => l.escopo?.[parte] === true);
+}
+
 /**
  * O aluno é meu, e ele abriu esta parte da vida dele para mim?
  *
  * Sem `parte`, a pergunta é só "o aluno é meu": é o caso da ficha, que precisa
  * abrir para qualquer profissional do aluno e mostrar o que o escopo permitir.
- * Com `parte`, exige aquele escopo naquele vínculo.
+ * Com `parte`, exige que a DUPLA (não só o vínculo escolhido) tenha aquela
+ * parte aberta — ver `parteAberta`.
  *
  * A escolha entre vínculos continua sendo a de antes, e pelo mesmo motivo: quem
  * acompanha a mesma pessoa como treinador E como nutricionista tem dois
  * vínculos ativos, com escopos diferentes. Pegar "um deles" negava acesso a
  * quem tinha, de forma intermitente — o pior jeito de um bug de permissão
- * aparecer.
+ * aparecer. Com `parte`, preferimos o vínculo do papel dono: é o dele que
+ * `parteAberta` de fato avalia.
  */
 async function alunoDoProfissional(
   req: { user?: { _id: mongoose.Types.ObjectId }; params: Record<string, string> },
@@ -302,16 +332,14 @@ async function alunoDoProfissional(
   const links = (await vinculosAtivos(clientId, req.user!._id)).sort(
     (a, b) => a.aceitoEm.getTime() - b.aceitoEm.getTime()
   );
-  const abre = (l: (typeof links)[number]) => (parte ? l.escopo?.[parte] === true : true);
 
   const link =
-    links.find((l) => l.papel === preferido && abre(l)) ??
-    links.find(abre) ??
+    links.find((l) => l.papel === (parte ? donoDaParte(parte) : preferido)) ??
     links.find((l) => l.papel === preferido) ??
     links[0];
 
   if (!link) throw new HttpError(404, "Este não é seu aluno.");
-  if (!abre(link)) {
+  if (parte && !parteAberta(links, parte)) {
     const oQue = parte === "dieta" ? "a dieta" : "os treinos";
     throw new HttpError(403, `Este aluno não abriu ${oQue} para você.`);
   }
@@ -350,7 +378,9 @@ proRouter.get(
     // mesmo aluno tem dois vínculos, e o de coach pode abrir treinos mesmo
     // que o mais antigo dos dois seja o de nutri com treinos fechado. Checar
     // só `link.escopo` escondia o treino de quem tinha acesso de verdade.
-    const podeTreinos = links.some((l) => l.escopo?.treinos === true);
+    // `parteAberta` também cobre o caminho oposto: o de coach FECHADO vence o
+    // de nutri aberto por default, porque treino é do coach decidir.
+    const podeTreinos = parteAberta(links, "treinos");
 
     const [exercicios, calendario, datas] = podeTreinos
       ? await Promise.all([

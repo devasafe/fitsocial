@@ -139,4 +139,79 @@ describe("A ficha abre pelo vínculo, e cada bloco pelo escopo", () => {
     expect(r.body.data.vinculos).toHaveLength(2);
     expect(r.body.data.vinculos.map((v: { papel: string }) => v.papel).sort()).toEqual(["coach", "nutri"]);
   });
+
+  it("fechar treinos no vínculo de treinador fecha de verdade, mesmo com vínculo de nutri aberto por default", async () => {
+    // A mesma pessoa acompanha o aluno como coach E como nutri. O aluno
+    // desliga treinos no cartão do treinador; o vínculo de nutri nem foi
+    // tocado e carrega o default (`treinos: true`). Quem decide `treinos` é
+    // o vínculo de coach — e ele disse não.
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const outroAluno = await registrar();
+    await vincular(ambos.token, outroAluno.token, { treinos: false }, "coach");
+    await vincular(ambos.token, outroAluno.token, { dieta: true }, "nutri");
+
+    const ficha = await request(app)
+      .get(`/pro/alunos/${outroAluno.id}`)
+      .set(auth(ambos.token))
+      .expect(200);
+    expect(ficha.body.data.constancia).toBeUndefined();
+    expect(ficha.body.data.exercicios).toBeUndefined();
+    expect(ficha.body.data.calendario).toBeUndefined();
+
+    await request(app).get(`/pro/alunos/${outroAluno.id}/grupos`).set(auth(ambos.token)).expect(403);
+  });
+
+  it("treinador com treinos abertos continua vendo, mesmo com o vínculo de nutri fechado", async () => {
+    // O inverso do teste acima: garante que a Tarefa 1 (coach vendo o próprio
+    // aluno mesmo quando ele também é nutri de outro vínculo) não regride.
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const outroAluno = await registrar();
+    await vincular(ambos.token, outroAluno.token, { treinos: true }, "coach");
+    await vincular(ambos.token, outroAluno.token, { dieta: true, treinos: false }, "nutri");
+
+    const ficha = await request(app)
+      .get(`/pro/alunos/${outroAluno.id}`)
+      .set(auth(ambos.token))
+      .expect(200);
+    expect(ficha.body.data.constancia).toBeDefined();
+    expect(ficha.body.data.exercicios).toBeDefined();
+    expect(ficha.body.data.calendario).toBeDefined();
+
+    await request(app).get(`/pro/alunos/${outroAluno.id}/grupos`).set(auth(ambos.token)).expect(200);
+  });
+
+  it("só nutricionista, com treinos abertos, continua vendo treino", async () => {
+    // Sem vínculo de coach nesta dupla, o único vínculo que existe decide —
+    // é a única leitura possível da vontade do aluno.
+    const soNutri = await registrarProfissional("nutri");
+    const outroAluno = await registrar();
+    await vincular(soNutri.token, outroAluno.token, { treinos: true }, "nutri");
+
+    const ficha = await request(app)
+      .get(`/pro/alunos/${outroAluno.id}`)
+      .set(auth(soNutri.token))
+      .expect(200);
+    expect(ficha.body.data.exercicios).toBeDefined();
+  });
+
+  it("espelho para dieta: vínculo de nutri fechado vence o de coach aberto", async () => {
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const outroAluno = await registrar();
+    await vincular(ambos.token, outroAluno.token, { dieta: true }, "coach");
+    await vincular(ambos.token, outroAluno.token, { dieta: false }, "nutri");
+
+    await request(app).get(`/pro/alunos/${outroAluno.id}/dieta`).set(auth(ambos.token)).expect(403);
+  });
 });
