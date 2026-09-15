@@ -129,8 +129,9 @@ function serializePlan(plan: InstanceType<typeof Plan>) {
  * olhando no painel o que ele mesmo escreveu. Os dois achariam que estão
  * falando do mesmo treino.
  *
- * A dieta não entra aqui: quem responde por ela é o nutricionista, e o vínculo
- * dele é outro. `POST /plans/diet` continua aberto para quem tem só treinador.
+ * A dieta não entra aqui: quem responde por ela é o nutricionista, e a trava
+ * dela é `recusarSeTemNutricionista`, logo abaixo. `POST /plans/diet` continua
+ * aberto para quem tem só treinador.
  *
  * Vale para TODA porta que mexe no treino, e não só para a IA: gerar, reajustar,
  * importar de um texto, editar à mão e apagar chegam todas ao mesmo lugar — o
@@ -157,6 +158,30 @@ async function recusarSeTemTreinador(userId: mongoose.Types.ObjectId): Promise<v
 async function recusarSeForDoTreinador(userId: mongoose.Types.ObjectId): Promise<void> {
   const atual = await Plan.findOne({ user: userId }).sort({ version: -1 }).select("createdBy");
   if (atual?.createdBy) await recusarSeTemTreinador(userId);
+}
+
+/**
+ * Quem tem nutricionista não recebe dieta da IA.
+ *
+ * Mesma regra e mesmo motivo do treino, e agora ela cabe: até esta frente o
+ * vínculo de nutricionista não tinha função nenhuma, e por isso a dieta ficava
+ * de fora. Uma dieta que troca sozinha é a pessoa descobrir de manhã que está
+ * comendo outra coisa — e o nutricionista respondendo por números que ele nunca
+ * escreveu.
+ */
+async function recusarSeTemNutricionista(userId: mongoose.Types.ObjectId): Promise<void> {
+  if (await temProfissional(userId, "nutri")) {
+    throw new HttpError(
+      409,
+      "Quem escreve a sua dieta é o seu nutricionista. Fale com ele pelo acompanhamento para mudar o plano."
+    );
+  }
+}
+
+/** A dieta corrente é de um profissional? Então ela não se apaga sozinha. */
+async function recusarSeForDoNutricionista(userId: mongoose.Types.ObjectId): Promise<void> {
+  const atual = await Plan.findOne({ user: userId }).sort({ version: -1 }).select("createdBy");
+  if (atual?.createdBy) await recusarSeTemNutricionista(userId);
 }
 
 // Gera um novo plano a partir da ficha do usuário e o salva como nova versão.
@@ -315,6 +340,8 @@ plansRouter.put(
     // Só quando a edição TOCA no treino: mexer na dieta continua livre para
     // quem tem treinador e não tem nutricionista.
     if (body.workout !== undefined) await recusarSeTemTreinador(req.user!._id);
+    // E vice-versa: a trava é sobre comida, não sobre o plano inteiro.
+    if (body.diet !== undefined) await recusarSeTemNutricionista(req.user!._id);
 
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
@@ -400,6 +427,9 @@ plansRouter.get(
         // Quem tem treinador não acrescenta sessão à prescrição. O app esconde o
         // botão com isto, em vez de deixar a pessoa digitar e tomar 409 no fim.
         podeEditarPlano: !(await temProfissional(req.user!._id, "coach")),
+        // Mesma ideia, para a dieta: aditivo — o APK instalado ignora o campo,
+        // e o app novo desabilita o botão em vez de deixar a pessoa levar 409.
+        podeEditarDieta: !(await temProfissional(req.user!._id, "nutri")),
         programacao: req.user!.get("settings.programacao") ?? null,
       },
     });
@@ -622,6 +652,7 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
+    await recusarSeTemNutricionista(user._id);
 
     const profileDoc = await Profile.findOne({ user: user._id });
     if (!profileDoc) {
@@ -677,6 +708,7 @@ plansRouter.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     await recusarSeForDoTreinador(req.user!._id);
+    await recusarSeForDoNutricionista(req.user!._id);
 
     const r = await Plan.deleteMany({ user: req.user!._id });
     // Sem isto a Home ficaria sem plano E sem pergunta: uma tela vazia.
@@ -696,6 +728,7 @@ plansRouter.delete(
       throw new HttpError(400, "Parte desconhecida. Use workout ou diet.");
     }
     if (parte === "workout") await recusarSeForDoTreinador(req.user!._id);
+    if (parte === "diet") await recusarSeForDoNutricionista(req.user!._id);
 
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
