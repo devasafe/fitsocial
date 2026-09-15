@@ -142,7 +142,7 @@ async function recusarSeTemTreinador(userId: mongoose.Types.ObjectId): Promise<v
   if (await temProfissional(userId, "coach")) {
     throw new HttpError(
       409,
-      "Quem escreve o seu treino é o seu treinador. Fale com ele pelo acompanhamento para mudar o plano."
+      "Quem escreve o seu treino é o seu treinador. Fale com quem escreve o seu treino pelo acompanhamento para mudar o plano."
     );
   }
 }
@@ -173,7 +173,7 @@ async function recusarSeTemNutricionista(userId: mongoose.Types.ObjectId): Promi
   if (await temProfissional(userId, "nutri")) {
     throw new HttpError(
       409,
-      "Quem escreve a sua dieta é o seu nutricionista. Fale com ele pelo acompanhamento para mudar o plano."
+      "Quem escreve a sua dieta é o seu nutricionista. Fale com quem cuida da sua dieta pelo acompanhamento para mudar o plano."
     );
   }
 }

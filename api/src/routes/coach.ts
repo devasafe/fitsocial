@@ -115,7 +115,7 @@ coachRouter.post(
       turn.action === "adjust_diet" && (await temProfissional(user._id, "nutri"));
 
     if (dietaTravadaPeloNutri) {
-      reply = `${reply}\n\nQuem escreve a sua dieta é o seu nutricionista — fale com ele pelo acompanhamento para ajustá-la.`;
+      reply = `${reply}\n\nQuem escreve a sua dieta é o seu nutricionista — fale com quem cuida dela pelo acompanhamento para ajustá-la.`;
     } else if (turn.action !== "none") {
       // Reajustar exige ter a metade correspondente. Depois que treino e dieta
       // passaram a existir um sem o outro, "reajustar o plano" de quem só tem

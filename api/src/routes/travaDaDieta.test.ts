@@ -139,6 +139,7 @@ async function vincular(nutriToken: string, alunoToken: string, papel: "coach" |
     .set(auth(alunoToken))
     .send({});
   expect(r.status).toBe(201);
+  return r.body.data.id as string;
 }
 
 const DIETA_VALIDA = {
@@ -213,15 +214,42 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
     await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(201);
   });
 
-  it("apagar a dieta é permitido quando ela NÃO tem autor", async () => {
+  it("encerrar o vínculo com o nutricionista destrava a geração de dieta", async () => {
+    // `encerrarVinculo` não apaga o documento — vira histórico com outro
+    // status. `temProfissional` filtra `status: "ativo"`, e é essa linha, e só
+    // ela, que separa "encerrei com minha nutricionista" de "não consigo mais
+    // gerar dieta nenhuma". A mesma função é compartilhada com o treinador,
+    // então este teste protege os dois papéis de uma vez.
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    const linkId = await vincular(nutri.token, aluno.token);
+
+    await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(409);
+
+    const e = await request(app).delete(`/pro/acompanhamentos/${linkId}`).set(auth(aluno.token));
+    expect(e.status).toBe(200);
+
+    await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(201);
+  });
+
+  it("apagar a dieta é permitido quando ela NÃO tem autor, e só a dieta some", async () => {
     // Dieta feita pela IA pode ser zerada, senão quem tinha dieta antiga e
     // contratou nutricionista ficaria preso a ela.
+    //
+    // Com SÓ dieta no plano, `DELETE /plans/current/diet` cairia no ramo que
+    // apaga o documento inteiro (nada sobra) — e aí um 200 não distingue
+    // "zerou a metade certa" de "apagou tudo". Por isso o plano aqui tem as
+    // duas metades, e a asserção que importa é sobre o TREINO ter sobrevivido.
     const nutri = await registrarNutri();
     const aluno = await registrar();
     await vincular(nutri.token, aluno.token);
-    await criarPlano(aluno.id, { diet: DIETA_VALIDA });
+    await criarPlano(aluno.id, { workout: TREINO_VALIDO, diet: DIETA_VALIDA });
 
     await request(app).delete("/plans/current/diet").set(auth(aluno.token)).expect(200);
+
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(atual!.diet).toBeNull();
+    expect((atual!.workout as typeof TREINO_VALIDO).split).toBe(TREINO_VALIDO.split);
   });
 
   it("apagar a dieta é recusado quando ela foi prescrita", async () => {
