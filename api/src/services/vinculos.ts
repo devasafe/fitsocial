@@ -391,9 +391,9 @@ const DONO_DA_PARTE: Partial<Record<keyof EscopoPedido, PapelPro>> = {
   dieta: "nutri",
 };
 
-/** O papel dono de uma parte, se ela tiver um — ver `DONO_DA_PARTE`. */
-export function donoDaParte(parte: keyof EscopoPedido): PapelPro | undefined {
-  return DONO_DA_PARTE[parte];
+/** O papel dono de uma parte, ou `null` quando ela não tem um — ver `DONO_DA_PARTE`. */
+export function donoDaParte(parte: keyof EscopoPedido): PapelPro | null {
+  return DONO_DA_PARTE[parte] ?? null;
 }
 
 /**
@@ -415,7 +415,7 @@ export function parteAberta(
   links: { papel: PapelPro; escopo?: EscopoPedido }[],
   parte: keyof EscopoPedido
 ): boolean {
-  const dono = DONO_DA_PARTE[parte];
+  const dono = donoDaParte(parte);
   const doDono = dono ? links.filter((l) => l.papel === dono) : [];
   const decisores = doDono.length > 0 ? doDono : links;
   return decisores.some((l) => l.escopo?.[parte] === true);
