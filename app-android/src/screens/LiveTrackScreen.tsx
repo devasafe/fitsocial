@@ -8,11 +8,13 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button } from "../components/ui";
 import { RouteMap } from "../components/RouteMap";
 import { createActivity } from "../api/activities";
-import { usePRCelebration } from "../components/PRCelebration";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
 import { totalDistanceM, paceLabel, clock, type GeoPoint } from "../lib/geo";
 import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
+import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "LiveTrack">;
 type Status = "idle" | "recording" | "paused";
@@ -20,7 +22,7 @@ type Status = "idle" | "recording" | "paused";
 export function LiveTrackScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
-  const celebratePR = usePRCelebration();
+  const concluirTreino = useConclusaoDeTreino();
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const [status, setStatus] = useState<Status>("idle");
@@ -118,8 +120,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
         kind: "endurance",
         payload: { distanceM: 0, points: points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ele: p.ele })) },
       });
-      celebratePR(res.meta.newPRs ?? []);
-      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
+      concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -186,7 +187,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
     <>
       <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.sm }}>
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
+          <SportIcon sportId={sportId} size={22} />
           <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>
         </View>
 
@@ -222,9 +223,12 @@ export function LiveTrackScreen({ route, navigation }: Props) {
             activeOpacity={0.85}
             style={[styles.pill, { top: insets.top + 8, left: spacing.gutter }]}
           >
-            <Txt variant="label" color={colors.text}>
-              ▾ Minimizar
-            </Txt>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Icon name="chevronBaixo" size={14} color={colors.text} />
+              <Txt variant="label" color={colors.text}>
+                Minimizar
+              </Txt>
+            </View>
           </TouchableOpacity>
 
           <View style={{ position: "absolute", left: spacing.gutter, right: spacing.gutter, bottom: insets.bottom + spacing.md, gap: spacing.sm, zIndex: 1100, elevation: 12 }}>

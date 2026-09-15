@@ -111,7 +111,7 @@ export function LeaderboardScreen({ embedded }: { embedded?: boolean } = {}) {
           <ErrorState message="Não foi possível carregar o ranking." onRetry={load} />
         ) : (
           <EmptyState
-            icon="🏆"
+            icon="trofeu"
             title="Ranking vazio por enquanto"
             description="Siga pessoas para comparar sua evolução. Aqui ninguém fica em último."
           />

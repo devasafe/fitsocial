@@ -5,6 +5,7 @@ import { colors, radius, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import { linhasDoCard } from "../lib/crossfitResumo";
 import { tituloPorMusculos, musculosDe } from "../lib/musculos";
+import { duracao, numero, ritmo } from "../lib/formatoDeTreino";
 import type { PayloadDeCrossfit } from "../api/crossfit";
 import type { ActivityMetrics } from "../api/activities";
 
@@ -43,22 +44,6 @@ export interface TreinoNoCard {
 /** O cartão resume; o detalhe abre. Seis é onde a lista deixa de ser um
  *  resumo — o mesmo teto que o cartão do feed usa. */
 const MAXIMO_DE_MOVIMENTOS = 6;
-
-function duracao(seg: number): string {
-  const h = Math.floor(seg / 3600);
-  const m = Math.round((seg % 3600) / 60);
-  return h > 0 ? `${h}h ${m}min` : `${m}min`;
-}
-
-function numero(n: number, casas = 0): string {
-  return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
-}
-
-function ritmo(segPorKm: number): string {
-  const m = Math.floor(segPorKm / 60);
-  const s = Math.round(segPorKm % 60);
-  return `${m}:${String(s).padStart(2, "0")}/km`;
-}
 
 /** Os três números que definem aquele treino, na ordem em que importam. */
 function destaques(t: TreinoNoCard): { valor: string; rotulo: string }[] {

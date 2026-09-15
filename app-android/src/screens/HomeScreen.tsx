@@ -30,7 +30,9 @@ import {
   generateDiet,
   zerarPlano,
   zerarParteDoPlano,
+  getTreinoDeHoje,
   type Plan,
+  type TreinoDeHoje,
 } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
@@ -39,6 +41,7 @@ import { coachLine } from "../lib/coachContext";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 function todayStr(): string {
   const d = new Date();
@@ -51,6 +54,10 @@ export function HomeScreen() {
   const { user, token, refreshUser } = useAuth();
   const { contadores, refrescar: refrescarContadores } = useContadores();
   const [plan, setPlan] = useState<Plan | null>(null);
+  // Qual sessão é a de hoje, segundo o servidor (que calcula o dia em São
+  // Paulo). Nulo enquanto não chega, ou quando a rota não existe ainda — o
+  // deploy é manual, e o app pode rodar contra um servidor mais antigo.
+  const [hoje, setHoje] = useState<TreinoDeHoje | null>(null);
   const [stats, setStats] = useState<CheckInStats | null>(null);
   const [day, setDay] = useState<DaySummary | null>(null);
   const [water, setWater] = useState<WaterDay | null>(null);
@@ -148,9 +155,27 @@ export function HomeScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [p, s] = await Promise.all([getCurrentPlan(token!), getCheckInStats(token!)]);
+      // O treino de hoje vem NO MESMO lote, e não depois.
+      //
+      // Buscado à parte, a Home saía do skeleton com `hoje === null` garantido,
+      // caía no fallback e mostrava `sessions[0]` sob o rótulo "Treino de hoje"
+      // por uma volta de rede inteira — a mentira que esta frente veio corrigir,
+      // e clicável: tocar "Começar treino" nessa janela abria o check-in da
+      // sessão errada e gravava o `sessionDay` errado.
+      //
+      // `undefined` no catch é diferente de `null`: significa "não consegui
+      // saber", e aí o que já estava na tela continua valendo. Com `null`, um
+      // blip de rede num refoco REBAIXAVA uma Home que já estava certa.
+      const [p, s, h] = await Promise.all([
+        getCurrentPlan(token!),
+        getCheckInStats(token!),
+        getTreinoDeHoje(token!)
+          .then((r) => r.data)
+          .catch(() => undefined),
+      ]);
       setPlan(p);
       setStats(s.stats);
+      if (h !== undefined) setHoje(h);
     } catch (err) {
       notify("Erro", (err as Error).message);
     } finally {
@@ -233,7 +258,20 @@ export function HomeScreen() {
   // ao fazer `plan.workout.sessions.map(...)` sem guarda.
   const temTreino = (plan?.workout?.sessions?.length ?? 0) > 0;
   const temDieta = (plan?.diet?.meals?.length ?? 0) > 0;
-  const todaySession = plan?.workout?.sessions?.[0];
+  /**
+   * O treino de hoje.
+   *
+   * Era `sessions[0]`: a Home mostrava sempre a primeira sessão do plano,
+   * fosse terça ou domingo, e "Treino de hoje" era um rótulo que mentia. Agora
+   * quem responde é o servidor, pelo dia da semana em São Paulo.
+   *
+   * A queda para `sessions[0]` continua de propósito: quem ainda não escolheu
+   * os dias (`sem_agenda`) e quem roda contra um servidor sem a rota nova veem
+   * exatamente o que viam antes, em vez de uma Home vazia.
+   */
+  const semAgenda = hoje === null || hoje.estado === "sem_agenda";
+  const ehDescanso = hoje?.estado === "descanso";
+  const todaySession = semAgenda ? plan?.workout?.sessions?.[0] : (hoje?.sessao ?? undefined);
 
   async function gerarDieta() {
     setGerandoDieta(true);
@@ -332,9 +370,15 @@ export function HomeScreen() {
         <View style={{ flex: 1 }}>
           <Txt variant="titleScreen">Olá, {user?.name?.split(" ")[0]}</Txt>
           {user?.isFounder && user?.founderMessage ? (
-            <Txt variant="label" color={colors.lime} style={{ marginTop: 2 }}>
-              ✦ {user.founderMessage}
-            </Txt>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
+              <Icon name="faisca" size={13} color={colors.lime} />
+              {/* `flex: 1` porque no React Native o `flexShrink` padrão é 0:
+                  sem isto a mensagem estoura para fora da coluna em vez de
+                  quebrar, e o fundador lê meia frase. */}
+              <Txt variant="label" color={colors.lime} style={{ flex: 1 }}>
+                {user.founderMessage}
+              </Txt>
+            </View>
           ) : user?.tier === "premium" ? (
             <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>
               Plano Premium
@@ -349,10 +393,10 @@ export function HomeScreen() {
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.lg }}>
           <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.7} hitSlop={8}>
-            <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+            <Icon name="faisca" size={22} color={colors.lime} accessibilityLabel="Falar com a assistente" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate("Notificacoes")} activeOpacity={0.7} hitSlop={8}>
-            <Txt variant="titleCard">🔔</Txt>
+            <Icon name="sino" size={22} color={colors.text} accessibilityLabel="Notificações" />
             <BadgeSobreposto valor={contadores.notificacoes} />
           </TouchableOpacity>
         </View>
@@ -363,10 +407,14 @@ export function HomeScreen() {
         /* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */
         <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
           <Txt variant="label" color={colors.text2}>
-            Treino de hoje
+            {ehDescanso ? "Hoje" : "Treino de hoje"}
           </Txt>
           <Txt variant="titleSection" style={{ marginTop: 2 }}>
-            {todaySession ? todaySession.focus || todaySession.day : plan.workout.split}
+            {ehDescanso
+              ? "Dia de descanso"
+              : todaySession
+                ? todaySession.focus || todaySession.day
+                : plan.workout.split}
           </Txt>
           {/* Quem assinou. Só aparece quando há um nome para dizer: sem
               treinador, "seu coach" já é como o resto da tela chama a IA, e
@@ -385,13 +433,30 @@ export function HomeScreen() {
               {`montado antes de ${treinador.profissional.nome.split(" ")[0]} assumir`}
             </Txt>
           ) : null}
-          <View style={{ height: spacing.md }} />
-          <Button title="Começar treino" onPress={(e) => void startToday(e)} size="lg" glow />
-          <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
-            <Txt variant="label" color={colors.text2}>
-              Escolher outro treino
+          {/* Descanso planejado não é falta: o cartão diz isso e oferece o
+              caminho, sem cobrar nada de ninguém (brief §7). */}
+          {ehDescanso ? (
+            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
+              Nada marcado para hoje. Se quiser treinar assim mesmo, é só escolher.
             </Txt>
-          </TouchableOpacity>
+          ) : null}
+          <View style={{ height: spacing.md }} />
+          {ehDescanso ? (
+            <Button
+              title="Escolher um treino"
+              variant="secondary"
+              onPress={() => navigation.navigate("TodayWorkout")}
+            />
+          ) : (
+            <>
+              <Button title="Começar treino" onPress={(e) => void startToday(e)} size="lg" glow />
+              <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
+                <Txt variant="label" color={colors.text2}>
+                  Escolher outro treino
+                </Txt>
+              </TouchableOpacity>
+            </>
+          )}
         </Card>
       ) : seguePropria ? (
         /* Quem segue a programação do box não tem "treino de hoje" para abrir —
@@ -520,7 +585,7 @@ export function HomeScreen() {
             style={{ alignItems: "center", paddingVertical: spacing.sm }}
           >
             <Txt variant="label" color={colors.text2}>
-              Tirar dúvida com a assistente ✦
+              Tirar dúvida com a assistente
             </Txt>
           </TouchableOpacity>
         </>
@@ -528,7 +593,7 @@ export function HomeScreen() {
         <TouchableOpacity onPress={() => setCoachOpen(true)} activeOpacity={0.85}>
           <Card>
             <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginBottom: spacing.sm }}>
-              <Txt variant="titleCard" color={colors.lime}>✦</Txt>
+              <Icon name="faisca" size={20} color={colors.lime} />
               <Txt variant="titleCard">Seu coach</Txt>
             </View>
             {stats && (
@@ -540,7 +605,7 @@ export function HomeScreen() {
               {plan?.summary ?? "Pergunte sobre treino, técnica ou alimentação quando quiser."}
             </Txt>
             <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.sm }}>
-              Conversar com o coach ›
+              Conversar com o coach
             </Txt>
           </Card>
         </TouchableOpacity>
@@ -736,9 +801,7 @@ function NavRow({ title, sub, onPress }: { title: string; sub: string; onPress: 
             {sub}
           </Txt>
         </View>
-        <Txt variant="metricMd" color={colors.text3}>
-          ›
-        </Txt>
+          <Icon name="chevronDireita" size={20} color={colors.text3} />
       </Card>
     </TouchableOpacity>
   );

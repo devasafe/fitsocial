@@ -7,8 +7,26 @@ import { HttpError } from "../utils/httpError.js";
 import { temProfissional } from "../services/vinculos.js";
 import { calcularPlan } from "../services/entitlement.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
-import { Plan, workoutSchema, dietSchema } from "../models/Plan.js";
+import {
+  Plan,
+  workoutSchema,
+  dietSchema,
+  DISCLAIMER_PROPRIO,
+  type WorkoutData,
+  type SessionData,
+} from "../models/Plan.js";
+import {
+  preservarAgenda,
+  montarPlanoDoDia,
+  aplicarAgenda,
+  sessoesSemDia,
+  normalizarWeekdays,
+  atribuirDias,
+} from "../services/agendaDeTreino.js";
+import { sessaoDeAtividade, nomeUnicoDeSessao } from "../services/sessaoDoPlano.js";
+import { diaDaSemana, chaveDoDia, FUSO } from "../utils/dia.js";
 import { Activity } from "../models/Activity.js";
+import { strengthPayloadSchema } from "../models/strength.js";
 import { generateDiet, generatePlan, adjustPlan, importPlanFromText } from "../services/ai/planGenerator.js";
 import { buildAdherenceSummary } from "../services/adherence.js";
 import { backfillWorkoutKinds } from "../services/exerciseKind.js";
@@ -176,6 +194,12 @@ plansRouter.post(
       user: user._id,
       version: (last?.version ?? 0) + 1,
       ...data,
+      // "Plano novo, nada a preservar" só vale para a PRIMEIRA geração. O gate
+      // acima deixa passar exatamente o contrário: premium regenerando por
+      // cima de um plano que já existe — e aí os dias que a pessoa escolheu
+      // sumiriam sem ninguém ligar o sumiço ao botão de gerar. Quando não há
+      // agenda anterior isto é no-op.
+      workout: preservarAgenda(last?.workout as WorkoutData | null, data.workout),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -220,6 +244,9 @@ plansRouter.post(
       user: user._id,
       version: current.version + 1,
       ...data,
+      // A IA reescreve o treino inteiro e não sabe de agenda. Este é o
+      // escritor mais traiçoeiro dos três: não parece um escritor de workout.
+      workout: preservarAgenda(current.workout as WorkoutData | null, data.workout),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -261,6 +288,10 @@ plansRouter.post(
       user: user._id,
       version: (last?.version ?? 0) + 1,
       ...data,
+      // Pelo mesmo motivo do `/generate`: quem é Pro reimporta por cima de um
+      // plano existente. Como o casamento é por nome exato de sessão, um texto
+      // de verdade diferente não herda nada — só o reimport do mesmo plano.
+      workout: preservarAgenda(last?.workout as WorkoutData | null, data.workout),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -289,7 +320,9 @@ plansRouter.put(
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
 
     if (body.workout !== undefined) {
-      plan.workout = body.workout;
+      // O cliente pode não conhecer `weekdays` — o APK instalado não conhece.
+      // Sem isto, editar a ficha por ele apagaria a agenda em silêncio.
+      plan.workout = preservarAgenda(plan.workout as WorkoutData | null, body.workout);
       plan.markModified("workout");
     }
     if (body.diet !== undefined) {
@@ -300,6 +333,278 @@ plansRouter.put(
     await plan.save();
 
     res.json({ plan: serializePlan(plan) });
+  })
+);
+
+// ------------------------------------------------------------ plano por dia
+
+/**
+ * A sessão como a tela de executar precisa dela: com os exercícios inteiros e
+ * com `kind` preenchido, igual ao que `serializePlan` entrega.
+ *
+ * O clone existe pelo mesmo motivo de lá: `backfillWorkoutKinds` muta in place,
+ * e escrever `kind` de volta num `Mixed` hidratado gravaria no documento.
+ */
+function sessaoCompleta(s: SessionData) {
+  const clone = { ...s, exercises: s.exercises.map((e) => ({ ...e })) };
+  backfillWorkoutKinds({ sessions: [clone] });
+  return { ...clone, weekdays: normalizarWeekdays(s.weekdays) };
+}
+
+/**
+ * O treino de hoje.
+ *
+ * Rota nova em vez de um bloco a mais no `GET /plans/current`: aquela é a rota
+ * mais chamada pelo APK instalado e está no envelope legado `{ plan }`. Mexer
+ * nela seria trocar o envelope (quebra) ou misturar dois padrões no mesmo
+ * corpo. Aqui vale o `{ data, meta }` de endpoint novo.
+ *
+ * `data.estado` é o campo que o app lê: um `switch` num discriminante só, em
+ * vez de inferir o estado do cruzamento de três nulos.
+ */
+plansRouter.get(
+  "/hoje",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const hoje = diaDaSemana();
+
+    // `?dia=` serve para ESPIAR a semana ("o que é quinta?"), nunca para dizer
+    // que dia é hoje — quem diz isso é o relógio do servidor.
+    //
+    // Validado como TEXTO antes de virar número: `z.coerce.number()` é
+    // `Number(x)`, e `Number("") === 0`. Com a coerção crua, `?dia=` devolvia o
+    // treino de domingo em silêncio, numa terça, sem erro nenhum.
+    let alvo = hoje;
+    if (req.query.dia !== undefined) {
+      const lido = z
+        .string()
+        .regex(/^[0-6]$/)
+        .safeParse(req.query.dia);
+      if (!lido.success) {
+        throw new HttpError(400, "Dia da semana inválido. Use 0 (domingo) a 6 (sábado).");
+      }
+      alvo = Number(lido.data);
+    }
+
+    const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
+    const workout = (plan?.workout ?? null) as WorkoutData | null;
+    const dia = montarPlanoDoDia(workout, alvo, sessaoCompleta);
+
+    res.json({
+      data: { ...dia, diaDaSemana: alvo, planVersion: plan?.version ?? null },
+      meta: {
+        fuso: FUSO,
+        hoje: chaveDoDia(),
+        diaDaSemana: hoje,
+        naoAgendadas: sessoesSemDia(workout),
+        // Quem tem treinador não acrescenta sessão à prescrição. O app esconde o
+        // botão com isto, em vez de deixar a pessoa digitar e tomar 409 no fim.
+        podeEditarPlano: !(await temProfissional(req.user!._id, "coach")),
+        programacao: req.user!.get("settings.programacao") ?? null,
+      },
+    });
+  })
+);
+
+/** Substituição TOTAL da agenda: a tela edita a grade inteira de uma vez. */
+const agendaSchema = z.object({
+  /** A versão que a tela leu. Lock otimista barato contra editar plano velho. */
+  versao: z.number().int().min(1).optional(),
+  agenda: z
+    .array(
+      z.object({
+        indice: z.number().int().min(0),
+        /**
+         * O nome da sessão como a tela o leu.
+         *
+         * `versao` sozinha não basta: `PUT /plans/current` edita o treino IN
+         * PLACE e não incrementa a versão. Quem abrisse "mudar meus dias",
+         * apagasse uma sessão no editor e voltasse para salvar a grade não
+         * tomaria 409 nenhum — os índices já teriam deslizado, e os dias
+         * cairiam nas sessões erradas em silêncio.
+         */
+        day: z.string().max(200).optional(),
+        weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+      })
+    )
+    // Teto acima do que `workoutSchema` permite na prática, para a grade
+    // inteira caber sempre: recusar a tela por tamanho seria trancar a pessoa
+    // fora da própria agenda.
+    .max(40)
+    // Índice repetido não é a grade inteira — é a mesma sessão duas vezes, e
+    // uma das duas seria descartada em silêncio pelo Map logo abaixo.
+    .refine((itens) => new Set(itens.map((i) => i.indice)).size === itens.length, {
+      message: "Cada treino aparece uma vez só na grade.",
+    }),
+});
+
+/**
+ * Em que dias você treina — a tela de encaixe.
+ *
+ * A regra vive em `aplicarAgenda`; aqui ficam só a validação, a busca e a
+ * escrita. Esta rota NÃO chama `recusarSeTemTreinador`, e é de propósito: a
+ * guarda existe por AUTORIA — a IA reescrevendo a prescrição sem o coach saber.
+ * Em que dias eu faço as sessões que o coach escreveu não é autoria, é a minha
+ * agenda; bloquear deixaria todo aluno com treinador preso em `sem_agenda` para
+ * sempre, justamente quem paga. A contrapartida é que a prescrição não pode
+ * atropelar a agenda — e é o que `preservarAgenda` faz em `pro.ts`.
+ */
+plansRouter.put(
+  "/current/agenda",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = agendaSchema.parse(req.body);
+
+    const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
+    const workout = (plan?.workout ?? null) as WorkoutData | null;
+    if (!plan || !workout?.sessions?.length) {
+      throw new HttpError(404, "Você ainda não tem um treino para agendar");
+    }
+    if (body.versao !== undefined && body.versao !== plan.version) {
+      throw new HttpError(409, "Seu plano mudou. Abra de novo para escolher os dias.");
+    }
+
+    const { sessions, diasOcupados } = aplicarAgenda(workout, body.agenda);
+    plan.workout = {
+      ...workout,
+      sessions,
+      // `daysPerWeek` NÃO é recalculado aqui. Ele é a intenção da ficha e o
+      // denominador da adesão (`services/adherence.ts`); reescrevê-lo como
+      // efeito colateral de arrastar um treino mudaria a métrica em silêncio.
+    };
+    plan.markModified("workout");
+    await plan.save();
+
+    res.json({
+      data: { plan: serializePlan(plan) },
+      meta: { diasOcupados, naoAgendadas: sessoesSemDia(plan.workout as WorkoutData) },
+    });
+  })
+);
+
+const novaSessaoSchema = z.object({
+  /** O treino já salvo que vira sessão. Mandar o id, e não os exercícios de
+   *  novo: duas fontes para a mesma coisa acabam discordando. */
+  activityId: z.string(),
+  /** Mesmo lock otimista da rota irmã — sem ele, dois toques no botão viram
+   *  duas sessões (ou dois planos versão 1, quando ainda não havia plano). */
+  versao: z.number().int().min(1).optional(),
+  day: z.string().max(120).optional(),
+  focus: z.string().max(120).optional(),
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+});
+
+/**
+ * "Quer adicionar este treino ao plano?" — o sim.
+ *
+ * Aqui `recusarSeTemTreinador` VALE: acrescentar sessão é escrever na
+ * prescrição, e isso é autoria. (Diferente de escolher os dias, logo acima.)
+ */
+plansRouter.post(
+  "/current/sessoes",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const user = req.user!;
+    await recusarSeTemTreinador(user._id);
+
+    const body = novaSessaoSchema.parse(req.body);
+    if (!mongoose.isValidObjectId(body.activityId)) throw new HttpError(400, "ID inválido");
+
+    const atividade = await Activity.findById(body.activityId);
+    // 404 e não 403 para atividade de outra pessoa: quem não pode ver não
+    // precisa descobrir que ela existe.
+    if (!atividade || atividade.user.toString() !== user._id.toString()) {
+      throw new HttpError(404, "Treino não encontrado");
+    }
+    if (atividade.kind !== "strength") {
+      throw new HttpError(400, "Por enquanto só treino de musculação vira sessão do plano.");
+    }
+
+    // `safeParse`, e não `parse`: isto valida dado JÁ GRAVADO. Um ZodError
+    // aqui sairia como 400 "Dados inválidos", que lê como "sua requisição está
+    // errada" quando o errado é o registro no banco.
+    const lido = strengthPayloadSchema.safeParse(atividade.payload);
+    if (!lido.success) {
+      throw new HttpError(422, "Não consegui ler esse treino para virar uma sessão do plano.");
+    }
+    const payload = lido.data;
+    const weekdays = normalizarWeekdays(body.weekdays);
+
+    const plan = await Plan.findOne({ user: user._id }).sort({ version: -1 });
+    if (body.versao !== undefined && plan && body.versao !== plan.version) {
+      throw new HttpError(409, "Seu plano mudou. Abra de novo.");
+    }
+    const atual = (plan?.workout ?? null) as WorkoutData | null;
+    const existentes = atual?.sessions ?? [];
+
+    const day = nomeUnicoDeSessao(
+      existentes.map((s) => s.day),
+      body.day ?? atividade.title ?? ""
+    );
+    const nova = sessaoDeAtividade({ payload, day, focus: body.focus, weekdays });
+    if (nova.exercises.length === 0) {
+      throw new HttpError(400, "Esse treino não tem exercício para virar uma sessão.");
+    }
+
+    // A sessão nova entra por último e leva os dias que pediu; quem tinha
+    // aqueles dias fica sem eles. É o pedido explícito da pessoa.
+    const { sessions, tomadosDe } = atribuirDias([...existentes, nova], existentes.length, weekdays);
+    const workout: WorkoutData = {
+      split: atual?.split || "Meu treino",
+      daysPerWeek: Math.min(Math.max(atual?.daysPerWeek ?? 0, 1), 7),
+      sessions,
+    };
+
+    let doc = plan;
+    let criouPlano = false;
+    if (!doc) {
+      // Primeiro plano da pessoa, montado por ela. `summary` e `disclaimer` são
+      // obrigatórios no modelo: sem eles isto estouraria como 500.
+      doc = await Plan.create({
+        user: user._id,
+        version: 1,
+        summary: "Seu treino, montado por você.",
+        workout,
+        diet: null,
+        disclaimer: DISCLAIMER_PROPRIO,
+        createdBy: null,
+      });
+      criouPlano = true;
+    } else {
+      // Acrescentar sessão EDITA a versão corrente. Criar versão nova faria
+      // todo `planLink.planVersion` já gravado passar a apontar para "um plano
+      // antigo" sem que nada tenha sido prescrito.
+      doc.workout = workout;
+      doc.markModified("workout");
+      await doc.save();
+    }
+
+    // Sem isto a Home continuaria perguntando "como você treina?" com plano
+    // existindo. As rotas de apagar já fazem o inverso.
+    //
+    // Só quando ela ainda NÃO respondeu. `"propria"` não é ausência de
+    // resposta: é a resposta de quem segue a programação do box, dada na mão e
+    // visível como um botão em Configurações. Sobrescrever isso seria mudar
+    // uma preferência que ninguém pediu para mudar.
+    if (user.get("settings.programacao") == null) {
+      user.set("settings.programacao", "plano");
+      await user.save();
+    }
+
+    // O treino que semeou a sessão passa a contar na adesão da ficha. Sem isto
+    // ele ficaria de fora justamente do plano que ele criou.
+    if (!atividade.planLink) {
+      atividade.set("planLink", { planVersion: doc.version, sessionDay: day });
+      await atividade.save();
+    }
+
+    res.status(201).json({
+      data: { plan: serializePlan(doc) },
+      // `tomadosDe` diz quais sessões perderam um dia para esta. O app usa isso
+      // para avisar ("Dia A ficou sem a terça") em vez de a pessoa descobrir na
+      // terça seguinte.
+      meta: { criouPlano, sessionDay: day, diasTomadosDe: tomadosDe },
+    });
   })
 );
 

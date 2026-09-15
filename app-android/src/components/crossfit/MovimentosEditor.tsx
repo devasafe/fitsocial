@@ -33,6 +33,7 @@ import {
   type UnidadeDeVolume,
 } from "../../api/crossfit";
 import { colors, radius, spacing } from "../../theme";
+import { Icon } from "../Icon";
 
 /** "escada" não é unidade do modelo: é reps com valor em lista. */
 type Medida = UnidadeDeVolume | "escada";
@@ -143,21 +144,19 @@ export function MovimentosEditor({
               </View>
               {/* A ordem importa: num chipper ela É o treino. */}
               <TouchableOpacity onPress={() => trocar(i, -1)} hitSlop={8} disabled={i === 0}>
-                <Txt variant="titleCard" color={i === 0 ? colors.text3 : colors.text2}>
-                  ↑
-                </Txt>
+                <Icon name="setaCima" size={20} color={i === 0 ? colors.text3 : colors.text2} accessibilityLabel="Subir movimento" />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => trocar(i, 1)}
                 hitSlop={8}
                 disabled={i === movimentos.length - 1}
               >
-                <Txt
-                  variant="titleCard"
+                <Icon
+                  name="setaBaixo"
+                  size={20}
                   color={i === movimentos.length - 1 ? colors.text3 : colors.text2}
-                >
-                  ↓
-                </Txt>
+                  accessibilityLabel="Descer movimento"
+                />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => aoMudar(movimentos.filter((_, j) => j !== i))}

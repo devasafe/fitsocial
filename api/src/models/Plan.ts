@@ -16,6 +16,25 @@ const sessionSchema = z.object({
   day: z.string(), // "Dia A — Peito e Tríceps", "Segunda" etc.
   focus: z.string(),
   exercises: z.array(exerciseSchema).min(1),
+  /**
+   * Em que dias da semana esta sessão acontece. 0=domingo … 6=sábado.
+   *
+   * Ausente ou vazio significa "sem dia marcado", que é o estado verdadeiro de
+   * todo plano que já existe: ninguém nunca escolheu. É por isso que o campo é
+   * opcional e não tem `.default([])` — `planDataSchema` também valida a saída
+   * da IA, e um default materializaria um array vazio em todo plano gerado.
+   *
+   * ARRAY, e não um dia só, porque um ABC em seis dias treina A duas vezes na
+   * semana. Com um dia por sessão seria preciso duplicar a sessão inteira — e
+   * duas sessões com o mesmo `day` são duas adesões ambíguas, já que `day` é a
+   * chave de `Activity.planLink.sessionDay`.
+   *
+   * Quem mexe no treino sem conhecer este campo (o APK instalado, que não se
+   * atualiza sozinho) o apagaria em silêncio: o zod descarta chave desconhecida
+   * e `PUT /plans/current` substitui o workout inteiro. A defesa é
+   * `preservarAgenda`, em `services/agendaDeTreino.ts`.
+   */
+  weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
 });
 
 export const workoutSchema = z.object({
@@ -23,6 +42,9 @@ export const workoutSchema = z.object({
   daysPerWeek: z.number().int().min(1).max(7),
   sessions: z.array(sessionSchema).min(1),
 });
+
+export type WorkoutData = z.infer<typeof workoutSchema>;
+export type SessionData = z.infer<typeof sessionSchema>;
 
 const mealItemSchema = z.object({
   food: z.string(),
@@ -79,6 +101,18 @@ export interface PlanParts {
   disclaimer: string;
 }
 
+/**
+ * O aviso de um plano que a própria pessoa montou.
+ *
+ * `disclaimer` é obrigatório no modelo e nasceu para a IA — "gerado por IA, é um
+ * ponto de partida" não diz nada sobre um treino que a pessoa escreveu. Sem um
+ * texto próprio, criar o primeiro plano a partir de um treino registrado
+ * estouraria a validação do modelo e sairia como 500. Espelha o
+ * `DISCLAIMER_DO_COACH` de `routes/pro.ts`.
+ */
+export const DISCLAIMER_PROPRIO =
+  "Treino montado por você. Em caso de dor ou desconforto, pare e procure um profissional.";
+
 // ---- Modelo Mongoose (guarda histórico de versões por usuário) ----
 
 const planSchema = new Schema(
@@ -103,6 +137,16 @@ const planSchema = new Schema(
   },
   { timestamps: true }
 );
+
+/**
+ * Todo acesso a plano é "a versão mais nova desta pessoa".
+ *
+ * Com só `user: 1`, o filtro usa índice mas a ordenação é feita em memória. Não
+ * doía porque a consulta era rara; `GET /plans/hoje` é tela inicial e roda a
+ * cada foco. Índice composto transforma em seek puro, e é aditivo: criar um
+ * índice não muda documento nenhum.
+ */
+planSchema.index({ user: 1, version: -1 });
 
 export type PlanDoc = HydratedDocument<InferSchemaType<typeof planSchema>>;
 

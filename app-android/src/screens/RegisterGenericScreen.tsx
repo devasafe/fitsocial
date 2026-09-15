@@ -5,17 +5,18 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
-import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
-import { colors, spacing, sportColor } from "../theme";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
+import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterGeneric">;
 
-export function RegisterGenericScreen({ route, navigation }: Props) {
+export function RegisterGenericScreen({ route }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
-  const perguntarPrivacidade = usePerguntaDePrivacidade();
+  const concluirTreino = useConclusaoDeTreino();
   const [name, setName] = useState("");
   const [min, setMin] = useState("");
   const [description, setDescription] = useState("");
@@ -64,10 +65,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
           customMetrics,
         },
       });
-      // Esta tela vai direto para publicar, então a pergunta vem antes de sair
-      // — senão quem registra só por aqui nunca seria perguntado.
-      perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
+      concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -78,7 +76,7 @@ export function RegisterGenericScreen({ route, navigation }: Props) {
   return (
     <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
+        <SportIcon sportId={sportId} size={22} />
         <Txt variant="titleScreen">{sportLabel(sportId)}</Txt>
       </View>
 

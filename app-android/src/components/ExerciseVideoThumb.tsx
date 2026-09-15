@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, ActivityIndicator } from "react-native";
+import { View, Image, StyleSheet, TouchableOpacity, Linking, ActivityIndicator } from "react-native";
 import { colors, radius } from "../theme";
 import type { VideoRef } from "../api/exerciseVideos";
 import { ExerciseVideoModal } from "./ExerciseVideoModal";
@@ -10,6 +10,7 @@ import {
   urlDeBusca,
   type PlataformaDeVideo,
 } from "../lib/plataformaDeVideo";
+import { Icon } from "./Icon";
 
 interface Props {
   video: VideoRef | null;
@@ -62,7 +63,7 @@ export function ExerciseVideoThumb({ video, loading, exerciseName }: Props) {
           onPress={() => void verExecucao()}
           accessibilityLabel={`Buscar vídeo de ${exerciseName}`}
         >
-          <Text style={styles.play}>▶</Text>
+          <Icon name="play" size={22} color={colors.text} preenchido />
         </TouchableOpacity>
         <EscolherPlataformaSheet
           visivel={escolhendo}
@@ -82,7 +83,7 @@ export function ExerciseVideoThumb({ video, loading, exerciseName }: Props) {
       >
         <Image source={{ uri: video.thumbnailUrl }} style={styles.thumb} resizeMode="cover" />
         <View style={styles.overlay}>
-          <Text style={styles.play}>▶</Text>
+          <Icon name="play" size={22} color={colors.text} preenchido />
         </View>
       </TouchableOpacity>
       <ExerciseVideoModal
@@ -101,5 +102,4 @@ const styles = StyleSheet.create({
   fallback: { borderWidth: 1, borderColor: colors.border },
   thumb: { width: "100%", height: "100%" },
   overlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
-  play: { color: "#fff", fontSize: 14, fontWeight: "900" },
 });

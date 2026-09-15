@@ -23,6 +23,7 @@ import { notify } from "../lib/notify";
 import { ApiHttpError } from "../api/client";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 /**
  * A conversa com o profissional.
@@ -288,7 +289,7 @@ export function ConversaScreen() {
               {item.plan && !meu ? (
                 <Pressable onPress={() => nav.navigate("TodayWorkout")} style={{ marginTop: spacing.s8 }}>
                   <Txt variant="label" color={colors.lime}>
-                    Ver treino ›
+                    Ver treino
                   </Txt>
                 </Pressable>
               ) : null}
@@ -376,9 +377,11 @@ export function ConversaScreen() {
               justifyContent: "center",
             }}
           >
-            <Txt variant="bodyStrong" color={texto.trim() ? colors.onLime : colors.text3}>
-              ↑
-            </Txt>
+            <Icon
+              name="setaCima"
+              size={20}
+              color={texto.trim() ? colors.onLime : colors.text3}
+            />
           </Pressable>
         </View>
       )}

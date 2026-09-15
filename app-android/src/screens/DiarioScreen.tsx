@@ -10,6 +10,7 @@ import { loadRecents, pushRecentFood, type RecentFood } from "../lib/foodRecents
 import { colors, spacing, radius } from "../theme";
 import { SkeletonLista } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 const MEALS: Meal[] = ["cafe", "almoco", "lanche", "janta"];
 
@@ -117,16 +118,17 @@ export function DiarioScreen() {
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       {/* Navegação de data */}
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <TouchableOpacity onPress={() => setDate((d) => shift(d, -1))} hitSlop={10}>
-          <Txt variant="titleSection" color={colors.text2}>
-            ‹
-          </Txt>
+        <TouchableOpacity onPress={() => setDate((d) => shift(d, -1))} hitSlop={11}>
+          <Icon name="chevronEsquerda" size={22} color={colors.text2} accessibilityLabel="Dia anterior" />
         </TouchableOpacity>
         <Txt variant="titleSection">{dateLabel(date)}</Txt>
-        <TouchableOpacity onPress={() => setDate((d) => shift(d, 1))} hitSlop={10} disabled={date === todayStr()}>
-          <Txt variant="titleSection" color={date === todayStr() ? colors.text3 : colors.text2}>
-            ›
-          </Txt>
+        <TouchableOpacity onPress={() => setDate((d) => shift(d, 1))} hitSlop={11} disabled={date === todayStr()}>
+          <Icon
+            name="chevronDireita"
+            size={22}
+            color={date === todayStr() ? colors.text3 : colors.text2}
+            accessibilityLabel="Próximo dia"
+          />
         </TouchableOpacity>
       </View>
 

@@ -27,6 +27,7 @@ import { Skeleton } from "../components/Skeleton";
 import { notify } from "../lib/notify";
 import { colors, radius, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 type Aba = "treinos" | "publicacoes" | "fotos";
 
@@ -244,9 +245,7 @@ export function ProfileScreen() {
                   accessibilityLabel="Configurações"
                   style={styles.engrenagem}
                 >
-                  <Txt variant="body" color={colors.text2}>
-                    ⚙
-                  </Txt>
+                  <Icon name="engrenagem" size={20} color={colors.text2} />
                 </Pressable>
               </View>
             </View>

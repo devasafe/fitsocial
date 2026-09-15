@@ -8,10 +8,11 @@ import { Txt, Screen, Button } from "../components/ui";
 import { listSports, type Sport } from "../api/sports";
 import { listActivities, type Activity } from "../api/activities";
 import { sportLabel } from "../lib/sportLabel";
-import { colors, spacing, radius, sportColor } from "../theme";
+import { colors, spacing, radius } from "../theme";
 import { SkeletonGrade } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
 import type { MuscleGroup } from "../api/library";
+import { SportIcon } from "../components/SportIcon";
 
 interface RecentSport {
   sportId: string;
@@ -85,6 +86,19 @@ export function RegistrarScreen() {
     switch (kind) {
       case "strength": {
         const prefill = activity ? strengthPrefill(activity.payload) : undefined;
+        // Musculação passa pelo treino do dia antes do formulário em branco.
+        //
+        // É o esporte da ficha: `Plan.workout` não tem esporte, e o check-in do
+        // plano grava sempre `musculacao`. Mandar calistenia ou powerlifting
+        // para lá faria a pessoa cair num plano que não é o treino dela.
+        //
+        // "Repetir Musculação" continua indo direto ao formulário: ali a pessoa
+        // pediu explicitamente o último treino, com as cargas já preenchidas —
+        // desviar seria desfazer o que ela acabou de escolher.
+        if (sportId === "musculacao" && !prefill) {
+          nav.navigate("TreinoDoDia", { sportId });
+          break;
+        }
         nav.navigate("RegisterActivity", prefill ? { sportId, prefill } : { sportId });
         break;
       }
@@ -153,7 +167,7 @@ export function RegistrarScreen() {
                     backgroundColor: colors.surface,
                   }}
                 >
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(r.sportId) }} />
+                  <SportIcon sportId={r.sportId} size={14} />
                   <Txt variant="label">{r.label}</Txt>
                 </TouchableOpacity>
               ))}
@@ -188,7 +202,7 @@ export function RegistrarScreen() {
                 gap: 8,
               }}
             >
-              <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: sportColor(s.id) }} />
+              <SportIcon sportId={s.id} size={30} />
               <Txt variant="label" color={colors.text} style={{ textAlign: "center" }}>
                 {s.label}
               </Txt>

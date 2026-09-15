@@ -64,7 +64,7 @@ export function PrivacidadeTreinosProvider({ children }: { children: React.React
               padding: spacing.lg,
             }}
           >
-            <Txt variant="titleCard">Treino registrado 💪</Txt>
+            <Txt variant="titleCard">Treino registrado</Txt>
 
             <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.md }}>
               Quer que seus treinos apareçam no seu perfil? Outras pessoas vão poder ver o

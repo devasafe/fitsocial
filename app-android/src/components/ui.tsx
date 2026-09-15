@@ -23,6 +23,7 @@ import {
   sportColor,
   type TypeVariant,
 } from "../theme";
+import { Icon, type NomeDeIcone } from "./Icon";
 
 // ---- Tipografia ----
 
@@ -266,27 +267,43 @@ export function MetricTile({
   delta,
   sport,
   style,
+  icon,
 }: {
   value: string;
   label: string;
   delta?: { value: string; positive?: boolean };
   sport?: string;
   style?: StyleProp<ViewStyle>;
+  /** No lugar do número, quando não há número a mostrar (bloqueado pelo plano). */
+  icon?: NomeDeIcone;
 }) {
   return (
     <View
       style={[{ borderRadius: radius.hero, padding: spacing.md }, elevation.e2, style]}
     >
-      <Txt variant="metricMd" tabular color={sport ? sportColor(sport) : colors.text}>
-        {value}
-      </Txt>
+      {icon ? (
+        <View style={{ height: typeScale.metricMd.lineHeight, justifyContent: "center" }}>
+          <Icon name={icon} size={24} color={colors.text3} />
+        </View>
+      ) : (
+        <Txt variant="metricMd" tabular color={sport ? sportColor(sport) : colors.text}>
+          {value}
+        </Txt>
+      )}
       <Txt variant="label" color={colors.text2} style={{ marginTop: 2 }}>
         {label}
       </Txt>
       {delta ? (
-        <Txt variant="caption" color={delta.positive ? colors.lime : colors.text3}>
-          {delta.positive ? "▲" : "▼"} {delta.value}
-        </Txt>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Icon
+            name={delta.positive ? "subindo" : "descendo"}
+            size={14}
+            color={delta.positive ? colors.lime : colors.text3}
+          />
+          <Txt variant="caption" color={delta.positive ? colors.lime : colors.text3}>
+            {delta.value}
+          </Txt>
+        </View>
       ) : null}
     </View>
   );
@@ -297,11 +314,14 @@ export function Chip({
   active,
   onPress,
   sport,
+  icon,
 }: {
   label: string;
   active?: boolean;
   onPress?: () => void;
   sport?: string;
+  /** Marca à direita do rótulo — o cadeado do que o plano limita, por exemplo. */
+  icon?: NomeDeIcone;
 }) {
   const dot = sport ? sportColor(sport) : colors.lime;
   return (
@@ -322,6 +342,7 @@ export function Chip({
     >
       {sport ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dot }} /> : null}
       <Text style={[typeScale.label, { color: active ? colors.text : colors.text2 }]}>{label}</Text>
+      {icon ? <Icon name={icon} size={13} color={colors.text3} /> : null}
     </TouchableOpacity>
   );
 }

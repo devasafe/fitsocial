@@ -5,11 +5,11 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
-import { usePRCelebration } from "../components/PRCelebration";
-import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
+import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterEndurance">;
 
@@ -28,8 +28,7 @@ function paceLabel(km: number, min: number): string {
 export function RegisterEnduranceScreen({ route, navigation }: Props) {
   const { sportId } = route.params;
   const { token } = useAuth();
-  const celebratePR = usePRCelebration();
-  const perguntarPrivacidade = usePerguntaDePrivacidade();
+  const concluirTreino = useConclusaoDeTreino();
   const label = sportLabel(sportId);
   const [km, setKm] = useState("");
   const [min, setMin] = useState("");
@@ -77,10 +76,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
         durationSec: Math.round(minN * 60),
         payload: { distanceM: Math.round(kmN * 1000) },
       });
-      celebratePR(res.meta.newPRs ?? []);
-      // Só aparece para quem ainda não escolheu; o treino já está salvo.
-      perguntarPrivacidade();
-      navigation.navigate("CreatePost", { activity: res.data, newPRs: res.meta.newPRs ?? [] });
+      concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -91,7 +87,7 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
   return (
     <Screen scroll underHeader>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing.section }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: sportColor(sportId) }} />
+        <SportIcon sportId={sportId} size={22} />
         <Txt variant="titleScreen">{label}</Txt>
       </View>
 

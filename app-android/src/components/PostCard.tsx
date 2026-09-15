@@ -9,6 +9,7 @@ import { Avatar } from "./Avatar";
 import { MenuSheet, type AcaoDoMenu } from "./MenuSheet";
 import { CompartilharTreino } from "./CompartilharTreino";
 import { useProporcaoDaFoto } from "../lib/proporcaoDaFoto";
+import { SportIcon } from "./SportIcon";
 
 // Tempo relativo em caixa de frase, sem juntar metadados por ponto médio.
 function timeAgo(iso: string): string {
@@ -234,7 +235,7 @@ export function PostCard({
           style={[styles.wodBox, { borderLeftColor: sportColor(post.activity.sportId) }]}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: post.activity.stats.length ? 2 : 0 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sportColor(post.activity.sportId) }} />
+            <SportIcon sportId={post.activity.sportId} size={14} />
             <Txt variant="bodyStrong" color={colors.text}>
               {post.activity.title}
             </Txt>

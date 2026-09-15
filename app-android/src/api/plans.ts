@@ -12,6 +12,9 @@ export interface Session {
   day: string;
   focus: string;
   exercises: Exercise[];
+  /** Em que dias da semana esta sessão acontece. 0=domingo … 6=sábado.
+   *  Ausente ou vazio = a pessoa ainda não escolheu. */
+  weekdays?: number[];
 }
 export interface Workout {
   split: string;
@@ -87,6 +90,90 @@ export function importPlan(token: string, text: string) {
 /** Edição manual do plano (treino/dieta) — salva in place. */
 export function updatePlan(token: string, data: { summary?: string; workout?: Workout; diet?: Diet }) {
   return apiFetch<{ plan: Plan }>("/plans/current", { method: "PUT", token, body: data });
+}
+
+// ------------------------------------------------------------- o treino de hoje
+
+/** A sessão como a semana mostra: o suficiente para escolher outro dia. */
+export interface SessaoResumida {
+  day: string;
+  focus: string;
+  exerciciosCount: number;
+  weekdays: number[];
+}
+
+/** Uma sessão à espera de dia, na tela de encaixe. */
+export interface SessaoSemDia extends SessaoResumida {
+  indice: number;
+  /** Palpite lido do nome ("Segunda" → [1]). Só pré-preenche; nada foi gravado. */
+  sugestao: number[];
+}
+
+/**
+ * O que o servidor responde sobre hoje.
+ *
+ * `estado` é o discriminante: a tela faz um `switch` nele em vez de deduzir o
+ * caso do cruzamento de três nulos.
+ */
+export interface TreinoDeHoje {
+  estado: "treino_de_hoje" | "descanso" | "sem_agenda" | "sem_plano";
+  diaDaSemana: number;
+  planVersion: number | null;
+  sessao: Session | null;
+  /** As sete posições, sempre — trocar de dia não custa outra ida ao servidor. */
+  semana: { diaDaSemana: number; sessao: SessaoResumida | null }[];
+  /** Só em `sem_agenda`. */
+  sessoes?: SessaoSemDia[];
+}
+
+export interface MetaDeHoje {
+  fuso: string;
+  hoje: string;
+  /** Qual é hoje de verdade — não muda quando a tela espia outro dia. */
+  diaDaSemana: number;
+  naoAgendadas: number;
+  /** Falso para quem tem treinador: não se acrescenta sessão à prescrição. */
+  podeEditarPlano: boolean;
+  programacao: "plano" | "propria" | null;
+}
+
+/** O treino de hoje. `dia` só para espiar outro dia da semana. */
+export function getTreinoDeHoje(token: string, dia?: number) {
+  const q = dia === undefined ? "" : `?dia=${dia}`;
+  return apiFetch<{ data: TreinoDeHoje; meta: MetaDeHoje }>(`/plans/hoje${q}`, { token });
+}
+
+/** Em que dias você treina — grava a grade inteira de uma vez. */
+export function salvarAgenda(
+  token: string,
+  /** `day` vai junto: é o que faz o servidor perceber que o plano mudou por
+   *  outra tela e os índices deslizaram. */
+  agenda: { indice: number; day: string; weekdays: number[] }[],
+  versao?: number
+) {
+  return apiFetch<{ data: { plan: Plan }; meta: { diasOcupados: number; naoAgendadas: number } }>(
+    "/plans/current/agenda",
+    { method: "PUT", token, body: { agenda, ...(versao === undefined ? {} : { versao }) } }
+  );
+}
+
+/** "Quer adicionar este treino ao plano?" — o sim. */
+export function adicionarSessaoAoPlano(
+  token: string,
+  data: { activityId: string; day?: string; focus?: string; weekdays: number[] }
+) {
+  return apiFetch<{
+    data: { plan: Plan };
+    meta: {
+      criouPlano: boolean;
+      sessionDay: string;
+      /** Sessões que perderam um dia para esta. Vazio no caso comum. */
+      diasTomadosDe: string[];
+    };
+  }>(
+    "/plans/current/sessoes",
+    { method: "POST", token, body: data }
+  );
 }
 
 /**

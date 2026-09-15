@@ -12,6 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import { checkUsername, updateMe } from "../api/auth";
 import { Button, Txt } from "../components/ui";
 import { colors, radius, spacing, type as typeScale } from "../theme";
+import { Icon } from "../components/Icon";
 
 export function ChooseUsernameScreen() {
   const { token, refreshUser, logout } = useAuth();
@@ -96,9 +97,12 @@ export function ChooseUsernameScreen() {
           </Txt>
         ) : null}
         {valid && available === true ? (
-          <Txt variant="label" color={colors.lime} style={styles.status}>
-            Disponível ✓
-          </Txt>
+          <View style={[styles.status, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
+            <Icon name="check" size={14} color={colors.lime} strokeWidth={2.25} />
+            <Txt variant="label" color={colors.lime}>
+              Disponível
+            </Txt>
+          </View>
         ) : null}
         {error ? (
           <Txt variant="label" color={colors.danger} style={styles.status}>

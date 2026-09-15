@@ -119,5 +119,5 @@ export function legendaDeRecorde(prs: NewPR[]): string {
   if (!pr) return "";
 
   const valor = prValueLabel(pr.type, pr.value, pr.unit);
-  return `Hoje bati meu recorde no ${capitalize(pr.exerciseName)}: ${valor} 🔥`;
+  return `Hoje bati meu recorde no ${capitalize(pr.exerciseName)}: ${valor}`;
 }

@@ -158,7 +158,7 @@ export function AcompanhamentosScreen() {
         <ErrorState message="Não foi possível carregar." onRetry={carregar} />
       ) : lista.length === 0 && convites.length === 0 ? (
         <EmptyState
-          icon="🤝"
+          icon="pessoas"
           title="Ninguém te acompanha ainda"
           description="Quando um treinador ou nutricionista te mandar um convite, ele aparece aqui e você escolhe o que abrir."
           actionLabel="Voltar"

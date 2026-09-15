@@ -294,9 +294,8 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
             {JANELAS.map((d) => (
               <Chip
                 key={d}
-                label={
-                  janelaAplicada?.limitadoPeloPlano ? `${rotuloDaJanela(d)} 🔒` : rotuloDaJanela(d)
-                }
+                label={rotuloDaJanela(d)}
+                icon={janelaAplicada?.limitadoPeloPlano ? "cadeado" : undefined}
                 active={janela === d}
                 onPress={() => setJanela(d)}
               />
@@ -319,7 +318,7 @@ export function HistoryScreen({ embedded }: { embedded?: boolean } = {}) {
                   As janelas maiores fazem parte do Pro. Seu histórico continua todo aqui.
                 </Txt>
                 <Txt variant="label" color={colors.lime} style={{ marginTop: spacing.s8 }}>
-                  Conhecer o Pro ›
+                  Conhecer o Pro
                 </Txt>
               </Card>
             </TouchableOpacity>

@@ -399,7 +399,7 @@ activitiesRouter.post(
     const sport = getSport(a.sportId);
     const post = await Post.create({
       author: a.user,
-      text: caption?.trim() || `Treino de ${sport?.label ?? a.sportId} concluído 💪`,
+      text: caption?.trim() || `Treino de ${sport?.label ?? a.sportId} concluído`,
       activity: a._id,
     });
 

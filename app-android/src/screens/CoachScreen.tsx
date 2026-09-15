@@ -22,6 +22,7 @@ import { Txt, ErrorState } from "../components/ui";
 import { colors, radius, spacing } from "../theme";
 import { SkeletonChat } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
+import { Icon } from "../components/Icon";
 
 export function CoachScreen() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
@@ -200,7 +201,7 @@ export function CoachScreen() {
           accessibilityRole="button"
           accessibilityLabel="Enviar mensagem"
         >
-          <Txt style={styles.sendText}>›</Txt>
+          <Icon name="setaCima" size={22} color={colors.onLime} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -252,5 +253,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sendDisabled: { opacity: 0.4 },
-  sendText: { color: colors.onLime, fontSize: 28, fontWeight: "800", marginTop: -4 },
 });

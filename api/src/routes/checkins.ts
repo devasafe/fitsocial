@@ -81,7 +81,7 @@ checkinsRouter.post(
       notes: body.notes ?? "",
       shareToFeed: body.shareToFeed,
       caption: body.shareToFeed
-        ? body.shareText?.trim() || `Concluí o treino: ${body.sessionDay} 💪`
+        ? body.shareText?.trim() || `Concluí o treino: ${body.sessionDay}`
         : undefined,
     });
 

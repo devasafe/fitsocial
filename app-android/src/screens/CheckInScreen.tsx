@@ -8,17 +8,17 @@ import {
   Animated,
 } from "react-native";
 import { notify, confirmDialog } from "../lib/notify";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useRoute, type RouteProp } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, lastEntries, type CheckInEntry, type LastEntry } from "../api/checkins";
-import { usePRCelebration } from "../components/PRCelebration";
+import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing, motion } from "../theme";
 import type { AppStackParams } from "../navigation/types";
 import { resolveExerciseVideos, type VideoRef } from "../api/exerciseVideos";
 import { ExerciseVideoThumb } from "../components/ExerciseVideoThumb";
+import { Icon } from "../components/Icon";
 
 interface Row {
   name: string;
@@ -64,9 +64,8 @@ function paceLabel(row: { duration: string; distance: string }): string | null {
 
 export function CheckInScreen() {
   const route = useRoute<RouteProp<AppStackParams, "CheckIn">>();
-  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token } = useAuth();
-  const celebratePR = usePRCelebration();
+  const concluirTreino = useConclusaoDeTreino();
   const { session } = route.params;
   const storageKey = `fitsocial.session:${session.day}`;
 
@@ -253,9 +252,7 @@ export function CheckInScreen() {
     try {
       const res = await createCheckIn(token!, { sessionDay: session.day, entries });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
-      celebratePR(res.newPRs ?? []);
-      // Sempre abre o compositor com o treino anexado (foto/texto ou "Agora não").
-      nav.navigate("CreatePost", { activity: res.activity, newPRs: res.newPRs ?? [] });
+      concluirTreino(res.activity, res.newPRs ?? []);
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);
     } finally {
@@ -313,7 +310,7 @@ export function CheckInScreen() {
                 accessibilityLabel={`${row.name}, marcar como feito`}
               >
                 <View style={[styles.check, row.done && styles.checkOn]}>
-                  {row.done ? <Txt style={styles.checkMark}>✓</Txt> : null}
+                  {row.done ? <Icon name="check" size={18} color={colors.onLime} strokeWidth={2.5} /> : null}
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.exNameRow}>
@@ -493,7 +490,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   checkOn: { backgroundColor: colors.lime, borderColor: colors.lime },
-  checkMark: { color: colors.onLime, fontSize: 22, fontWeight: "900" },
   exNameRow: { flexDirection: "row", alignItems: "center", gap: spacing.s8 },
   exName: { flexShrink: 1 },
   exNameDone: { textDecorationLine: "line-through" },

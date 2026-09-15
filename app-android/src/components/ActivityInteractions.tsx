@@ -7,6 +7,7 @@ import { likePost, unlikePost, getComments, createComment, type Comment } from "
 import { Txt, Card } from "./ui";
 import { Avatar } from "./Avatar";
 import { colors, radius, spacing } from "../theme";
+import { Icon } from "./Icon";
 
 function timeAgo(iso: string): string {
   const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -81,9 +82,12 @@ export function ActivityInteractions({
         activeOpacity={0.7}
         style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingBottom: spacing.sm }}
       >
-        <Txt variant="titleCard" color={liked ? colors.danger : colors.text2}>
-          {liked ? "♥" : "♡"}
-        </Txt>
+        <Icon
+          name="coracao"
+          size={22}
+          color={liked ? colors.danger : colors.text2}
+          preenchido={liked}
+        />
         <Txt variant="bodyStrong" color={liked ? colors.danger : colors.text2} tabular>
           {count} {count === 1 ? "curtida" : "curtidas"}
         </Txt>
@@ -152,7 +156,7 @@ export function ActivityInteractions({
             opacity: !draft.trim() || sending ? 0.5 : 1,
           }}
         >
-          {sending ? <ActivityIndicator color={colors.onLime} /> : <Txt style={{ fontSize: 20, color: colors.onLime }}>›</Txt>}
+          {sending ? <ActivityIndicator color={colors.onLime} /> : <Icon name="setaCima" size={20} color={colors.onLime} />}
         </TouchableOpacity>
       </View>
     </Card>

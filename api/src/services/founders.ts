@@ -5,7 +5,7 @@ import { env } from "../config/env.js";
 // (FOUNDER_EMAILS = lista CSV) + uma mensagem pessoal (FOUNDER_MESSAGE).
 // Lê o env ao vivo — mudar no Render (e reiniciar) já reflete, e é testável.
 
-const DEFAULT_MESSAGE = `Você é fundador do ${env.appName} 🖤 Obrigado por estar aqui desde o começo.`;
+const DEFAULT_MESSAGE = `Você é fundador do ${env.appName}. Obrigado por estar aqui desde o começo.`;
 
 export function founderEmails(): string[] {
   return (process.env.FOUNDER_EMAILS ?? "")

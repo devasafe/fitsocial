@@ -132,6 +132,9 @@ export interface Activity {
   compartilhado?: boolean;
   perceivedEffort?: number | null;
   feeling?: string | null;
+  /** Presente quando o treino veio de uma sessão da ficha (ou virou uma).
+   *  É o que separa "treino avulso" de "treino do plano". */
+  planLink?: { planVersion: number; sessionDay: string } | null;
   // Presente ao buscar por id (ex.: abrir treino de outra pessoa pelo feed).
   owner?: { id: string; name: string; username: string | null; avatarUrl: string } | null;
   // Post do compartilhamento — para curtir/comentar direto do detalhe.

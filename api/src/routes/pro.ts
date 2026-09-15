@@ -33,7 +33,8 @@ import {
 } from "../services/evolucao.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { computeStats } from "../services/adherence.js";
-import { Plan, workoutSchema } from "../models/Plan.js";
+import { Plan, workoutSchema, type WorkoutData } from "../models/Plan.js";
+import { preservarAgenda } from "../services/agendaDeTreino.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
 import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } from "../utils/cursor.js";
@@ -841,7 +842,11 @@ proRouter.put(
       user: clientId,
       version: (atual?.version ?? 0) + 1,
       summary,
-      workout,
+      // Em que dias o aluno faz as sessões é escolha DELE, não da prescrição —
+      // e é o que permite deixar a tela de encaixe aberta para quem tem
+      // treinador. Sem preservar aqui, cada prescrição nova apagaria a agenda
+      // que o aluno montou, e a rota de agenda viraria uma promessa falsa.
+      workout: preservarAgenda(atual?.workout as WorkoutData | null, workout),
       // A dieta corrente é preservada: o plano tem duas metades independentes.
       diet: atual?.diet ?? null,
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,

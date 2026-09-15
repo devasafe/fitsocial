@@ -18,6 +18,7 @@ import type { ChatMessage } from "../api/onboarding";
 import { Txt, ErrorState } from "./ui";
 import { DisclaimerBanner } from "./DisclaimerBanner";
 import { colors, radius, spacing } from "../theme";
+import { Icon } from "./Icon";
 
 export function CoachSheet({
   visible,
@@ -141,9 +142,7 @@ export function CoachSheet({
             {/* Cabeçalho */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.sm }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
-                <Txt variant="titleSection" color={colors.lime}>
-                  ✦
-                </Txt>
+                <Icon name="faisca" size={20} color={colors.lime} />
                 {/* "Seu coach" é cargo de uma pessoa só. Quem contratou um
                     treinador não pode abrir a Home e encontrar dois. */}
                 <Txt variant="titleSection">{temTreinador ? "Assistente" : "Seu coach"}</Txt>
@@ -212,7 +211,7 @@ export function CoachSheet({
                   activeOpacity={0.85}
                   style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.lime, alignItems: "center", justifyContent: "center", opacity: !input.trim() || sending ? 0.5 : 1 }}
                 >
-                  {sending ? <ActivityIndicator color={colors.onLime} /> : <Txt style={{ fontSize: 22, color: colors.onLime }}>›</Txt>}
+                  {sending ? <ActivityIndicator color={colors.onLime} /> : <Icon name="setaCima" size={22} color={colors.onLime} />}
                 </TouchableOpacity>
               </View>
             )}

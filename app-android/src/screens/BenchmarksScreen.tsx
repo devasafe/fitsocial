@@ -78,7 +78,7 @@ export function BenchmarksScreen() {
       contentContainerStyle={styles.lista}
       ListEmptyComponent={
         <EmptyState
-          icon="🏆"
+          icon="trofeu"
           title="Nenhum benchmark ainda"
           description="Registre um WOD conhecido — Fran, Cindy, Murph — e a evolução aparece aqui a cada vez que você repetir."
         />
@@ -110,7 +110,7 @@ export function BenchmarksScreen() {
                     {deltaEmTexto(item.delta, item.scoreTipo)}
                   </Txt>
                   <Txt variant="caption" color={colors.text3}>
-                    {melhorou ? "🔥 melhorou" : "vs. anterior"}
+                    {melhorou ? "melhorou" : "vs. anterior"}
                   </Txt>
                 </View>
               ) : null}
