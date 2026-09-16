@@ -9,6 +9,7 @@ import { Txt, Screen, Card, Button } from "../components/ui";
 import { RouteMap } from "../components/RouteMap";
 import { createActivity } from "../api/activities";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { totalDistanceM, paceLabel, clock, type GeoPoint } from "../lib/geo";
 import { colors, spacing, radius, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -37,6 +38,10 @@ export function LiveTrackScreen({ route, navigation }: Props) {
   const startTsRef = useRef(0);
   const elapsedBaseRef = useRef(0);
   const resumeMsRef = useRef(0);
+  // A chave nasce quando a gravação COMEÇA (em `start`), não quando "Finalizar
+  // e salvar" é tocado — ver `chaveDoTreino`. Pausar/retomar não gera outra.
+  const clientKeyRef = useRef<string | null>(null);
+  const contextoDaChave = `liveTrack:${sportId}`;
 
   // Em tela cheia, esconde o header nativo para o mapa ocupar tudo.
   useLayoutEffect(() => {
@@ -82,6 +87,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       notify("Localização necessária", "Libere o acesso à localização para gravar o percurso.");
       return;
     }
+    clientKeyRef.current = await chaveDoTreino(contextoDaChave);
     startTsRef.current = Date.now();
     elapsedBaseRef.current = 0;
     setPoints([]);
@@ -115,11 +121,14 @@ export function LiveTrackScreen({ route, navigation }: Props) {
     }
     setSaving(true);
     try {
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(contextoDaChave));
       const res = await createActivity(token!, {
         sportId,
         kind: "endurance",
         payload: { distanceM: 0, points: points.map((p) => ({ lat: p.lat, lng: p.lng, t: p.t, ele: p.ele })) },
+        clientKey,
       });
+      await limparChaveDoTreino(contextoDaChave);
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

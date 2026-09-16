@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Switch } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field, Chip } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { colors, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -31,6 +32,20 @@ export function RegisterClassScreen({ route }: Props) {
   const [gi, setGi] = useState(true);
   const [lastMin, setLastMin] = useState(0);
   const [saving, setSaving] = useState(false);
+  // A chave nasce quando a tela abre — não quando "Salvar" é tocado — ver
+  // `chaveDoTreino`. Por esporte: é o que essa tela registra.
+  const clientKeyRef = useRef<string | null>(null);
+  const contextoDaChave = `class:${sportId}`;
+
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(contextoDaChave).then((k) => {
+      if (alive) clientKeyRef.current = k;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [contextoDaChave]);
 
   // Última vez neste esporte: dica + pré-preenchimento da duração se vazia.
   useEffect(() => {
@@ -57,12 +72,15 @@ export function RegisterClassScreen({ route }: Props) {
     }
     setSaving(true);
     try {
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(contextoDaChave));
       const res = await createActivity(token!, {
         sportId,
         kind: "class",
         durationSec: Math.round(minN * 60),
         payload: { modality: sportId, sessionType: sessionType ?? undefined, gi },
+        clientKey,
       });
+      await limparChaveDoTreino(contextoDaChave);
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

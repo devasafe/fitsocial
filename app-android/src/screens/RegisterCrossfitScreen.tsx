@@ -12,7 +12,7 @@
 // só mostra resumos, a edição de cada bloco vive num sheet, e o rascunho é
 // salvo a cada mudança para dar para sair e voltar.
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -28,6 +28,7 @@ import { blocoVazio, type Bloco, type PayloadDeCrossfit } from "../api/crossfit"
 import { comoNoQuadro, resultadoEmTexto, ehDescanso } from "../lib/crossfitResumo";
 import { anotarTreino } from "../lib/sugestoes";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { notify } from "../lib/notify";
 import { colors, radius, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -37,6 +38,9 @@ import { SportIcon } from "../components/SportIcon";
 type Props = NativeStackScreenProps<AppStackParams, "RegisterCrossfit">;
 
 const RASCUNHO = "fitsocial.rascunhoCrossfit";
+// Um slot só, como o rascunho acima — não por esporte: quem troca de esporte
+// no meio ainda está editando o MESMO rascunho, então é o mesmo envio.
+const CONTEXTO_DA_CHAVE = "crossfit";
 
 /** Um bloco tem conteúdo quando tem modo, movimento, resultado ou nota. */
 function temAlgo(b: Bloco): boolean {
@@ -80,6 +84,19 @@ export function RegisterCrossfitScreen({ route }: Props) {
   const [editando, setEditando] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [carregou, setCarregou] = useState(false);
+  // A chave nasce quando a tela abre — não quando "Salvar treino" é tocado —
+  // ver `chaveDoTreino`.
+  const clientKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(CONTEXTO_DA_CHAVE).then((k) => {
+      if (alive) clientKeyRef.current = k;
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const tamanhoDoTime = Math.max(1, paraInteiro(time) ?? 1);
   const emEquipe = tamanhoDoTime > 1;
@@ -142,6 +159,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
 
     setSalvando(true);
     try {
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(CONTEXTO_DA_CHAVE));
       const res = await createActivity(token!, {
         sportId,
         kind: "wod",
@@ -149,6 +167,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
         durationSec: paraSegundos(duracao) ?? undefined,
         perceivedEffort: paraInteiro(rpe) ?? undefined,
         notes: notas.trim() || undefined,
+        clientKey,
       });
 
       // O acervo de sugestões se enche do que VOCÊ escreve, no salvamento —
@@ -159,6 +178,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
       );
 
       limparRascunho();
+      await limparChaveDoTreino(CONTEXTO_DA_CHAVE);
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

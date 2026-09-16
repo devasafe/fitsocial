@@ -22,12 +22,19 @@ export function createCheckIn(
     sessionDay: string;
     entries: CheckInEntry[];
     notes?: string;
+    /** Identifica o ENVIO, não o conteúdo — nasce quando o treino começa. Ver
+     *  `chaveDoTreino` em `lib/chaveDoTreino.ts`. */
+    clientKey?: string;
+    mesmoAssim?: boolean;
   }
 ) {
-  return apiFetch<{ log: unknown; post: { id: string } | null; newPRs: NewPR[]; activity: Activity }>(
-    "/checkins",
-    { method: "POST", token, body: data }
-  );
+  return apiFetch<{
+    log: unknown;
+    post: { id: string } | null;
+    newPRs: NewPR[];
+    activity: Activity;
+    repetido?: boolean;
+  }>("/checkins", { method: "POST", token, body: data });
 }
 
 export interface LastEntry {

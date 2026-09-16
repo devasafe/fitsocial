@@ -30,6 +30,14 @@ interface CommonInput {
   /** RPE de 1 a 10. A API já aceitava; o cliente é que não expunha. */
   perceivedEffort?: number;
   feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
+  /** Identifica o ENVIO, não o conteúdo — nasce quando o treino começa. Gerada
+   *  por `chaveDoTreino` (`lib/chaveDoTreino.ts`). O servidor a usa para
+   *  devolver o treino já existente em vez de criar outro. */
+  clientKey?: string;
+  /** Confirma que é mesmo um segundo treino, quando o servidor suspeitou de
+   *  repetição sem chave (rede por impressão do conteúdo). Não usado ainda —
+   *  fica pronto para a tela que oferecer essa escolha à pessoa. */
+  mesmoAssim?: boolean;
 }
 
 export type CreateActivityInput =
@@ -166,7 +174,12 @@ export interface NewPR {
 export async function createActivity(
   token: string,
   input: CreateActivityInput
-): Promise<{ data: Activity; meta: { sharedPostId: string | null; newPRs: NewPR[] } }> {
+): Promise<{
+  data: Activity;
+  // `repetido` vem true quando o servidor reconheceu um envio já feito (por
+  // `clientKey` ou pela impressão do conteúdo) e devolveu o treino existente.
+  meta: { sharedPostId: string | null; newPRs: NewPR[]; repetido?: boolean };
+}> {
   return apiFetch("/activities", { method: "POST", body: input, token });
 }
 
