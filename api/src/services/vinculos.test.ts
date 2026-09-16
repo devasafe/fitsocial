@@ -294,4 +294,19 @@ describe("papéis são separados", () => {
     expect(await quantosAlunos(dois._id, "coach")).toBe(1);
     expect(await quantosAlunos(dois._id, "nutri")).toBe(1);
   });
+
+  it("medidas e fotos continuam decidindo por qualquer vínculo, mesmo com dois vínculos ativos", async () => {
+    // Medidas e fotos não têm papel dono — são sobre o corpo do aluno, não
+    // sobre o ofício de ninguém. Mesmo com dois vínculos na dupla, quem abriu
+    // em QUALQUER um deles decide, e este teste não pode regredir isso.
+    const dois = await pessoa({
+      pro: { coach: { ativo: true, origem: "manual" }, nutri: { ativo: true, origem: "manual" } },
+    });
+    const aluno = await pessoa();
+    await aceitarConvite(aluno, (await gerarConvite(dois, "coach")).code);
+    await aceitarConvite(aluno, (await gerarConvite(dois, "nutri")).code, { medidas: true });
+
+    expect(await podeVer(aluno._id, dois._id, "medidas")).toBe(true);
+    expect(await podeVer(aluno._id, dois._id, "fotos")).toBe(false);
+  });
 });

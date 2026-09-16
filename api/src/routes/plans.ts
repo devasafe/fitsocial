@@ -4,7 +4,7 @@ import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
 import { HttpError } from "../utils/httpError.js";
-import { temProfissional } from "../services/vinculos.js";
+import { escritaEhDoProfissional, papeisAtivosDoAluno } from "../services/vinculos.js";
 import { calcularPlan } from "../services/entitlement.js";
 import { Profile, profileDataSchema } from "../models/Profile.js";
 import {
@@ -129,19 +129,27 @@ function serializePlan(plan: InstanceType<typeof Plan>) {
  * olhando no painel o que ele mesmo escreveu. Os dois achariam que estão
  * falando do mesmo treino.
  *
- * A dieta não entra aqui: quem responde por ela é o nutricionista, e o vínculo
- * dele é outro. `POST /plans/diet` continua aberto para quem tem só treinador.
+ * A dieta não entra aqui: quem responde por ela é o nutricionista, e a trava
+ * dela é `recusarSeTemNutricionista`, logo abaixo. `POST /plans/diet` continua
+ * aberto para quem tem só treinador.
  *
  * Vale para TODA porta que mexe no treino, e não só para a IA: gerar, reajustar,
  * importar de um texto, editar à mão e apagar chegam todas ao mesmo lugar — o
  * treino que o profissional assinou deixa de ser o que ele escreveu, sem que
  * ele saiba. Fechar só a IA seria trancar uma porta e deixar quatro abertas.
+ *
+ * Por ESCOPO, e não por existência de vínculo (`escritaEhDoProfissional`, não
+ * `temProfissional`): um vínculo de coach com `treinos: false` não torna o
+ * treinador dono do treino — o dono continua sendo o aluno, e ele não pode
+ * ficar impedido de escrever algo que mais ninguém escreve. Antes desta
+ * correção, o convite pré-marcava `treinos: true` e escondia o defeito; um
+ * aluno que desligasse os treinos no cartão do treinador caía nele.
  */
 async function recusarSeTemTreinador(userId: mongoose.Types.ObjectId): Promise<void> {
-  if (await temProfissional(userId, "coach")) {
+  if (await escritaEhDoProfissional(userId, "treinos")) {
     throw new HttpError(
       409,
-      "Quem escreve o seu treino é o seu treinador. Fale com ele pelo acompanhamento para mudar o plano."
+      "Quem escreve o seu treino é o seu treinador. Peça a mudança pelo acompanhamento."
     );
   }
 }
@@ -159,6 +167,94 @@ async function recusarSeForDoTreinador(userId: mongoose.Types.ObjectId): Promise
   if (atual?.createdBy) await recusarSeTemTreinador(userId);
 }
 
+/**
+ * Quem tem nutricionista não recebe dieta da IA.
+ *
+ * Mesma regra e mesmo motivo do treino, e agora ela cabe: até esta frente o
+ * vínculo de nutricionista não tinha função nenhuma, e por isso a dieta ficava
+ * de fora. Uma dieta que troca sozinha é a pessoa descobrir de manhã que está
+ * comendo outra coisa — e o nutricionista respondendo por números que ele nunca
+ * escreveu.
+ *
+ * Por ESCOPO, e não por existência de vínculo — mesmo motivo de
+ * `recusarSeTemTreinador`, espelhado: um vínculo de nutri com `dieta: false`
+ * (o que o app instalado pré-marca em TODO aceite, inclusive de convite de
+ * nutricionista) não torna a nutricionista dona da dieta. Antes desta
+ * correção, era exatamente esse o caminho padrão que travava a dieta dos dois
+ * lados ao mesmo tempo: o aluno recusado por existência de vínculo, e a
+ * nutricionista recusada por escopo fechado — ninguém conseguia escrever.
+ */
+async function recusarSeTemNutricionista(userId: mongoose.Types.ObjectId): Promise<void> {
+  if (await escritaEhDoProfissional(userId, "dieta")) {
+    throw new HttpError(
+      409,
+      "Quem escreve a sua dieta é o seu nutricionista. Peça a mudança pelo acompanhamento."
+    );
+  }
+}
+
+/** A dieta corrente é de um profissional? Então ela não se apaga sozinha. */
+async function recusarSeForDoNutricionista(userId: mongoose.Types.ObjectId): Promise<void> {
+  const atual = await Plan.findOne({ user: userId }).sort({ version: -1 }).select("createdBy");
+  if (atual?.createdBy) await recusarSeTemNutricionista(userId);
+}
+
+/**
+ * Que metades deste plano o ALUNO pode escrever agora — a resposta que
+ * `/generate`, `/adjust` e `/import` precisam para decidir o que fazer com o
+ * que a IA devolve, em vez de recusar a requisição inteira. `PlanData`
+ * inclui as duas metades sempre juntas; travar por INTEIRO quando só uma
+ * delas tem dono profissional prendia quem só tem nutricionista (ou só
+ * treinador) numa ficha sem plano nenhum — a Tarefa 11b, Defeito 2.
+ */
+async function metadesEscreviveisPeloAluno(
+  userId: mongoose.Types.ObjectId
+): Promise<{ treino: boolean; dieta: boolean }> {
+  const [treinoTravado, dietaTravada] = await Promise.all([
+    escritaEhDoProfissional(userId, "treinos"),
+    escritaEhDoProfissional(userId, "dieta"),
+  ]);
+  return { treino: !treinoTravado, dieta: !dietaTravada };
+}
+
+/**
+ * Só recusa a requisição INTEIRA quando não sobra NADA para o aluno escrever
+ * — as duas metades são de profissional. Fora isso, `/generate`/`/adjust`/
+ * `/import` escrevem a metade livre e descartam a outra, preservando a que já
+ * existia (mesmo precedente de `PUT /pro/alunos/:id/treino` preservando a
+ * dieta com `diet: atual?.diet ?? null`, e vice-versa em `/dieta`).
+ */
+function recusarSeNadaParaEscrever(metades: { treino: boolean; dieta: boolean }): void {
+  if (!metades.treino && !metades.dieta) {
+    throw new HttpError(
+      409,
+      "Quem escreve o seu treino é o seu treinador, e quem escreve a sua dieta é o seu nutricionista. Peça as mudanças pelo acompanhamento."
+    );
+  }
+}
+
+/**
+ * `createdBy`/`disclaimer` são UM CAMPO POR DOCUMENTO para DUAS METADES
+ * independentes — mesma raiz que a Tarefa 11c já registrou em
+ * `PUT /alunos/:id/treino` e `/dieta` (ver os comentários lá; o que vem
+ * abaixo fica coerente com aquela decisão, não é um segundo raciocínio).
+ * A variação aqui é que, ao contrário daquelas duas rotas (que sempre
+ * preservam UMA metade e escrevem a outra), estas três podem escrever as
+ * DUAS metades de uma vez — e só nesse caso ninguém "assinou" nada, e o
+ * disclaimer genérico da IA está certo.
+ *
+ * Rodada 2 (correção de bug pós-11b): quando QUALQUER metade era preservada
+ * por ser de profissional, o `Plan.create` gravava sempre `createdBy: null`
+ * e `disclaimer: data.disclaimer` (o genérico da IA) — nenhuma das três
+ * rotas os condicionava. `recusarSeForDoTreinador`/
+ * `recusarSeForDoNutricionista` (as guardas de apagar) leem justamente
+ * `createdBy`: com ele sempre `null`, apagar o plano parava de ser barrado
+ * mesmo levando junto um treino ou dieta que um profissional escreveu —
+ * reabria a porta que a Tarefa 11b existe para fechar. E o disclaimer
+ * específico do profissional (ex.: aviso de dor de um treinador) era
+ * apagado por cima de uma metade que não mudou nesta chamada.
+ */
+
 // Gera um novo plano a partir da ficha do usuário e o salva como nova versão.
 // Geração é cara (IA); limite baixo por minuto.
 const generateLimiter = rateLimit({ windowMs: 60_000, max: 5, name: "plan-generate" });
@@ -169,7 +265,14 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
-    await recusarSeTemTreinador(user._id);
+    // `generatePlan` devolve as duas metades (`PlanData` inclui `diet`), e só
+    // o treino passa por `preservarAgenda` depois do spread — a dieta entraria
+    // crua por cima da prescrição. A metade travada é DESCARTADA e a corrente
+    // preservada abaixo; só recusa a requisição inteira quando as duas são de
+    // profissional (Defeito 2 — travar tudo prendia quem só tem nutricionista
+    // numa ficha sem plano nenhum, e o treino nem é o que estava travado).
+    const metades = await metadesEscreviveisPeloAluno(user._id);
+    recusarSeNadaParaEscrever(metades);
 
     const profileDoc = await Profile.findOne({ user: user._id });
     if (!profileDoc) {
@@ -193,13 +296,27 @@ plansRouter.post(
     const plan = await Plan.create({
       user: user._id,
       version: (last?.version ?? 0) + 1,
-      ...data,
+      summary: data.summary,
       // "Plano novo, nada a preservar" só vale para a PRIMEIRA geração. O gate
       // acima deixa passar exatamente o contrário: premium regenerando por
       // cima de um plano que já existe — e aí os dias que a pessoa escolheu
       // sumiriam sem ninguém ligar o sumiço ao botão de gerar. Quando não há
-      // agenda anterior isto é no-op.
-      workout: preservarAgenda(last?.workout as WorkoutData | null, data.workout),
+      // agenda anterior isto é no-op. Se o treino é do treinador, o gerado é
+      // descartado e nem passa por `preservarAgenda` — não há agenda de um
+      // treino que não vai existir.
+      workout: metades.treino
+        ? preservarAgenda(last?.workout as WorkoutData | null, data.workout)
+        : (last?.workout ?? null),
+      // Mesma ideia para a dieta: se ela é da nutricionista, a gerada é
+      // descartada e a corrente preservada — byte a byte, sem passar por
+      // nenhuma transformação.
+      diet: metades.dieta ? data.diet : (last?.diet ?? null),
+      // Se as duas metades vieram da IA agora, ninguém assinou. Se alguma
+      // veio preservada, o plano novo continua contendo trabalho de
+      // profissional — a procedência da versão anterior vem junto, senão
+      // apagar o plano deixaria de ser barrado (ver comentário acima).
+      createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -213,7 +330,11 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
-    await recusarSeTemTreinador(user._id);
+    // `adjustPlan` reescreve o plano inteiro — incluindo a dieta, sem que
+    // ninguém tenha pedido a ela nada. Mesma trava do `/generate`, e mesma
+    // correção: escreve só a metade livre, descarta a travada.
+    const metades = await metadesEscreviveisPeloAluno(user._id);
+    recusarSeNadaParaEscrever(metades);
 
     if (user.tier !== "premium") {
       throw new HttpError(
@@ -243,10 +364,18 @@ plansRouter.post(
     const plan = await Plan.create({
       user: user._id,
       version: current.version + 1,
-      ...data,
+      summary: data.summary,
       // A IA reescreve o treino inteiro e não sabe de agenda. Este é o
       // escritor mais traiçoeiro dos três: não parece um escritor de workout.
-      workout: preservarAgenda(current.workout as WorkoutData | null, data.workout),
+      // Se o treino é do treinador, o reajuste é descartado e o corrente
+      // preservado como está — sem passar por `preservarAgenda`.
+      workout: metades.treino
+        ? preservarAgenda(current.workout as WorkoutData | null, data.workout)
+        : (current.workout as WorkoutData | null),
+      diet: metades.dieta ? data.diet : (current.diet as unknown),
+      // Mesma procedência do `/generate` — ver o comentário lá.
+      createdBy: metades.treino && metades.dieta ? null : (current.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (current.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -262,7 +391,10 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
-    await recusarSeTemTreinador(user._id);
+    // `importPlanFromText` também devolve as duas metades — mesma trava, e
+    // mesma correção do `/generate`: escreve só a metade livre.
+    const metades = await metadesEscreviveisPeloAluno(user._id);
+    recusarSeNadaParaEscrever(metades);
 
     // O mesmo gate do `/generate`: importar é a IA ESCREVENDO um plano novo, a
     // partir de um texto, e custa uma chamada de modelo igual à geração. Esta
@@ -287,11 +419,19 @@ plansRouter.post(
     const plan = await Plan.create({
       user: user._id,
       version: (last?.version ?? 0) + 1,
-      ...data,
+      summary: data.summary,
       // Pelo mesmo motivo do `/generate`: quem é Pro reimporta por cima de um
       // plano existente. Como o casamento é por nome exato de sessão, um texto
       // de verdade diferente não herda nada — só o reimport do mesmo plano.
-      workout: preservarAgenda(last?.workout as WorkoutData | null, data.workout),
+      // Se o treino é do treinador, o importado é descartado e o corrente
+      // preservado, sem passar por `preservarAgenda`.
+      workout: metades.treino
+        ? preservarAgenda(last?.workout as WorkoutData | null, data.workout)
+        : (last?.workout ?? null),
+      diet: metades.dieta ? data.diet : (last?.diet ?? null),
+      // Mesma procedência do `/generate` — ver o comentário lá.
+      createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -315,6 +455,8 @@ plansRouter.put(
     // Só quando a edição TOCA no treino: mexer na dieta continua livre para
     // quem tem treinador e não tem nutricionista.
     if (body.workout !== undefined) await recusarSeTemTreinador(req.user!._id);
+    // E vice-versa: a trava é sobre comida, não sobre o plano inteiro.
+    if (body.diet !== undefined) await recusarSeTemNutricionista(req.user!._id);
 
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
@@ -390,6 +532,11 @@ plansRouter.get(
     const workout = (plan?.workout ?? null) as WorkoutData | null;
     const dia = montarPlanoDoDia(workout, alvo, sessaoCompleta);
 
+    // Um round-trip só para os dois papéis: esta é a Home, aberta em toda
+    // sessão, e duas chamadas de `temProfissional` em sequência seriam duas
+    // consultas onde uma resolve.
+    const papeis = await papeisAtivosDoAluno(req.user!._id);
+
     res.json({
       data: { ...dia, diaDaSemana: alvo, planVersion: plan?.version ?? null },
       meta: {
@@ -399,7 +546,10 @@ plansRouter.get(
         naoAgendadas: sessoesSemDia(workout),
         // Quem tem treinador não acrescenta sessão à prescrição. O app esconde o
         // botão com isto, em vez de deixar a pessoa digitar e tomar 409 no fim.
-        podeEditarPlano: !(await temProfissional(req.user!._id, "coach")),
+        podeEditarPlano: !papeis.coach,
+        // Mesma ideia, para a dieta: aditivo — o APK instalado ignora o campo,
+        // e o app novo desabilita o botão em vez de deixar a pessoa levar 409.
+        podeEditarDieta: !papeis.nutri,
         programacao: req.user!.get("settings.programacao") ?? null,
       },
     });
@@ -622,6 +772,7 @@ plansRouter.post(
   generateLimiter,
   asyncHandler(async (req, res) => {
     const user = req.user!;
+    await recusarSeTemNutricionista(user._id);
 
     const profileDoc = await Profile.findOne({ user: user._id });
     if (!profileDoc) {
@@ -677,6 +828,7 @@ plansRouter.delete(
   requireAuth,
   asyncHandler(async (req, res) => {
     await recusarSeForDoTreinador(req.user!._id);
+    await recusarSeForDoNutricionista(req.user!._id);
 
     const r = await Plan.deleteMany({ user: req.user!._id });
     // Sem isto a Home ficaria sem plano E sem pergunta: uma tela vazia.
@@ -696,6 +848,7 @@ plansRouter.delete(
       throw new HttpError(400, "Parte desconhecida. Use workout ou diet.");
     }
     if (parte === "workout") await recusarSeForDoTreinador(req.user!._id);
+    if (parte === "diet") await recusarSeForDoNutricionista(req.user!._id);
 
     const plan = await Plan.findOne({ user: req.user!._id }).sort({ version: -1 });
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");

@@ -7,29 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-// O envelope tematizado do Recharts.
-//
-// As decisões de desenho vêm de admin/src/components/Grafico.tsx, que já tinha
-// acertado: grade só na horizontal, eixo sem linha, área tênue sob a curva,
-// tooltip na superfície 2. O que NÃO veio de lá foi a cor — aquele arquivo
-// ainda está no lima antigo (#c8fa4b), e a marca é verde desde 11/09/2026.
-
-const VERDE = "#3bcc06";
-
-const EIXO = { stroke: "var(--texto-3)", fontSize: 11 };
-const GRADE = { stroke: "var(--line)", strokeDasharray: "0" };
-const TOOLTIP = {
-  contentStyle: {
-    background: "var(--surface-2)",
-    border: "1px solid var(--line-forte)",
-    borderRadius: 10,
-    color: "var(--texto)",
-    fontSize: 13,
-  },
-  labelStyle: { color: "var(--texto-2)", marginBottom: 4 },
-  cursor: { fill: "rgba(59, 204, 6, 0.06)" },
-};
+import { diaEMes, EIXO, GRADE, TOOLTIP, VERDE } from "./grafico-base";
 
 export interface PontoDoGrafico {
   /** yyyy-mm-dd ou ISO — o eixo mostra dia/mês. */
@@ -55,20 +33,6 @@ function PontoDeRecorde({ cx, cy, payload }: { cx?: number; cy?: number; payload
       <circle cx={cx} cy={cy} r={5} fill={VERDE} stroke="var(--bg)" strokeWidth={2} />
     </g>
   );
-}
-
-/**
- * Encurta a data do eixo: "2026-09-09" vira "09/09".
- *
- * Aceita `unknown` porque o recharts tipa os formatadores com o valor cru do
- * dado, que pode ser qualquer coisa — estreitar aqui é mais honesto que um
- * cast na chamada dizendo que sempre será string.
- */
-function diaEMes(v: unknown): string {
-  if (typeof v !== "string") return String(v ?? "");
-  const d = new Date(v.length <= 10 ? `${v}T12:00:00` : v);
-  if (Number.isNaN(d.getTime())) return v;
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function Grafico({

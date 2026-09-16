@@ -20,6 +20,7 @@ import {
   unidadeDaMetrica,
   valorDoRecorde,
   type Conquista,
+  type Escopo,
   type EsporteNaLista,
   type ExercicioNaLista,
   type GrupoTreinado,
@@ -32,16 +33,49 @@ import {
 import { Calendario } from "../components/Calendario";
 import { Conversa } from "../components/Conversa";
 import { Prescrever } from "../components/Prescrever";
+import { PrescreverDieta } from "../components/PrescreverDieta";
 
 // O Recharts sozinho pesa mais que o resto do painel inteiro. Separado, a
 // lista de alunos e a tela de convites não pagam por ele — e é a lista que
-// abre primeiro, todo dia.
+// abre primeiro, todo dia. `Nutricao` importa recharts direto (o gráfico de
+// kcal é escrito à mão ali, sem passar por `Grafico`), então ela entra na
+// mesma regra: importar estático desfaria o corte de bundle e o coach que
+// nunca abre a aba Nutrição pagaria pelo recharts mesmo assim.
 const Grafico = lazy(() => import("../components/Grafico").then((m) => ({ default: m.Grafico })));
 const RadarDeGrupos = lazy(() =>
   import("../components/Radar").then((m) => ({ default: m.RadarDeGrupos }))
 );
+const Nutricao = lazy(() =>
+  import("../components/Nutricao").then((m) => ({ default: m.Nutricao }))
+);
 
-type Aba = "evolucao" | "treino" | "conversa";
+type Aba = "evolucao" | "treino" | "nutricao" | "dieta" | "conversa";
+
+/**
+ * Que abas esta pessoa vê deste aluno.
+ *
+ * O papel do VÍNCULO decide, e não um seletor de modo: quem acompanha a mesma
+ * pessoa como treinador e como nutricionista tem dois vínculos, e a lista de
+ * alunos já sabe qual é qual. Pedir que ela lembre em que modo está seria
+ * inventar um estado para ela errar.
+ */
+function abasDoVinculo(papel: "coach" | "nutri", escopo: Escopo): [Aba, string][] {
+  const abas: [Aba, string][] = [];
+  if (papel === "coach") {
+    // As duas exigem `escopo.treinos`: a rota de prescrição também é guardada
+    // com `{ parte: "treinos" }` (api/src/routes/pro.ts) — sem isto, o coach
+    // via aba que dá 403 ao salvar.
+    if (escopo.treinos) {
+      abas.push(["evolucao", "Evolução"]);
+      abas.push(["treino", "Prescrever treino"]);
+    }
+  }
+  if (papel === "nutri") {
+    if (escopo.dieta) abas.push(["nutricao", "Nutrição"], ["dieta", "Prescrever dieta"]);
+  }
+  abas.push(["conversa", "Conversa"]);
+  return abas;
+}
 
 export function Aluno({
   token,
@@ -57,7 +91,20 @@ export function Aluno({
   const [perfil, setPerfil] = useState<PerfilDoAluno | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [aba, setAba] = useState<Aba>("evolucao");
+  // Não dá para inicializar com uma aba fixa: qual existe depende do perfil,
+  // que ainda não chegou. `null` até lá, e a aba de fato usada é derivada mais
+  // abaixo — a partir das abas disponíveis — para nunca ficar presa numa que
+  // sumiu (ex.: aluno fechou o escopo depois de a pessoa tê-la selecionado).
+  const [abaEscolhida, setAbaEscolhida] = useState<Aba | null>(null);
+  /**
+   * Qual vínculo alimenta a aba Conversa quando a dupla tem dois papéis.
+   *
+   * `ProMessage.link` aponta para UM vínculo específico: coach e nutri do
+   * mesmo aluno têm duas conversas separadas de verdade, não uma só vista de
+   * dois jeitos. Escolher uma sozinho escondia a outra sem a pessoa saber que
+   * ela existe — por isso isto é estado visível e trocável, não um cálculo.
+   */
+  const [linkDaConversa, setLinkDaConversa] = useState<string | null>(null);
 
   /**
    * A janela vale para a tela inteira.
@@ -92,7 +139,9 @@ export function Aluno({
       // Mantém o exercício escolhido quando ele existe na janela nova; trocar
       // de janela não pode trocar o assunto embaixo do coach.
       setExercicio((atual) => {
-        const lista = r.data.exercicios;
+        // Ausente quando ninguém abriu `escopo.treinos` para esta pessoa —
+        // ausência de dado, não lista vazia por falta de treino.
+        const lista = r.data.exercicios ?? [];
         return lista.find((e) => e.slug === atual?.slug) ?? lista[0] ?? null;
       });
       setErro(null);
@@ -230,7 +279,19 @@ export function Aluno({
     );
   }
 
-  const dias = perfil.constancia.lastCheckIn
+  const abas = perfil.vinculos.flatMap((v) => abasDoVinculo(v.papel, v.escopo));
+  // "Conversa" sai uma vez só, mesmo com dois vínculos.
+  const unicas = abas.filter(([id], i) => abas.findIndex(([x]) => x === id) === i);
+  // `unicas` nunca vem vazia: a ficha exige ao menos um vínculo ativo para
+  // existir, e `abasDoVinculo` sempre inclui "conversa" para qualquer papel.
+  const aba: Aba =
+    abaEscolhida && unicas.some(([id]) => id === abaEscolhida) ? abaEscolhida : unicas[0][0];
+  // Quando há só um vínculo, isto é sempre `perfil.vinculo.id` — o mesmo de
+  // antes. O `find` só muda de resultado quando a pessoa escolhe no seletor.
+  const conversaLinkId =
+    perfil.vinculos.find((v) => v.id === linkDaConversa)?.id ?? perfil.vinculo.id;
+
+  const dias = perfil.constancia?.lastCheckIn
     ? Math.floor((Date.now() - new Date(perfil.constancia.lastCheckIn).getTime()) / 86_400_000)
     : null;
 
@@ -302,41 +363,71 @@ export function Aluno({
         </div>
       </div>
 
-      <div className="cartoes" style={{ marginBottom: 16 }}>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.streak}</div>
-          <div className="rotulo">dias seguidos</div>
+      {/* Some inteiro, não mostra zero: ausência é "não me deixou ver", e
+          zero seria uma afirmação sobre a vida do aluno (mesma regra do
+          comentário em api/src/routes/pro.ts sobre omitir estes campos).
+          E some também sem a aba "Evolução": `escopo.treinos` nasce `true`
+          por padrão no vínculo de nutri, então ele recebe `constancia` na
+          ficha sem ter aba nenhuma que explique os três números — não é o
+          caso de inventar uma aba nova para o nutricionista, é o de não
+          mostrar o que ninguém aqui vai aprofundar. */}
+      {perfil.constancia && unicas.some(([id]) => id === "evolucao") && (
+        <div className="cartoes" style={{ marginBottom: 16 }}>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.streak}</div>
+            <div className="rotulo">dias seguidos</div>
+          </div>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.week}</div>
+            <div className="rotulo">treinos na semana</div>
+          </div>
+          <div className="cartao">
+            <div className="num">{perfil.constancia.total}</div>
+            <div className="rotulo">treinos no total</div>
+            {dias !== null && (
+              <div className="aviso">
+                {dias === 0 ? "treinou hoje" : `último há ${dias} ${dias === 1 ? "dia" : "dias"}`}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.week}</div>
-          <div className="rotulo">treinos na semana</div>
-        </div>
-        <div className="cartao">
-          <div className="num">{perfil.constancia.total}</div>
-          <div className="rotulo">treinos no total</div>
-          {dias !== null && (
-            <div className="aviso">
-              {dias === 0 ? "treinou hoje" : `último há ${dias} ${dias === 1 ? "dia" : "dias"}`}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       <nav className="nav" style={{ flexDirection: "row", marginBottom: 16 }}>
-        {(
-          [
-            ["evolucao", "Evolução"],
-            ["treino", "Prescrever treino"],
-            ["conversa", "Conversa"],
-          ] as const
-        ).map(([id, rotulo]) => (
-          <button key={id} aria-current={aba === id ? "page" : undefined} onClick={() => setAba(id)}>
+        {unicas.map(([id, rotulo]) => (
+          <button
+            key={id}
+            aria-current={aba === id ? "page" : undefined}
+            onClick={() => setAbaEscolhida(id)}
+          >
             {rotulo}
           </button>
         ))}
       </nav>
 
-      {aba === "evolucao" && (
+      {/* A janela fica FORA das abas — não dentro da guarda `evolucao` — porque
+          serve as duas telas que dependem dela (Evolução e Nutrição), e as duas
+          usam o mesmo período por definição (comentário em `janela`, acima).
+          Antes ela vivia dentro do bloco de Evolução, então trocar para
+          Nutrição trocava de aba sem trocar de período em silêncio: o
+          nutricionista via 90 dias de treino e, ao mudar de aba, continuava
+          vendo "90 dias" no cabeçalho mas sem chip nenhum aceso para provar
+          isso. Uma barra só, no mesmo lugar, para as duas. */}
+      {(aba === "evolucao" || aba === "nutricao") && (
+        <div className="chips" role="group" aria-label="Janela de tempo" style={{ marginBottom: 16 }}>
+          {JANELAS.map((d) => (
+            <button key={d} aria-pressed={janela === d} onClick={() => setJanela(d)}>
+              {rotuloDaJanela(d)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* `exercicios`/`calendario` estruturalmente vêm juntos com esta aba —
+          ela só existe quando `escopo.treinos` é verdadeiro, o mesmo `podeTreinos`
+          que faz o backend incluir os dois. A checagem aqui é defensiva: dá ao
+          TypeScript o mesmo fato, em vez de assumir undefined como array vazio. */}
+      {aba === "evolucao" && perfil.exercicios && perfil.calendario && (
         <>
           <nav className="nav" style={{ flexDirection: "row", marginBottom: 12 }}>
             {(
@@ -354,19 +445,6 @@ export function Aluno({
               </button>
             ))}
           </nav>
-
-          <div
-            className="chips"
-            role="group"
-            aria-label="Janela de tempo"
-            style={{ marginBottom: 16 }}
-          >
-            {JANELAS.map((d) => (
-              <button key={d} aria-pressed={janela === d} onClick={() => setJanela(d)}>
-                {rotuloDaJanela(d)}
-              </button>
-            ))}
-          </div>
 
           {modo === "cardio" && (
             <div className="duas-colunas">
@@ -561,11 +639,42 @@ export function Aluno({
         </div>
       )}
 
+      {aba === "nutricao" && (
+        <div className="painel">
+          <Suspense fallback={<p className="vazio">Carregando gráfico…</p>}>
+            <Nutricao token={token} alunoId={perfil.aluno.id} janela={janela} />
+          </Suspense>
+        </div>
+      )}
+
+      {aba === "dieta" && (
+        <div className="painel">
+          <PrescreverDieta token={token} alunoId={perfil.aluno.id} euId={euId} aoSalvar={carregar} />
+        </div>
+      )}
+
       {aba === "conversa" && (
         <div className="painel">
+          {/* Só aparece com dois vínculos — coach e nutri do mesmo aluno têm
+              conversas separadas de verdade, e escondida a escolha a pessoa
+              não teria como saber que a outra existe nem como chegar nela. */}
+          {perfil.vinculos.length > 1 && (
+            <div className="chips" role="group" aria-label="Qual conversa" style={{ marginBottom: 12 }}>
+              {perfil.vinculos.map((v) => (
+                <button
+                  key={v.id}
+                  aria-pressed={conversaLinkId === v.id}
+                  onClick={() => setLinkDaConversa(v.id)}
+                >
+                  {v.papel === "coach" ? "Treino" : "Nutrição"}
+                </button>
+              ))}
+            </div>
+          )}
           <Conversa
+            key={conversaLinkId}
             token={token}
-            linkId={perfil.vinculo.id}
+            linkId={conversaLinkId}
             euId={euId}
             nomeDoAluno={perfil.aluno.nome}
           />

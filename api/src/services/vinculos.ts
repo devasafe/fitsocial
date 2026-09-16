@@ -363,21 +363,128 @@ export async function temProfissional(
   return link != null;
 }
 
-/** O profissional pode ver esta parte da vida deste aluno? */
+/**
+ * Os papéis de profissional que acompanham esta pessoa agora, num round-trip
+ * só ao banco.
+ *
+ * Existe para rota que precisa perguntar por MAIS de um papel na mesma
+ * resposta — duas chamadas de `temProfissional` em sequência seriam duas
+ * consultas onde uma resolve, e `GET /plans/hoje` é a Home, aberta em toda
+ * sessão.
+ */
+export async function papeisAtivosDoAluno(
+  clientId: mongoose.Types.ObjectId
+): Promise<Record<PapelPro, boolean>> {
+  const links = await ProfessionalLink.find({ client: clientId, status: "ativo" }).select("papel");
+  const papeis = new Set(links.map((l) => l.papel));
+  return { coach: papeis.has("coach"), nutri: papeis.has("nutri") };
+}
+
+/**
+ * O papel DONO de cada parte do escopo. Treinos é do coach, dieta é do nutri
+ * — quem exerce aquele ofício é quem decide se abre. Medidas e fotos não têm
+ * dono: são sobre o corpo do aluno, não sobre o ofício de ninguém, e inventar
+ * um dono para elas seria decisão de produto sem base nenhuma.
+ *
+ * `Record` completo, e não `Partial`, de propósito: uma parte nova em
+ * `EscopoPedido` sem entrada aqui não pode cair em silêncio no ramo mais
+ * permissivo ("qualquer vínculo decide") — o compilador tem que cobrar essa
+ * decisão de quem acrescentar a parte, e não escolhê-la por omissão.
+ */
+const DONO_DA_PARTE: Record<keyof EscopoPedido, PapelPro | null> = {
+  treinos: "coach",
+  dieta: "nutri",
+  medidas: null,
+  fotos: null,
+};
+
+/** O papel dono de uma parte, ou `null` quando ela não tem um — ver `DONO_DA_PARTE`. */
+export function donoDaParte(parte: keyof EscopoPedido): PapelPro | null {
+  return DONO_DA_PARTE[parte];
+}
+
+/**
+ * Esta parte está aberta, entre os vínculos ativos de uma dupla?
+ *
+ * Quando a parte tem papel dono (treinos, dieta) e existe vínculo desse papel
+ * na dupla, é ELE quem decide sozinho — mesmo que outro vínculo da mesma
+ * dupla, de outro papel, diga o contrário. Só quando não existe vínculo do
+ * papel dono (ou a parte não tem dono, como medidas e fotos) é que qualquer
+ * vínculo decide, porque aí é a única leitura possível da vontade do aluno.
+ *
+ * Existe porque um `some`/`find` sobre TODOS os vínculos deixava o default
+ * errado vencer: o vínculo de nutri nasce com `treinos: true` (ele não é dono
+ * de treino, então o aluno nunca precisou decidir isso ali) e esse `true`
+ * reabria o treino mesmo depois do aluno desligar, explicitamente, no cartão
+ * do treinador. Dieta corre o mesmo risco, espelhado, com o vínculo de coach.
+ */
+export function parteAberta(
+  links: { papel: PapelPro; escopo?: EscopoPedido }[],
+  parte: keyof EscopoPedido
+): boolean {
+  const dono = donoDaParte(parte);
+  const doDono = dono ? links.filter((l) => l.papel === dono) : [];
+  const decisores = doDono.length > 0 ? doDono : links;
+  return decisores.some((l) => l.escopo?.[parte] === true);
+}
+
+/**
+ * Existe profissional que ESCREVE esta parte da vida deste aluno agora?
+ *
+ * Não confundir com `parteAberta`/`podeVer`, que respondem "quem pode VER" —
+ * pergunta diferente, e as duas não podem virar uma só. `parteAberta` tem um
+ * fallback de propósito: quando a dupla não tem vínculo do papel dono, ELA
+ * deixa QUALQUER vínculo da dupla decidir, porque é a única leitura possível
+ * de "o aluno abriu isto para este profissional enxergar" — é assim que um
+ * aluno deixa a nutricionista ver o treino, mesmo ela não sendo dona dele.
+ *
+ * Autoria de ESCRITA não tem esse fallback, e a prova de que a distinção é
+ * real (não cosmética) é concreta: todo vínculo nasce com `escopo.treinos:
+ * true` por default — inclusive o de NUTRI, que "não é dono de treino, então
+ * o aluno nunca precisou decidir isso ali" (ver o comentário de `parteAberta`).
+ * Um aluno com SÓ nutricionista, sem coach nenhum, tem exatamente esse vínculo
+ * com `treinos: true`. Se esta função usasse `parteAberta` (que cai no
+ * fallback "qualquer vínculo decide" quando a dupla não tem vínculo do papel
+ * dono), ela leria esse `true` e diria que existe alguém escrevendo o treino
+ * deste aluno — quando não existe treinador nenhum. Seria travar de novo,
+ * pior que o bug que esta função existe para consertar, o aluno que a
+ * correção do gate de IA existe para destravar.
+ *
+ * Por isso aqui não há fallback: só vínculo do papel DONO da parte conta, e
+ * `medidas`/`fotos` (sem dono — ver `donoDaParte`) nunca são "de profissional",
+ * porque ninguém escreve o corpo de alguém por procuração.
+ *
+ * Não precisa agrupar por profissional antes de perguntar: o índice único é
+ * `{professional, client, papel}`, então "vínculos ativos do aluno com o
+ * papel dono" já tem no máximo um documento POR profissional — o `.some()`
+ * abaixo já responde "existe ALGUM profissional daquele papel com a parte
+ * aberta", sem chance de misturar o escopo de um profissional com o de outro.
+ */
+export async function escritaEhDoProfissional(
+  clientId: mongoose.Types.ObjectId,
+  parte: keyof EscopoPedido
+): Promise<boolean> {
+  const dono = donoDaParte(parte);
+  if (!dono) return false;
+  const links = await ProfessionalLink.find({ client: clientId, papel: dono, status: "ativo" });
+  return links.some((l) => l.escopo?.[parte] === true);
+}
+
+/**
+ * O profissional pode ver esta parte da vida deste aluno?
+ *
+ * Busca os vínculos ativos da dupla e decide em memória com `parteAberta`, em
+ * vez de um `findOne` com o escopo dentro do filtro: a regra do papel dono não
+ * cabe num filtro de banco, porque ela precisa OLHAR o papel de um vínculo
+ * para decidir se outro vínculo (de outro papel) conta ou não. São no máximo
+ * dois documentos por dupla — um por papel — então o custo é irrelevante.
+ */
 export async function podeVer(
   clientId: mongoose.Types.ObjectId,
   professionalId: mongoose.Types.ObjectId,
-  parte: "treinos" | "dieta" | "medidas" | "fotos"
+  parte: keyof EscopoPedido
 ): Promise<boolean> {
   if (clientId.equals(professionalId)) return false;
-  // Pergunta ao banco por um vínculo que ABRA esta parte, em vez de pegar um
-  // vínculo qualquer e olhar o escopo depois: com dois vínculos ativos, o
-  // "qualquer" podia ser justo o que não abriu.
-  const link = await ProfessionalLink.findOne({
-    client: clientId,
-    professional: professionalId,
-    status: "ativo",
-    [`escopo.${parte}`]: true,
-  });
-  return link != null;
+  const links = await vinculosAtivos(clientId, professionalId);
+  return parteAberta(links, parte);
 }

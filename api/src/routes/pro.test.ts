@@ -8,10 +8,60 @@ import { Activity } from "../models/Activity.js";
 import { ProfessionalLink } from "../models/ProfessionalLink.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
 import { Plan } from "../models/Plan.js";
+import { Profile } from "../models/Profile.js";
+import { setAIProvider } from "../services/ai/index.js";
+import type { AIProvider, GenerateOptions } from "../services/ai/provider.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
 const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
+
+// Plano completo (as duas metades) que a IA "gera" nos testes da Tarefa 11b —
+// Defeito 2 escreve só a metade livre do aluno, e para isso a IA precisa
+// devolver algo com as duas, como `planDataSchema` exige.
+const PLANO_GERADO_PELA_IA = JSON.stringify({
+  summary: "Plano gerado pela IA",
+  workout: {
+    split: "Full body IA",
+    daysPerWeek: 3,
+    sessions: [
+      { day: "A", focus: "Geral", exercises: [{ name: "Leg press", sets: 3, reps: "10", restSeconds: 60, notes: "" }] },
+    ],
+  },
+  diet: {
+    dailyCalories: 2100,
+    macros: { proteinG: 160, carbsG: 210, fatG: 65 },
+    meals: [{ name: "Almoço", timeHint: "12:00", items: [{ food: "Frango", quantity: "150g" }] }],
+    notes: "",
+  },
+  disclaimer: "Aviso.",
+});
+
+/** Dublê de IA — só os testes da Tarefa 11b (Defeito 2) chamam a IA aqui. */
+class EspiaoDeProvider implements AIProvider {
+  readonly name = "espiao";
+  readonly aceitaImagem = false;
+  async generate(_params: GenerateOptions): Promise<string> {
+    return PLANO_GERADO_PELA_IA;
+  }
+}
+
+/** Ficha mínima válida — `/plans/generate` e `/plans/adjust` exigem uma. */
+async function perfilValido(userId: string) {
+  await Profile.create({
+    user: new mongoose.Types.ObjectId(userId),
+    goal: "ganhar_massa",
+    sex: "masculino",
+    age: 30,
+    heightCm: 180,
+    weightKg: 80,
+    experienceLevel: "intermediario",
+    daysPerWeek: 4,
+    sessionMinutes: 60,
+    dietaryRestrictions: [],
+    injuriesConditions: [],
+  });
+}
 
 let n = 0;
 async function registrar(): Promise<{ token: string; id: string }> {
@@ -34,8 +84,10 @@ async function registrarProfissional(papel: "coach" | "nutri" = "coach", limite 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
+  setAIProvider(new EspiaoDeProvider());
 });
 afterAll(async () => {
+  setAIProvider(null);
   await mongoose.disconnect();
   await mongod.stop();
 });
@@ -46,6 +98,7 @@ beforeEach(async () => {
     ProfessionalLink.deleteMany({}),
     ProfessionalInvite.deleteMany({}),
     Plan.deleteMany({}),
+    Profile.deleteMany({}),
   ]);
 });
 
@@ -55,8 +108,13 @@ async function convite(token: string, papel: "coach" | "nutri" = "coach", usos =
   return r.body.data.code as string;
 }
 
-async function vincular(coachToken: string, alunoToken: string, escopo = {}) {
-  const code = await convite(coachToken);
+async function vincular(
+  proToken: string,
+  alunoToken: string,
+  escopo = {},
+  papel: "coach" | "nutri" = "coach"
+) {
+  const code = await convite(proToken, papel);
   const r = await request(app)
     .post(`/pro/convites/${code}/aceitar`)
     .set(auth(alunoToken))
@@ -261,7 +319,7 @@ describe("o perfil do aluno", () => {
     expect(r.status).toBe(404);
   });
 
-  it("aluno que fechou os treinos dá 403 — diferente de não ter treinado", async () => {
+  it("aluno que fechou os treinos: a ficha abre, mas o treino não vem", async () => {
     const coach = await registrarProfissional();
     const aluno = await registrar();
     const linkId = await vincular(coach.token, aluno.token);
@@ -270,8 +328,17 @@ describe("o perfil do aluno", () => {
       .set(auth(aluno.token))
       .send({ treinos: false });
 
-    const r = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(coach.token));
-    expect(r.status).toBe(403);
+    const r = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(coach.token)).expect(200);
+
+    // O que o escopo protege continua protegido — e é isto que o teste guarda.
+    expect(r.body.data.exercicios).toBeUndefined();
+    expect(r.body.data.calendario).toBeUndefined();
+    expect(r.body.data.constancia).toBeUndefined();
+
+    // O que a ficha passa a dar é só identidade e vínculo: o coach já via o
+    // nome na lista de alunos, e clicar nele dava 403 — um beco sem saída.
+    expect(r.body.data.aluno.nome).toBeTruthy();
+    expect(r.body.data.vinculo.papel).toBe("coach");
   });
 
   it("depois de encerrado, o perfil fecha", async () => {
@@ -962,6 +1029,12 @@ describe("o coach vê o mesmo que o aluno", () => {
 
     const perfil = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(p.token));
     expect(perfil.status).toBe(200);
+    // A pergunta do bloco de treino é sobre a DUPLA, não sobre qual dos dois
+    // vínculos calhou de vir primeiro: o vínculo de nutri (sem treinos) não
+    // pode apagar o bloco de treino de quem também é coach da mesma pessoa.
+    expect(perfil.body.data.exercicios).toBeDefined();
+    expect(perfil.body.data.calendario).toBeDefined();
+    expect(perfil.body.data.constancia).toBeDefined();
 
     const grupos = await request(app).get(`/pro/alunos/${aluno.id}/grupos`).set(auth(p.token));
     expect(grupos.status).toBe(200);
@@ -1033,15 +1106,18 @@ describe("o coach vê o mesmo que o aluno", () => {
     expect(curvaDoCoach.body.meta.menorEhMelhor).toBe(true);
   });
 
-  it("aluno que fechou os treinos fecha tudo junto, não só o perfil", async () => {
+  it("aluno que fechou os treinos fecha as rotas de dado — menos a ficha, que abre sem o treino", async () => {
     const { coach, aluno, linkId } = await comTreinos();
     await request(app)
       .patch(`/pro/acompanhamentos/${linkId}`)
       .set(auth(aluno.token))
       .send({ treinos: false });
 
+    // A ficha (`/pro/alunos/:id`) NÃO entra nesta lista de propósito: ela pede
+    // só vínculo, não escopo, e monta a resposta por bloco — coberto pelo
+    // teste "a ficha abre, mas o treino não vem". As rotas abaixo continuam
+    // atrás do escopo de `treinos` porque servem dado de treino puro.
     for (const rota of [
-      `/pro/alunos/${aluno.id}`,
       `/pro/alunos/${aluno.id}/grupos`,
       `/pro/alunos/${aluno.id}/conquistas`,
       `/pro/alunos/${aluno.id}/exercicios/supino_reto`,
@@ -1124,17 +1200,30 @@ describe("quem tem treinador não recebe treino da IA", () => {
     expect(conversa.body.data[0].texto).toContain("Semana de adaptação");
   });
 
-  it("a IA não gera nem reajusta o plano de quem tem treinador", async () => {
+  it("a IA escreve só a dieta de quem tem treinador — o treino segue sendo o do coach (Tarefa 11b, Defeito 2)", async () => {
+    // Até a Tarefa 11b, `/plans/generate` e `/plans/adjust` recusavam a
+    // requisição INTEIRA por causa do treino travado — mesmo a dieta, que
+    // ninguém aqui travou, ficando de fora. A correção escreve só a metade
+    // livre: a dieta é gerada, e o treino do coach não é tocado.
     const coach = await registrarProfissional();
     const aluno = await registrar();
+    await User.updateOne({ _id: aluno.id }, { $set: { tier: "premium", premiumSource: "admin" } });
+    await perfilValido(aluno.id);
     await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
 
-    for (const rota of ["/plans/generate", "/plans/adjust"]) {
-      const r = await request(app).post(rota).set(auth(aluno.token));
-      // 409, e não 402: não é falta de plano pago, é que o treino tem dono.
-      expect(r.status).toBe(409);
-      expect(r.body.error).toContain("treinador");
-    }
+    const g = await request(app).post("/plans/generate").set(auth(aluno.token)).send({});
+    expect(g.status).toBe(201);
+    expect(g.body.plan.diet.dailyCalories).toBeGreaterThan(0);
+    let atual = await Plan.findOne({ user: new mongoose.Types.ObjectId(aluno.id) }).sort({ version: -1 });
+    expect((atual!.workout as typeof treino.workout).split).toBe(treino.workout.split);
+
+    const a = await request(app).post("/plans/adjust").set(auth(aluno.token)).send({});
+    expect(a.status).toBe(201);
+    atual = await Plan.findOne({ user: new mongoose.Types.ObjectId(aluno.id) }).sort({ version: -1 });
+    // O treino continua o do coach depois das duas chamadas — nenhuma delas
+    // o tocou, mesmo reescrevendo a dieta duas vezes.
+    expect((atual!.workout as typeof treino.workout).split).toBe(treino.workout.split);
   });
 
   it("encerrado o acompanhamento, a IA volta a poder gerar", async () => {
@@ -1150,17 +1239,19 @@ describe("quem tem treinador não recebe treino da IA", () => {
     expect(r.body.error ?? "").not.toContain("treinador");
   });
 
-  it("nenhuma porta reescreve o treino do treinador pelas costas dele", async () => {
+  it("nenhuma porta que reescreve o treino INTEIRO passa por cima do treinador", async () => {
     const coach = await registrarProfissional();
     const aluno = await registrar();
     await vincular(coach.token, aluno.token);
     await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
 
-    // Gerar e reajustar já estavam fechados; estas quatro chegavam ao mesmo
-    // lugar por caminhos diferentes — o treino assinado deixando de ser o que
-    // o profissional escreveu, sem que ele saiba.
+    // Estas três continuam fechadas por inteiro: são edição/remoção MANUAL do
+    // treino, e não geração por IA — não têm uma metade livre para escrever,
+    // porque a única coisa que pedem é justamente a que está travada.
+    // `/plans/import` NÃO entra aqui: desde a Tarefa 11b (Defeito 2) ela
+    // escreve a dieta e preserva o treino em vez de recusar tudo — é o
+    // próximo teste.
     const portas = [
-      request(app).post("/plans/import").set(auth(aluno.token)).send({ text: "Treino A: supino 4x10" }),
       request(app)
         .put("/plans/current")
         .set(auth(aluno.token))
@@ -1178,6 +1269,23 @@ describe("quem tem treinador não recebe treino da IA", () => {
     // E o treino continua de pé, com o autor certo.
     const plano = await request(app).get("/plans/current").set(auth(aluno.token));
     expect(plano.body.plan.autor.id).toBe(coach.id);
+  });
+
+  it("POST /plans/import escreve só a dieta de quem tem treinador — o treino segue sendo o do coach", async () => {
+    const coach = await registrarProfissional();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token);
+    await request(app).put(`/pro/alunos/${aluno.id}/treino`).set(auth(coach.token)).send(treino);
+
+    const r = await request(app)
+      .post("/plans/import")
+      .set(auth(aluno.token))
+      .send({ text: "Treino A: supino 4x10" });
+
+    expect(r.status).toBe(201);
+    expect(r.body.plan.diet.dailyCalories).toBeGreaterThan(0);
+    const atual = await Plan.findOne({ user: new mongoose.Types.ObjectId(aluno.id) }).sort({ version: -1 });
+    expect((atual!.workout as typeof treino.workout).split).toBe(treino.workout.split);
   });
 
   it("mexer só na dieta continua livre para quem tem treinador", async () => {

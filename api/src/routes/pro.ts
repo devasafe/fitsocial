@@ -8,14 +8,18 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
+import { FoodLog } from "../models/FoodLog.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
 import { ProfessionalLink, PAPEIS_PRO, type PapelPro } from "../models/ProfessionalLink.js";
 import { limiteDeAlunos } from "../services/entitlement.js";
 import {
   aceitarConvite,
   ajustarEscopo,
+  donoDaParte,
   encerrarVinculo,
+  type EscopoPedido,
   gerarConvite,
+  parteAberta,
   quantosAlunos,
   verConvite,
   vinculosAtivos,
@@ -32,12 +36,15 @@ import {
   serieDoExercicio,
 } from "../services/evolucao.js";
 import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
+import { evolucaoDeNutricao } from "../services/nutricao.js";
 import { computeStats } from "../services/adherence.js";
-import { Plan, workoutSchema, type WorkoutData } from "../models/Plan.js";
+import { Plan, workoutSchema, dietSchema, type WorkoutData } from "../models/Plan.js";
+import { autoriaDaDieta } from "../services/autoriaDaDieta.js";
 import { preservarAgenda } from "../services/agendaDeTreino.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
 import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } from "../utils/cursor.js";
+import { ultimosDias } from "../utils/dia.js";
 
 /**
  * O aviso que acompanha um treino escrito por gente, e não pela IA.
@@ -47,7 +54,17 @@ import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } 
  * profissional com nome, e a pessoa deve parar se sentir dor.
  */
 const DISCLAIMER_DO_COACH =
-  "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e fale com ele.";
+  "Treino prescrito pelo seu profissional. Em caso de dor ou desconforto, pare e procure quem escreveu.";
+
+/**
+ * O aviso que acompanha uma dieta escrita por gente, e não pela IA.
+ *
+ * Mesmo motivo do `DISCLAIMER_DO_COACH`, mas sobre comida: quem responde pela
+ * dieta é um profissional com nome, e a pessoa deve procurá-lo antes de mudar
+ * algo por conta própria.
+ */
+const DISCLAIMER_DO_NUTRI =
+  "Dieta prescrita pelo seu profissional. Antes de mudar algo por conta própria, procure quem escreveu.";
 
 export const proRouter = Router();
 proRouter.use(requireAuth);
@@ -197,7 +214,36 @@ proRouter.get(
       .sort({ aceitoEm: -1 })
       .populate("client", "name username avatarUrl");
 
+    // `treinos` é decidido pela DUPLA, não pela linha — e a linha aqui é só
+    // um vínculo. Com `?papel=nutri`, `links` só teria o vínculo de nutri;
+    // filtrar por ele reabriria o vazamento que esta tela existe para
+    // fechar (o vínculo de coach que fechou o treino ficaria fora da conta),
+    // só que agora escondido atrás do filtro. Por isso é uma consulta à
+    // parte, sem `papel` no filtro, agrupada por aluno.
+    const idsDosAlunos = [
+      ...new Set(links.map((l) => (l.client as unknown as { _id: mongoose.Types.ObjectId })._id.toString())),
+    ].map((id) => new mongoose.Types.ObjectId(id));
+    const vinculosAtivosPorAluno = new Map<string, { papel: PapelPro; escopo?: EscopoPedido }[]>();
+    if (idsDosAlunos.length > 0) {
+      const ativos = await ProfessionalLink.find({
+        professional: req.user!._id,
+        status: "ativo",
+        client: { $in: idsDosAlunos },
+      }).select("client papel escopo");
+      for (const v of ativos) {
+        const chave = v.client.toString();
+        const lista = vinculosAtivosPorAluno.get(chave) ?? [];
+        lista.push({ papel: v.papel as PapelPro, escopo: v.escopo });
+        vinculosAtivosPorAluno.set(chave, lista);
+      }
+    }
+
     const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // `FoodLog.date` é string yyyy-mm-dd (fuso America/Sao_Paulo na borda), não
+    // Date — a janela de "últimos 7 dias" para ela é por CHAVE de dia, e não
+    // por timestamp, senão a virada do dia em SP e em UTC desalinham. Mesma
+    // função que `evolucaoDeNutricao` usa para a mesma janela.
+    const seteDias = ultimosDias(7);
 
     const data = await Promise.all(
       links.map(async (link) => {
@@ -210,13 +256,40 @@ proRouter.get(
 
         // Só quem abriu os treinos entra com número; para os outros, a lista
         // mostra o vínculo e diz que não há acesso, em vez de mentir zero.
-        const podeTreinos = link.escopo?.treinos === true;
+        const vinculosDaDupla = vinculosAtivosPorAluno.get(cliente._id.toString()) ?? [];
+        const podeTreinos = parteAberta(vinculosDaDupla, "treinos");
         const [ultimo, naSemana] = podeTreinos
           ? await Promise.all([
               Activity.findOne({ user: cliente._id }).sort({ startedAt: -1 }).select("startedAt"),
               Activity.countDocuments({ user: cliente._id, startedAt: { $gte: semanaAtras } }),
             ])
           : [null, 0];
+
+        // Irmão do bloco de treino, só que para o nutricionista: o sinal dele
+        // não é "sumiu do treino", é "parou de registrar comida". Só a LINHA
+        // de nutri ganha o bloco — quem é dono da parte é o escopo da DUPLA
+        // (`parteAberta`), não o `link.escopo` desta linha isolada.
+        let nutricao:
+          | { ultimoRegistroEm: string | null; diasComRegistroNaSemana: number }
+          | null
+          | undefined;
+        if (link.papel === "nutri") {
+          const podeDieta = parteAberta(vinculosDaDupla, "dieta");
+          if (podeDieta) {
+            const [ultimoLog, diasComRegistro] = await Promise.all([
+              FoodLog.findOne({ user: cliente._id }).sort({ date: -1 }).select("date"),
+              // Dias DISTINTOS, não documentos: quem registra quatro refeições
+              // por dia não pode aparecer com "28 na semana".
+              FoodLog.distinct("date", { user: cliente._id, date: { $gte: seteDias[0] } }),
+            ]);
+            nutricao = {
+              ultimoRegistroEm: ultimoLog?.date ?? null,
+              diasComRegistroNaSemana: diasComRegistro.length,
+            };
+          } else {
+            nutricao = null;
+          }
+        }
 
         return {
           id: link._id.toString(),
@@ -231,6 +304,7 @@ proRouter.get(
             avatarUrl: cliente.avatarUrl ?? "",
           },
           treinos: podeTreinos ? { ultimoEm: ultimo?.startedAt ?? null, naSemana } : null,
+          ...(link.papel === "nutri" ? { nutricao } : {}),
         };
       })
     );
@@ -263,52 +337,65 @@ const janelaDoAluno = z.preprocess(
 );
 
 /**
- * O aluno é meu, e ele abriu os treinos?
+ * O aluno é meu, e ele abriu esta parte da vida dele para mim?
  *
- * Estava repetido em cada rota do perfil; com quatro cópias, é questão de tempo
- * até uma delas esquecer a checagem de escopo — e aí um profissional veria o
- * que o aluno fechou.
+ * Sem `parte`, a pergunta é só "o aluno é meu": é o caso da ficha, que precisa
+ * abrir para qualquer profissional do aluno e mostrar o que o escopo permitir.
+ * Com `parte`, exige que a DUPLA (não só o vínculo escolhido) tenha aquela
+ * parte aberta — ver `parteAberta`.
+ *
+ * A escolha entre vínculos continua sendo a de antes, e pelo mesmo motivo: quem
+ * acompanha a mesma pessoa como treinador E como nutricionista tem dois
+ * vínculos ativos, com escopos diferentes. Pegar "um deles" negava acesso a
+ * quem tinha, de forma intermitente — o pior jeito de um bug de permissão
+ * aparecer. Com `parte`, preferimos o vínculo do papel dono: é o dele que
+ * `parteAberta` de fato avalia.
  */
-async function alunoComTreinosAbertos(
+async function alunoDoProfissional(
   req: { user?: { _id: mongoose.Types.ObjectId }; params: Record<string, string> },
   id: string,
-  /** Papel PREFERIDO, não filtro: se não houver vínculo dele, devolve o que
-   *  houver, para o erro continuar dizendo a verdade a quem é nutri do aluno. */
-  preferido?: PapelPro
+  opts: { parte?: "treinos" | "dieta"; preferido?: PapelPro } = {}
 ) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(404, "Aluno não encontrado.");
 
+  const { parte, preferido } = opts;
   const clientId = new mongoose.Types.ObjectId(id);
-  // Uma consulta só, e a escolha feita aqui: quem acompanha a mesma pessoa como
-  // treinador E como nutricionista tem dois vínculos ativos, com escopos
-  // diferentes. Pegar "um deles" negava acesso a quem tinha, de forma
-  // intermitente — o pior jeito de um bug de permissão aparecer.
-  const links = await vinculosAtivos(clientId, req.user!._id);
-  const abre = (l: (typeof links)[number]) => l.escopo?.treinos === true;
+  // Ordenado por aceite, do mais antigo para o mais novo: `vinculosAtivos` não
+  // ordena, e sem isto o `links[0]` do fallback abaixo seguia a ordem natural
+  // do Mongo — arbitrária, e por isso o `vinculo` singular da ficha podia
+  // sair de qualquer um dos dois papéis de quem acompanha em dobro.
+  const links = (await vinculosAtivos(clientId, req.user!._id)).sort(
+    (a, b) => a.aceitoEm.getTime() - b.aceitoEm.getTime()
+  );
+
   const link =
-    links.find((l) => l.papel === preferido && abre(l)) ??
-    links.find(abre) ??
+    links.find((l) => l.papel === (parte ? donoDaParte(parte) : preferido)) ??
     links.find((l) => l.papel === preferido) ??
     links[0];
 
   if (!link) throw new HttpError(404, "Este não é seu aluno.");
-  if (!abre(link)) throw new HttpError(403, "Este aluno não abriu os treinos para você.");
-  return { link, clientId };
+  if (parte && !parteAberta(links, parte)) {
+    const oQue = parte === "dieta" ? "a dieta" : "os treinos";
+    throw new HttpError(403, `Este aluno não abriu ${oQue} para você.`);
+  }
+  return { link, links, clientId };
 }
 
 /**
  * O aluno por dentro: o que ele autorizou, e nada além.
  *
- * A rota devolve 403 quando o escopo de treinos está fechado, em vez de
- * devolver a página vazia — a diferença entre "não treinou" e "não me deixou
- * ver" é exatamente o que o profissional precisa saber.
+ * Abre para qualquer profissional vinculado ao aluno — mesmo sem nenhum
+ * escopo aberto, ele precisa ver quem é a pessoa. Cada bloco (treinos, por
+ * ora) só vem quando o vínculo escolhido abriu aquele escopo; fechado, o
+ * campo fica AUSENTE, e não vazio — a diferença entre "não treinou" e "não me
+ * deixou ver" é exatamente o que o profissional precisa saber.
  */
 proRouter.get(
   "/alunos/:id",
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { link, links, clientId } = await alunoDoProfissional(req, String(req.params.id));
 
     const aluno = await User.findById(clientId).select("name username avatarUrl bio");
     if (!aluno) throw new HttpError(404, "Aluno não encontrado.");
@@ -320,11 +407,23 @@ proRouter.get(
     // Seguir a janela dava ao coach uma tira de 13 semanas contra o ano inteiro
     // que o aluno vê — e, com a janela em "tudo", um `Math.min(0, 365)` que
     // pedia ZERO dias: calendário vazio justo em quem tem mais histórico.
-    const [exercicios, calendario, datas] = await Promise.all([
-      exerciciosDoUsuario(clientId, dias),
-      calendarioDoUsuario(clientId, 365),
-      Activity.find({ user: clientId }).select("startedAt").sort({ startedAt: -1 }).limit(400),
-    ]);
+    //
+    // Pergunta é sobre a DUPLA, não sobre o `link` singular escolhido acima
+    // (que, sem `parte`, é só o vínculo mais antigo): quem é coach e nutri do
+    // mesmo aluno tem dois vínculos, e o de coach pode abrir treinos mesmo
+    // que o mais antigo dos dois seja o de nutri com treinos fechado. Checar
+    // só `link.escopo` escondia o treino de quem tinha acesso de verdade.
+    // `parteAberta` também cobre o caminho oposto: o de coach FECHADO vence o
+    // de nutri aberto por default, porque treino é do coach decidir.
+    const podeTreinos = parteAberta(links, "treinos");
+
+    const [exercicios, calendario, datas] = podeTreinos
+      ? await Promise.all([
+          exerciciosDoUsuario(clientId, dias),
+          calendarioDoUsuario(clientId, 365),
+          Activity.find({ user: clientId }).select("startedAt").sort({ startedAt: -1 }).limit(400),
+        ])
+      : [undefined, undefined, undefined];
 
     res.json({
       data: {
@@ -336,11 +435,25 @@ proRouter.get(
           bio: aluno.bio ?? "",
         },
         vinculo: { id: link._id.toString(), papel: link.papel, escopo: link.escopo, desde: link.aceitoEm },
-        // A mesma conta de sequência que o aluno vê na Home dele: os dois lados
-        // precisam ver o mesmo número, senão a conversa começa com discordância.
-        constancia: computeStats(datas.map((a) => ({ date: a.startedAt }))),
-        exercicios,
-        calendario,
+        // Todos os vínculos ativos desta dupla. `vinculo` continua sendo um
+        // deles, para não quebrar o painel que já está no ar; `vinculos` é o
+        // que permite a quem é coach E nutri do mesmo aluno ver as abas dos
+        // dois papéis.
+        vinculos: links.map((l) => ({
+          id: l._id.toString(),
+          papel: l.papel,
+          escopo: l.escopo,
+          desde: l.aceitoEm,
+        })),
+        // Ausentes quando o escopo não abre: ausência é "não me deixou ver", e
+        // zero seria uma afirmação sobre a vida do aluno.
+        ...(podeTreinos
+          ? {
+              constancia: computeStats(datas!.map((a) => ({ date: a.startedAt }))),
+              exercicios,
+              calendario,
+            }
+          : {}),
       },
       meta: { dias },
     });
@@ -359,7 +472,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const metrica = z.enum(METRICAS).default("carga_max").parse(req.query.metrica);
@@ -384,7 +497,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const esportes = await cardioDoUsuario(clientId, dias);
@@ -398,7 +511,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const dias = janelaDoAluno.parse(req.query.dias);
     const metrica = z.enum(METRICAS_CARDIO).default("pace").parse(req.query.metrica);
@@ -424,11 +537,97 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
     void link;
 
     const dias = janelaDoAluno.parse(req.query.dias);
     res.json({ data: await gruposDoUsuario(clientId, dias), meta: { dias } });
+  })
+);
+
+/**
+ * A aderência à dieta do aluno, ao longo do tempo.
+ *
+ * Mesma função que responde ao próprio dono em `/nutrition/evolucao` — o
+ * profissional vê o mesmo número que o aluno vê, e não uma segunda versão do
+ * cálculo que poderia discordar dele na frente dos dois.
+ *
+ * Sem gate de plano, como as demais rotas do painel: o profissional não paga a
+ * janela do aluno.
+ */
+proRouter.get(
+  "/alunos/:id/nutricao",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+    // `parteAberta` acima só confere se ALGUÉM da dupla abriu a dieta — inclui
+    // o coach com `escopo.dieta` ligado, para o aluno que não tem nutricionista.
+    // Sem nutri no vínculo, não existe quem decida por "qualquer vínculo": o
+    // dado é de acompanhamento nutricional, e só o nutricionista o lê.
+    if (link.papel !== "nutri") {
+      throw new HttpError(403, "Este é o acompanhamento nutricional do aluno; você não é o nutricionista dele.");
+    }
+
+    // `janelaDoAluno` aceita 0 como "tudo", mas `evolucaoDeNutricao` devolve UM
+    // ITEM POR DIA: com dias=0, a resposta viraria um corpo de milhares de
+    // itens para desenhar um gráfico que cabe numa tela. Aqui, 0 vira 365.
+    const pedidos = janelaDoAluno.parse(req.query.dias);
+    const dias = pedidos === 0 ? 365 : pedidos;
+
+    const data = await evolucaoDeNutricao(clientId, dias);
+    res.json({ data, meta: { dias } });
+  })
+);
+
+/**
+ * A dieta que está valendo, e de quem ela é.
+ *
+ * "De quem ela é" não é o `createdBy` da versão mais nova: esse campo é por
+ * DOCUMENTO, e `PUT /alunos/:id/treino` cria uma versão nova a cada
+ * prescrição de treino copiando a dieta corrente para ela, com o `createdBy`
+ * do treinador. `autoriaDaDieta` caminha pelo histórico até a versão em que a
+ * dieta corrente foi de fato escrita — ver `services/autoriaDaDieta.ts`.
+ */
+proRouter.get(
+  "/alunos/:id/dieta",
+  requirePro("coach", "nutri"),
+  leituraDoAluno,
+  asyncHandler(async (req, res) => {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+    // Mesma guarda de `GET /alunos/:id/nutricao`: sem nutri no vínculo, o
+    // treinador com `escopo.dieta` ligado não vira leitor da dieta por falta
+    // de concorrente — ver o comentário lá.
+    if (link.papel !== "nutri") {
+      throw new HttpError(403, "Este é o acompanhamento nutricional do aluno; você não é o nutricionista dele.");
+    }
+
+    const versoes = await Plan.find({ user: clientId })
+      .sort({ version: -1 })
+      .select("version diet createdBy createdAt")
+      .lean();
+
+    const atual = versoes[0] ?? null;
+    // `createdBy` null continua sendo "foi a IA, ou o próprio aluno" — é o que
+    // distingue uma prescrição de um plano auto-atribuído. O que muda é DE QUE
+    // VERSÃO ele vem: não necessariamente a mais nova.
+    const { createdBy, em } = autoriaDaDieta(versoes);
+
+    res.json({
+      data: {
+        diet: (atual?.diet as unknown) ?? null,
+        version: atual?.version ?? null,
+        createdBy,
+        em,
+      },
+      meta: {},
+    });
   })
 );
 
@@ -453,7 +652,7 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoComTreinosAbertos(req, String(req.params.id));
+    const { clientId } = await alunoDoProfissional(req, String(req.params.id), { parte: "treinos" });
 
     const { limit, cursor: bruto } = conquistasDoAlunoSchema.parse(req.query);
     const cursor = bruto ? decodeCursor(bruto) : null;
@@ -821,11 +1020,14 @@ proRouter.put(
   "/alunos/:id/treino",
   requirePro("coach"),
   asyncHandler(async (req, res) => {
-    const { link, clientId } = await alunoComTreinosAbertos(req, String(req.params.id), "coach");
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "treinos",
+      preferido: "coach",
+    });
     // Quem prescreve treino é o coach: o papel diz o que a pessoa faz, e não
-    // só em quem ela toca. O `"coach"` acima é o que garante que quem acompanha
-    // o mesmo aluno nos dois papéis caia no vínculo certo — e não leve um 403
-    // dizendo que ele não é o treinador de quem ele treina.
+    // só em quem ela toca. O `preferido: "coach"` acima é o que garante que
+    // quem acompanha o mesmo aluno nos dois papéis caia no vínculo certo — e
+    // não leve um 403 dizendo que ele não é o treinador de quem ele treina.
     if (link.papel !== "coach") throw new HttpError(403, "Só o treinador prescreve treino.");
 
     const { summary, workout, recado } = prescricaoSchema.parse(req.body);
@@ -849,6 +1051,16 @@ proRouter.put(
       workout: preservarAgenda(atual?.workout as WorkoutData | null, workout),
       // A dieta corrente é preservada: o plano tem duas metades independentes.
       diet: atual?.diet ?? null,
+      // O fallback (em vez de `DISCLAIMER_DO_COACH` direto) é de propósito, não
+      // descuido: `disclaimer` é UM CAMPO POR DOCUMENTO descrevendo DUAS
+      // METADES independentes. Se a dieta preservada acima foi prescrita por
+      // um nutricionista, o disclaimer da versão anterior é o dele — e
+      // sobrescrever sem condição apagaria o aviso da dieta (ex.: "procure seu
+      // nutricionista antes de mudar algo") por cima de uma dieta que não
+      // mudou nesta prescrição de treino. Mesmo problema, espelhado, na
+      // prescrição de dieta abaixo — ver o comentário lá. Raiz: `disclaimer`
+      // devia ser metadado POR METADE do plano, não do documento inteiro;
+      // registrado para tarefa própria, não para consertar aqui.
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
       createdBy: req.user!._id,
     });
@@ -869,6 +1081,110 @@ proRouter.put(
     void enviarPush(clientId, "mensagem_pro", {
       title: req.user!.name,
       body: "Atualizou o seu treino",
+      data: { tipo: "mensagem_pro", link: link._id.toString() },
+    });
+
+    res.status(201).json({
+      data: {
+        id: plan._id.toString(),
+        version: plan.version,
+        createdBy: req.user!._id.toString(),
+        mensagem: aviso._id.toString(),
+      },
+      meta: {},
+    });
+  })
+);
+
+const prescricaoDeDietaSchema = z.object({
+  summary: z.string().min(1).max(500),
+  diet: dietSchema,
+  /** O que o nutricionista quer dizer junto. Opcional: o aviso sai de qualquer jeito. */
+  recado: z.string().max(1000).optional(),
+});
+
+/** O aviso que o aluno recebe quando a dieta muda. Mesma forma do treino. */
+function mensagemDaDieta(
+  diet: { dailyCalories?: number; meals?: { name: string }[] },
+  summary: string,
+  recado?: string
+): string {
+  const forma = [
+    diet.dailyCalories ? `${diet.dailyCalories} kcal por dia` : "",
+    diet.meals?.length ? `${diet.meals.length} refeições` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const linhas = [forma ? `Atualizei sua dieta: ${forma}.` : "Atualizei sua dieta.", summary.trim()];
+  if (recado?.trim()) linhas.push(recado.trim());
+  return linhas.filter(Boolean).join("\n\n");
+}
+
+/**
+ * O nutricionista prescreve a dieta do aluno.
+ *
+ * Grava uma VERSÃO NOVA em vez de editar a atual, e aqui isso é requisito de
+ * outra feature: o progresso de nutrição resolve o alvo de cada dia pela versão
+ * do `Plan` ativa naquela data. Editar no lugar faria a meta de hoje ser
+ * aplicada retroativamente a dias que foram vividos com outra.
+ *
+ * Não toca no treino: ele é metade independente do plano, e prescrever comida
+ * não é motivo para apagar treino nem a agenda de dias que o aluno montou.
+ */
+proRouter.put(
+  "/alunos/:id/dieta",
+  requirePro("nutri"),
+  asyncHandler(async (req, res) => {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
+      parte: "dieta",
+      preferido: "nutri",
+    });
+    if (link.papel !== "nutri") throw new HttpError(403, "Só o nutricionista prescreve dieta.");
+
+    const { summary, diet, recado } = prescricaoDeDietaSchema.parse(req.body);
+
+    // Montado e cortado ANTES de gravar: `texto` tem teto de 2000 no modelo, e
+    // estourar a validação DEPOIS do plano existir faria o aluno receber dieta
+    // nova sem aviso nenhum.
+    const textoDoAviso = mensagemDaDieta(diet, summary, recado).slice(0, 2000);
+
+    const atual = await Plan.findOne({ user: clientId }).sort({ version: -1 });
+    const plan = await Plan.create({
+      user: clientId,
+      version: (atual?.version ?? 0) + 1,
+      summary,
+      workout: atual?.workout ?? null,
+      diet,
+      // Fallback de propósito, não descuido — mesmo problema do comentário
+      // espelhado em `PUT /alunos/:id/treino` (`disclaimer: atual?.disclaimer
+      // ?? DISCLAIMER_DO_COACH`, acima): `disclaimer` é UM CAMPO POR
+      // DOCUMENTO para DUAS METADES independentes. O `workout` preservado
+      // acima pode ter sido prescrito por um coach, e o disclaimer da versão
+      // anterior é dele (aviso de dor). Trocar sem condição por
+      // `DISCLAIMER_DO_NUTRI` apagaria esse aviso sobre um treino que não
+      // mudou nesta prescrição de dieta — pior que o bug que isto pareceria
+      // consertar (dieta nova ficar com o disclaimer da IA). Entre os dois
+      // erros, o que fica é o mais cauteloso: aviso redundante > aviso de
+      // segurança apagado. Raiz real: `disclaimer` devia ser metadado POR
+      // METADE do plano, não do documento inteiro — tarefa própria, não para
+      // consertar aqui (Tarefa 11c, item 2).
+      disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_NUTRI,
+      createdBy: req.user!._id,
+    });
+
+    const aviso = await ProMessage.create({
+      link: link._id,
+      autor: req.user!._id,
+      texto: textoDoAviso,
+      plan: plan._id,
+    });
+
+    // Push é best-effort e fica fora do caminho quente: uma falha da Expo não
+    // pode fazer uma dieta já gravada parecer que não foi.
+    void enviarPush(clientId, "mensagem_pro", {
+      title: req.user!.name,
+      body: "Atualizou a sua dieta",
       data: { tipo: "mensagem_pro", link: link._id.toString() },
     });
 

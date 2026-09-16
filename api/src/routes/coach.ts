@@ -12,6 +12,7 @@ import { chaveDoDia } from "../utils/dia.js";
 import { computeStats } from "../services/adherence.js";
 import { runCoachTurn, COACH_GREETING, type CoachContext } from "../services/ai/coach.js";
 import type { AIMessage } from "../services/ai/provider.js";
+import { temProfissional } from "../services/vinculos.js";
 
 export const coachRouter = Router();
 coachRouter.use(requireAuth);
@@ -102,8 +103,20 @@ coachRouter.post(
     let adjustPending = false;
     let dietAdjustPending = false;
     let premiumRequired = false;
+    let reply = turn.reply;
 
-    if (turn.action !== "none") {
+    // Quem tem nutricionista não recebe dieta da IA — nem pelo chat. A trava
+    // aqui é a mesma de `recusarSeTemNutricionista` em `routes/plans.ts`, mas o
+    // chat não pode responder com 409: é conversa, e quebrar com erro no meio
+    // dela seria pior do que simplesmente não ajustar. Por isso a resposta do
+    // coach segue normal, só que sem disparar o ajuste, e com uma frase a mais
+    // dizendo para falar com o profissional.
+    const dietaTravadaPeloNutri =
+      turn.action === "adjust_diet" && (await temProfissional(user._id, "nutri"));
+
+    if (dietaTravadaPeloNutri) {
+      reply = `${reply}\n\nQuem escreve a sua dieta é o seu nutricionista — fale com quem cuida dela pelo acompanhamento para ajustá-la.`;
+    } else if (turn.action !== "none") {
       // Reajustar exige ter a metade correspondente. Depois que treino e dieta
       // passaram a existir um sem o outro, "reajustar o plano" de quem só tem
       // dieta geraria um treino que ninguém pediu.
@@ -124,12 +137,12 @@ coachRouter.post(
     }
 
     // Persiste a resposta do coach.
-    await CoachMessage.create({ user: user._id, role: "assistant", content: turn.reply });
+    await CoachMessage.create({ user: user._id, role: "assistant", content: reply });
 
     // planAdjusted continua no corpo por compatibilidade: uma versão antiga do
     // app instalada no celular de alguém ainda lê esse campo.
     res.json({
-      reply: turn.reply,
+      reply,
       planAdjusted: false,
       adjustPending,
       dietAdjustPending,

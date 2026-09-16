@@ -108,6 +108,23 @@ describe("o profissional e os treinos do aluno", () => {
     expect(await Activity.countDocuments(filtro)).toBe(0);
   });
 
+  it("fechar treinos no vínculo de treinador tira a atividade do feed dele, mesmo com vínculo de nutri aberto", async () => {
+    // A mesma pessoa acompanha o aluno como coach E como nutri. O aluno
+    // desliga treinos no cartão do treinador; o vínculo de nutri nem foi
+    // tocado e carrega o default (`treinos: true`). Quem decide `treinos` é
+    // o vínculo de coach — e ele disse não.
+    const ambos = await pessoa({
+      pro: { coach: { ativo: true, origem: "manual" }, nutri: { ativo: true, origem: "manual" } },
+    });
+    const aluno = await pessoa();
+    await aceitarConvite(aluno, (await gerarConvite(ambos, "coach")).code, { treinos: false });
+    await aceitarConvite(aluno, (await gerarConvite(ambos, "nutri")).code, { dieta: true });
+
+    const treino = await treinoPrivado(aluno);
+
+    expect(await podeVerAtividade(treino, ambos._id)).toBe(false);
+  });
+
   it("encerrado o acompanhamento, o acesso acaba na hora", async () => {
     const { coach, aluno, link } = await dupla();
     const treino = await treinoPrivado(aluno);

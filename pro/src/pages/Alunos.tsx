@@ -8,13 +8,50 @@ function diasSemTreinar(ultimoEm: string | null): number | null {
 }
 
 /**
- * O sinal que a lista dá antes de o coach perguntar.
+ * Quantos dias desde o último registro de comida. Nulo quando nunca registrou.
+ *
+ * `ultimoRegistroEm` chega como `yyyy-mm-dd` — uma CHAVE de dia, não um
+ * instante como `treinos.ultimoEm`. Meio-dia evita a mesma armadilha de fuso
+ * que `comoData()` de `Calendario.tsx` já resolve para o calendário de treino:
+ * meia-noite fica perto demais da borda e um arredondamento joga a data para o
+ * dia vizinho. `Math.max(0, …)` cobre o caso do registro de hoje: se são 9h e
+ * o meio-dia âncora ainda não chegou, a subtração dá negativo sem ele.
+ */
+function diasSemRegistrar(ultimoRegistroEm: string | null): number | null {
+  if (!ultimoRegistroEm) return null;
+  const dias = Math.floor((Date.now() - new Date(`${ultimoRegistroEm}T12:00:00`).getTime()) / 86_400_000);
+  return Math.max(0, dias);
+}
+
+/** Dias sem contato, no sinal do papel: treino para o coach, comida para o nutri. */
+function diasSemContato(a: AlunoNaLista): number | null {
+  return a.papel === "nutri"
+    ? diasSemRegistrar(a.nutricao?.ultimoRegistroEm ?? null)
+    : diasSemTreinar(a.treinos?.ultimoEm ?? null);
+}
+
+/**
+ * O sinal que a lista dá antes do profissional perguntar.
  *
  * A ordem de leitura de uma lista de alunos não é alfabética — é "quem precisa
- * de mim hoje". Sete dias é o corte porque uma semana inteira sem treinar é o
- * ponto em que a pessoa deixou de ter um imprevisto e passou a estar sumindo.
+ * de mim hoje". Mas "precisar" não é o mesmo sinal para os dois papéis: o
+ * coach quer saber quem sumiu do treino, o nutricionista quer saber quem
+ * parou de registrar comida — por isso a função bifurca por `a.papel` em vez
+ * de olhar sempre `a.treinos`. Sete dias é o corte porque uma semana inteira
+ * sem contato é o ponto em que a pessoa deixou de ter um imprevisto e passou a
+ * estar sumindo — vale para as duas coisas.
  */
 function situacao(a: AlunoNaLista): { texto: string; classe: string; peso: number } {
+  if (a.papel === "nutri") {
+    if (!a.nutricao) return { texto: "sem acesso", classe: "neutro", peso: 1 };
+
+    const dias = diasSemRegistrar(a.nutricao.ultimoRegistroEm);
+    if (dias === null) return { texto: "nunca registrou", classe: "sumido", peso: 3 };
+    if (dias >= 7) return { texto: `${dias} dias sem registrar`, classe: "sumido", peso: 3 };
+    if (dias >= 4) return { texto: `${dias} dias sem registrar`, classe: "atencao", peso: 2 };
+    return { texto: `${a.nutricao.diasComRegistroNaSemana}x na semana`, classe: "ok", peso: 0 };
+  }
+
   if (!a.treinos) return { texto: "sem acesso", classe: "neutro", peso: 1 };
 
   const dias = diasSemTreinar(a.treinos.ultimoEm);
@@ -77,7 +114,7 @@ export function Alunos({ token, abrir }: { token: string; abrir: (alunoId: strin
     const pa = situacao(a).peso;
     const pb = situacao(b).peso;
     if (pa !== pb) return pb - pa;
-    return (diasSemTreinar(b.treinos?.ultimoEm ?? null) ?? 0) - (diasSemTreinar(a.treinos?.ultimoEm ?? null) ?? 0);
+    return (diasSemContato(b) ?? 0) - (diasSemContato(a) ?? 0);
   });
 
   const precisam = ordenada.filter((a) => situacao(a).peso >= 2).length;
