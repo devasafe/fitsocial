@@ -16,7 +16,7 @@ import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
 import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
-import { createActivity } from "../services/activities.js";
+import { createActivity, apagarAtividade } from "../services/activities.js";
 import { computeStrengthMetrics, musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
 import { movimentosDoCartao, totalDeMovimentos } from "../services/media/movimentosDoCartao.js";
@@ -454,12 +454,15 @@ activitiesRouter.patch(
   })
 );
 
+// Apaga de verdade: o post do compartilhamento (com curtidas e comentários) e
+// o recorde que só existia por causa deste treino vão junto — ver
+// `apagarAtividade` em services/activities.ts.
 activitiesRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const r = await Activity.deleteOne({ _id: req.params.id, user: req.user!._id });
-    if (!r.deletedCount) throw new HttpError(404, "Atividade não encontrada");
+    const apagou = await apagarAtividade(req.user!._id, req.params.id);
+    if (!apagou) throw new HttpError(404, "Atividade não encontrada");
     res.json({ data: { deleted: true } });
   })
 );

@@ -1,6 +1,8 @@
 import type mongoose from "mongoose";
 import { Activity, type ActivityCreateInput } from "../models/Activity.js";
 import { Post } from "../models/Post.js";
+import { Comment } from "../models/Comment.js";
+import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
 import { HttpError } from "../utils/httpError.js";
 import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
@@ -8,7 +10,7 @@ import { getSport } from "./sports.js";
 import { interpretarBlocos, normalizarWod } from "./crossfit.js";
 import { computeMetrics } from "./activityMetrics.js";
 import { preencherSlugs } from "./slug.js";
-import { detectPRs, type NewPR } from "./prEngine.js";
+import { detectPRs, recomputeUserPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
 import { impressaoDoTreino } from "./impressaoDoTreino.js";
 
@@ -215,4 +217,48 @@ export async function createActivity(
   }
 
   return { activity, post, newPRs, repetido: false };
+}
+
+/**
+ * Apaga de verdade um treino da pessoa — e o que só existe por causa dele.
+ *
+ * Antes disto, `DELETE /activities/:id` fazia só `Activity.deleteOne`: o post
+ * do compartilhamento sobrevivia apontando para um treino que não existe mais
+ * (mentira no feed dos outros), e o recorde que aquele treino tinha batido
+ * ficava para sempre no quadro de PRs, sem nenhum jeito de tirar.
+ *
+ * A ordem importa: primeiro os comentários e curtidas dos posts ligados ao
+ * treino, depois os posts, depois o treino, e só então `recomputeUserPRs` —
+ * que reconstrói os recordes do ZERO a partir do que restou. Reconstruir é
+ * mais simples que "desfazer" o recorde daquele treino especificamente, e não
+ * tem caso de borda (ex.: dois treinos empatados no mesmo recorde).
+ *
+ * Constância, streak, total, calendário e os gráficos de evolução não
+ * precisam de nada além disto: são calculados NA LEITURA a partir dos
+ * `Activity` que restaram, e se corrigem sozinhos assim que o treino some.
+ * Não acrescente um recontador para eles aqui.
+ *
+ * Devolve `false` sem apagar nada quando o treino não existe ou não é da
+ * pessoa — a rota transforma isso em 404 (nunca 403: confirmar que o treino
+ * existe para quem não é o dono vaza a existência dele).
+ */
+export async function apagarAtividade(
+  userId: mongoose.Types.ObjectId,
+  activityId: string
+): Promise<boolean> {
+  const atividade = await Activity.findOne({ _id: activityId, user: userId });
+  if (!atividade) return false;
+
+  const posts = await Post.find({ activity: atividade._id }).select("_id");
+  const postIds = posts.map((p) => p._id);
+  if (postIds.length > 0) {
+    await Comment.deleteMany({ post: { $in: postIds } });
+    await Like.deleteMany({ post: { $in: postIds } });
+    await Post.deleteMany({ _id: { $in: postIds } });
+  }
+
+  await atividade.deleteOne();
+  await recomputeUserPRs(userId);
+
+  return true;
 }
