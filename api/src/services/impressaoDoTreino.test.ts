@@ -50,4 +50,20 @@ describe("impressão digital do treino", () => {
     expect(semCampo).toBe(comCampoNull);
     expect(semCampo).toBe(comCampoUndefined);
   });
+
+  it("muda quando a ordem dos elementos do array muda", () => {
+    // Par do teste "não muda com a ordem das chaves": lá a ORDEM DE CHAVE de
+    // um objeto não importa, aqui a ORDEM DE ELEMENTO de um array importa —
+    // são regras opostas de propósito. A ordem dos exercícios de um treino é
+    // conteúdo (a pessoa fez Supino e depois Agachamento, não o contrário),
+    // não arrumação de dados. Se `normalizar` um dia passar a ordenar
+    // arrays como ordena chaves de objeto, dois treinos com os mesmos
+    // exercícios em ordem diferente virariam "o mesmo treino" e um dos dois
+    // seria engolido pela rede de duplicação.
+    const a = impressaoDoTreino({ kind: "strength", sportId: "musculacao", durationSec: 3600,
+      payload: { exercises: [{ name: "Supino" }, { name: "Agachamento" }] } });
+    const b = impressaoDoTreino({ kind: "strength", sportId: "musculacao", durationSec: 3600,
+      payload: { exercises: [{ name: "Agachamento" }, { name: "Supino" }] } });
+    expect(a).not.toBe(b);
+  });
 });

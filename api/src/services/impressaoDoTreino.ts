@@ -20,14 +20,21 @@ import { createHash } from "node:crypto";
 //
 // `durationSec` entra na impressão porque, para corrida e para aula, a
 // duração É o conteúdo do treino — tirá-la faria duas corridas diferentes
-// colidirem. Isso PRESSUPÕE que `durationSec` venha de um campo digitado
-// pela pessoa (é o que todas as telas de registro fazem hoje: minutos
-// digitados × 60, ou o texto de duração convertido), nunca de um cronômetro
-// em andamento — um reenvio do mesmo clique manda o mesmo número. Se algum
-// dia uma tela passar a mandar tempo decorrido de verdade (por exemplo, lido
-// de um cronômetro no momento do reenvio), essa premissa quebra e a
-// impressão pode divergir entre o envio original e o retry, em silêncio:
-// reavalie esta função antes de ligar essa tela à detecção de duplicação.
+// colidirem. As telas que MANDAM `durationSec` hoje o calculam a partir de
+// um campo digitado pela pessoa, não de um cronômetro em andamento (ex.:
+// app-android/src/screens/RegisterClassScreen.tsx:63,
+// `Math.round(minN * 60)` sobre os minutos digitados) — um reenvio do mesmo
+// clique manda o mesmo número. A corrida com GPS ao vivo
+// (app-android/src/screens/LiveTrackScreen.tsx) É um cronômetro em
+// andamento, mas ela não entra em conflito com essa premissa porque NÃO
+// manda `durationSec` nenhum: manda `distanceM` e o percurso (`points` com
+// carimbo de tempo), e é o servidor que deriva a duração dali, DEPOIS que
+// esta impressão já foi calculada (`durationSec = track.elapsedTimeSec ||
+// durationSec` em services/activities.ts:64). Se algum dia uma tela passar
+// a mandar `durationSec` lido de um cronômetro em vez de campo digitado,
+// essa premissa quebra e a impressão pode divergir entre o envio original e
+// o retry, em silêncio: reavalie esta função antes de ligar essa tela à
+// detecção de duplicação.
 
 /** Entrada crua de um treino, tal como o cliente manda. */
 export interface EntradaDoTreino {
