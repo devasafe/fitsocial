@@ -128,7 +128,22 @@ async function registrarNutri() {
   return p;
 }
 
-async function vincular(nutriToken: string, alunoToken: string, papel: "coach" | "nutri" = "nutri") {
+/** Espelho de `registrarNutri`, para os testes que provam o mesmo defeito do lado do treino. */
+async function registrarCoach() {
+  const p = await registrar();
+  await User.updateOne(
+    { _id: p.id },
+    { $set: { "pro.coach": { ativo: true, origem: "manual", limiteDeAlunos: 10 } } }
+  );
+  return p;
+}
+
+async function vincular(
+  nutriToken: string,
+  alunoToken: string,
+  papel: "coach" | "nutri" = "nutri",
+  escopo: Record<string, boolean> = {}
+) {
   const c = await request(app)
     .post("/pro/convites")
     .set(auth(nutriToken))
@@ -137,7 +152,7 @@ async function vincular(nutriToken: string, alunoToken: string, papel: "coach" |
   const r = await request(app)
     .post(`/pro/convites/${c.body.data.code}/aceitar`)
     .set(auth(alunoToken))
-    .send({});
+    .send(escopo);
   expect(r.status).toBe(201);
   return r.body.data.id as string;
 }
@@ -170,10 +185,23 @@ function criarPlano(user: mongoose.Types.ObjectId, partes: { workout?: unknown; 
 }
 
 describe("Quem tem nutricionista não recebe dieta da IA", () => {
+  // Defeito 1: a trava é pelo ESCOPO, não pela existência do vínculo. Um
+  // vínculo de nutri com `dieta: false` (o app instalado pré-marca exatamente
+  // isto em todo aceite, inclusive de convite de nutricionista) não torna o
+  // nutricionista dono da dieta — o dono continua sendo o aluno, e ele não
+  // pode ficar impedido de escrever algo que mais ninguém escreve.
+  it("aluno com nutricionista SEM escopo de dieta continua escrevendo a própria dieta", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: false });
+
+    await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(201);
+  });
+
   it("POST /plans/diet recusa com 409 e manda falar com o profissional", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
 
     const r = await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(409);
     expect(r.body.error).toMatch(/nutricionista/i);
@@ -183,7 +211,7 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
   it("PUT /plans/current com dieta recusa", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
     await criarPlano(aluno.id, { workout: TREINO_VALIDO });
 
     await request(app)
@@ -222,7 +250,7 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
     // então este teste protege os dois papéis de uma vez.
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    const linkId = await vincular(nutri.token, aluno.token);
+    const linkId = await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
 
     await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(409);
 
@@ -255,7 +283,7 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
   it("apagar a dieta é recusado quando ela foi prescrita", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
     await criarPlano(aluno.id, { diet: DIETA_VALIDA });
     await Plan.updateOne({ user: aluno.id }, { $set: { createdBy: nutri.id } });
 
@@ -265,7 +293,7 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
   it("DELETE /plans/current (tudo) é recusado quando a dieta foi prescrita", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
     await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
 
     await request(app).delete("/plans/current").set(auth(aluno.token)).expect(409);
@@ -290,73 +318,151 @@ describe("Quem tem nutricionista não recebe dieta da IA", () => {
   });
 });
 
-describe("as outras portas que escrevem a dieta inteira (generate/adjust/import)", () => {
+describe("Quem tem treinador não recebe treino da IA — pelo escopo, não pela existência (Defeito 1, espelhado)", () => {
+  // O mesmo defeito existe do lado do treino, só que latente: o convite
+  // pré-marca `treinos: true`, então o caminho feliz nunca pisa nele. Ele
+  // aparece assim que o aluno desliga os treinos no cartão do treinador — ou,
+  // como aqui, quando o teste escolhe o escopo explicitamente.
+  it("aluno com treinador SEM escopo de treinos continua escrevendo o próprio treino", async () => {
+    const coach = await registrarCoach();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: false });
+    // `PUT /plans/current` EDITA um plano existente — precisa de um para não
+    // cair no 404 "Nenhum plano para editar", que não tem nada a ver com a
+    // trava que este teste prova.
+    await criarPlano(aluno.id, { diet: DIETA_VALIDA });
+
+    await request(app)
+      .put("/plans/current")
+      .set(auth(aluno.token))
+      .send({ workout: TREINO_VALIDO })
+      .expect(200);
+  });
+
+  it("aluno com treinador COM escopo de treinos não escreve o próprio treino", async () => {
+    const coach = await registrarCoach();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: true });
+
+    const r = await request(app)
+      .put("/plans/current")
+      .set(auth(aluno.token))
+      .send({ workout: TREINO_VALIDO })
+      .expect(409);
+    expect(r.body.error).toMatch(/treinador/i);
+  });
+});
+
+describe("as outras portas que escrevem a dieta inteira (generate/adjust/import) — Defeito 2", () => {
   // `generatePlan`/`adjustPlan`/`importPlanFromText` devolvem as DUAS metades
   // do plano (`PlanData` inclui `diet`), e só o treino passa por
   // `preservarAgenda` depois do spread — a dieta entraria crua por cima da
   // prescrição do nutricionista, sem que a palavra "diet" apareça na rota.
-  // Aqui a decisão de produto é recusar por inteiro (mesma simetria de
-  // `/generate` já recusar por inteiro para quem tem treinador): quem tem só
-  // nutricionista perde a geração de treino por IA também, porque não existe
-  // hoje um jeito de preservar metade da autoria de um `Plan`.
   //
-  // O teste que importa aqui não é o status: é a dieta continuar sendo a do
-  // nutricionista (ou nada ter sido criado) DEPOIS da chamada — um teste que
-  // só olha 409 não pega alguém trocar a ordem das checagens e deixar o
-  // `Plan.create` rodar mesmo assim.
+  // Recusar a requisição INTEIRA por isso era grosseiro demais: também
+  // trancava quem só tem nutricionista e nunca gerou treino nenhum — a rota
+  // nunca chegava a rodar a IA, e a pessoa ficava presa na ficha, sem plano
+  // algum, porque a dieta (que ela nem pediu) tinha dono.
+  //
+  // A correção escreve só as metades que o aluno pode escrever: a dieta
+  // gerada é descartada e a corrente preservada quando ela é do
+  // nutricionista; o treino gerado é descartado e o corrente preservado
+  // quando ele é do treinador. Só quando AS DUAS são de profissional é que a
+  // requisição inteira é recusada — não sobra nada para escrever.
+  //
+  // O teste que importa aqui não é só o status: é a metade preservada
+  // continuar sendo, byte a byte, a que já existia — um teste que só olha o
+  // status não pega alguém trocar a ordem das checagens e deixar o
+  // `Plan.create` gravar o que a IA gerou por cima mesmo assim.
 
-  it("POST /plans/generate recusa por inteiro, e não cria plano nenhum", async () => {
+  it("aluno com só nutricionista gera o TREINO — o vínculo dela tem treinos:true por default, e isso não pode travar", async () => {
+    // A prova de que a checagem é por PAPEL DONO, e não por "qualquer vínculo
+    // decide": todo vínculo nasce com `escopo.treinos: true`, inclusive o de
+    // nutri — ela não é dona de treino, então o aluno nunca precisou decidir
+    // isso ali. Uma checagem que lesse esse `true` sem olhar o papel acharia
+    // que existe alguém escrevendo o treino deste aluno, e ele continuaria
+    // travado — o oposto do que esta correção existe para fazer.
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
+    espiao.proximaResposta = PLANO_GERADO;
 
-    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(409);
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
 
-    expect(await Plan.countDocuments({ user: aluno.id })).toBe(0);
-  });
-
-  it("POST /plans/generate recusa e não toca na dieta já prescrita", async () => {
-    const nutri = await registrarNutri();
-    const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
-    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
-
-    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(409);
-
+    const gerado = JSON.parse(PLANO_GERADO) as { workout: typeof TREINO_VALIDO };
+    expect(r.body.plan.workout.split).toBe(gerado.workout.split);
+    // Nenhuma dieta foi criada: não existia uma antes, e a que a IA gerou foi
+    // descartada.
     const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
-    expect(atual!.version).toBe(1);
-    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
-    expect((atual!.diet as typeof DIETA_VALIDA).dailyCalories).toBe(DIETA_VALIDA.dailyCalories);
+    expect(atual!.diet).toBeNull();
   });
 
-  it("POST /plans/adjust recusa e não toca na dieta já prescrita", async () => {
+  it("POST /plans/generate escreve só o treino, e a dieta já prescrita não é tocada — byte a byte", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
     await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+    espiao.proximaResposta = PLANO_GERADO;
 
-    await request(app).post("/plans/adjust").set(auth(aluno.token)).send({}).expect(409);
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
 
+    const gerado = JSON.parse(PLANO_GERADO) as { workout: typeof TREINO_VALIDO };
+    expect(r.body.plan.workout.split).toBe(gerado.workout.split);
     const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
-    expect(atual!.version).toBe(1);
-    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
+    expect(atual!.version).toBe(2);
+    // Byte a byte — não "tem valor parecido", e sim EXATAMENTE o que já
+    // existia. É esta comparação, e não um campo isolado, que garante que
+    // ninguém tocou no conteúdo da prescrição do nutricionista.
+    expect(JSON.stringify(atual!.diet)).toBe(JSON.stringify(DIETA_VALIDA));
   });
 
-  it("POST /plans/import recusa e não toca na dieta já prescrita", async () => {
+  it("POST /plans/adjust escreve só o treino, e a dieta já prescrita não é tocada", async () => {
     const nutri = await registrarNutri();
     const aluno = await registrar();
-    await vincular(nutri.token, aluno.token);
-    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
+    await criarPlano(aluno.id, { workout: TREINO_VALIDO, diet: DIETA_VALIDA, createdBy: nutri.id });
+    espiao.proximaResposta = PLANO_GERADO;
 
-    await request(app)
+    const r = await request(app).post("/plans/adjust").set(auth(aluno.token)).send({}).expect(201);
+
+    const gerado = JSON.parse(PLANO_GERADO) as { workout: typeof TREINO_VALIDO };
+    expect(r.body.plan.workout.split).toBe(gerado.workout.split);
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(JSON.stringify(atual!.diet)).toBe(JSON.stringify(DIETA_VALIDA));
+  });
+
+  it("POST /plans/import escreve só o treino, e a dieta já prescrita não é tocada", async () => {
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
+    await criarPlano(aluno.id, { diet: DIETA_VALIDA, createdBy: nutri.id });
+    espiao.proximaResposta = PLANO_GERADO;
+
+    const r = await request(app)
       .post("/plans/import")
       .set(auth(aluno.token))
       .send({ text: "Treino: A - Agachamento 3x10. B - Supino 3x10. Faça 3 vezes por semana." })
-      .expect(409);
+      .expect(201);
 
+    const gerado = JSON.parse(PLANO_GERADO) as { workout: typeof TREINO_VALIDO };
+    expect(r.body.plan.workout.split).toBe(gerado.workout.split);
     const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
-    expect(atual!.version).toBe(1);
-    expect(atual!.createdBy?.toString()).toBe(nutri.id.toString());
+    expect(JSON.stringify(atual!.diet)).toBe(JSON.stringify(DIETA_VALIDA));
+  });
+
+  it("aluno com treinador E nutricionista, os dois com escopo aberto, não gera plano nenhum", async () => {
+    const coach = await registrarCoach();
+    const nutri = await registrarNutri();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: true });
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true });
+
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(409);
+    // A mensagem explica QUAL profissional escreve O QUÊ — não é um 409 mudo.
+    expect(r.body.error).toMatch(/treinador/i);
+    expect(r.body.error).toMatch(/nutricionista/i);
+
+    expect(await Plan.countDocuments({ user: aluno.id })).toBe(0);
   });
 
   it("aluno sem nenhum profissional continua gerando plano pela IA nas três", async () => {
@@ -374,6 +480,26 @@ describe("as outras portas que escrevem a dieta inteira (generate/adjust/import)
       .set(auth(aluno.token))
       .send({ text: "Treino: A - Agachamento 3x10. B - Supino 3x10. Faça 3 vezes por semana." });
     expect(i.status).toBe(201);
+  });
+
+  it("preservarAgenda continua valendo quando o treino É escrito", async () => {
+    // Regressão: a rota não pode parar de chamar `preservarAgenda` no ramo em
+    // que o treino é gerado, só porque agora ele é condicional.
+    const aluno = await registrar();
+    await criarPlano(aluno.id, {
+      workout: {
+        ...TREINO_VALIDO,
+        sessions: [{ ...TREINO_VALIDO.sessions[0], weekdays: [1, 3, 5] }],
+      },
+    });
+    espiao.proximaResposta = PLANO_GERADO;
+
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
+
+    const sessaoA = (r.body.plan.workout.sessions as { day: string; weekdays?: number[] }[]).find(
+      (s) => s.day === "A"
+    );
+    expect(sessaoA?.weekdays).toEqual([1, 3, 5]);
   });
 });
 

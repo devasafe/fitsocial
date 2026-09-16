@@ -429,6 +429,48 @@ export function parteAberta(
 }
 
 /**
+ * Existe profissional que ESCREVE esta parte da vida deste aluno agora?
+ *
+ * Não confundir com `parteAberta`/`podeVer`, que respondem "quem pode VER" —
+ * pergunta diferente, e as duas não podem virar uma só. `parteAberta` tem um
+ * fallback de propósito: quando a dupla não tem vínculo do papel dono, ELA
+ * deixa QUALQUER vínculo da dupla decidir, porque é a única leitura possível
+ * de "o aluno abriu isto para este profissional enxergar" — é assim que um
+ * aluno deixa a nutricionista ver o treino, mesmo ela não sendo dona dele.
+ *
+ * Autoria de ESCRITA não tem esse fallback, e a prova de que a distinção é
+ * real (não cosmética) é concreta: todo vínculo nasce com `escopo.treinos:
+ * true` por default — inclusive o de NUTRI, que "não é dono de treino, então
+ * o aluno nunca precisou decidir isso ali" (ver o comentário de `parteAberta`).
+ * Um aluno com SÓ nutricionista, sem coach nenhum, tem exatamente esse vínculo
+ * com `treinos: true`. Se esta função usasse `parteAberta` (que cai no
+ * fallback "qualquer vínculo decide" quando a dupla não tem vínculo do papel
+ * dono), ela leria esse `true` e diria que existe alguém escrevendo o treino
+ * deste aluno — quando não existe treinador nenhum. Seria travar de novo,
+ * pior que o bug que esta função existe para consertar, o aluno que a
+ * correção do gate de IA existe para destravar.
+ *
+ * Por isso aqui não há fallback: só vínculo do papel DONO da parte conta, e
+ * `medidas`/`fotos` (sem dono — ver `donoDaParte`) nunca são "de profissional",
+ * porque ninguém escreve o corpo de alguém por procuração.
+ *
+ * Não precisa agrupar por profissional antes de perguntar: o índice único é
+ * `{professional, client, papel}`, então "vínculos ativos do aluno com o
+ * papel dono" já tem no máximo um documento POR profissional — o `.some()`
+ * abaixo já responde "existe ALGUM profissional daquele papel com a parte
+ * aberta", sem chance de misturar o escopo de um profissional com o de outro.
+ */
+export async function escritaEhDoProfissional(
+  clientId: mongoose.Types.ObjectId,
+  parte: keyof EscopoPedido
+): Promise<boolean> {
+  const dono = donoDaParte(parte);
+  if (!dono) return false;
+  const links = await ProfessionalLink.find({ client: clientId, papel: dono, status: "ativo" });
+  return links.some((l) => l.escopo?.[parte] === true);
+}
+
+/**
  * O profissional pode ver esta parte da vida deste aluno?
  *
  * Busca os vínculos ativos da dupla e decide em memória com `parteAberta`, em
