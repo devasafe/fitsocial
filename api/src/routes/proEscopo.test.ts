@@ -214,4 +214,54 @@ describe("A ficha abre pelo vínculo, e cada bloco pelo escopo", () => {
 
     await request(app).get(`/pro/alunos/${outroAluno.id}/dieta`).set(auth(ambos.token)).expect(403);
   });
+
+  it("a lista não mostra treino pela linha do nutri quando o aluno fechou no card do treinador", async () => {
+    // A lista tem uma linha por vínculo, mas a decisão de `treinos` é da
+    // DUPLA: a linha do nutri não pode mostrar o número que a linha do coach,
+    // logo acima, esconde — senão a mesma pessoa vê na linha de baixo o dado
+    // que o aluno acabou de bloquear na de cima.
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const outroAluno = await registrar();
+    await vincular(ambos.token, outroAluno.token, { treinos: false }, "coach");
+    await vincular(ambos.token, outroAluno.token, { dieta: true }, "nutri");
+
+    const r = await request(app).get("/pro/alunos").set(auth(ambos.token)).expect(200);
+    const linhas = r.body.data.filter((l: { aluno: { id: string } }) => l.aluno.id === outroAluno.id);
+    expect(linhas).toHaveLength(2);
+    for (const linha of linhas) expect(linha.treinos).toBeNull();
+  });
+
+  it("o mesmo com ?papel=nutri: o filtro não pode reabrir o buraco", async () => {
+    // Prova que agrupar por dupla não depende de `links` já filtrado por
+    // papel: se a consulta da decisão usasse só as linhas que a paginação
+    // trouxe, `?papel=nutri` esconderia o vínculo de coach que fechou o
+    // treino, e o vazamento voltaria só quando o filtro está ligado.
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const outroAluno = await registrar();
+    await vincular(ambos.token, outroAluno.token, { treinos: false }, "coach");
+    await vincular(ambos.token, outroAluno.token, { dieta: true }, "nutri");
+
+    const r = await request(app).get("/pro/alunos?papel=nutri").set(auth(ambos.token)).expect(200);
+    const linhas = r.body.data.filter((l: { aluno: { id: string } }) => l.aluno.id === outroAluno.id);
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0].papel).toBe("nutri");
+    expect(linhas[0].treinos).toBeNull();
+  });
+
+  it("treinador com treinos abertos continua com número na lista", async () => {
+    // Não regride o caso comum, que está em produção: `coach` já está
+    // vinculado a `aluno` com `treinos: true` no `beforeEach`.
+    const r = await request(app).get("/pro/alunos").set(auth(coach.token)).expect(200);
+    const linha = r.body.data.find((l: { aluno: { id: string } }) => l.aluno.id === alunoId);
+    expect(linha.treinos).not.toBeNull();
+    expect(linha.treinos).toHaveProperty("naSemana");
+  });
 });

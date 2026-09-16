@@ -385,15 +385,22 @@ export async function papeisAtivosDoAluno(
  * — quem exerce aquele ofício é quem decide se abre. Medidas e fotos não têm
  * dono: são sobre o corpo do aluno, não sobre o ofício de ninguém, e inventar
  * um dono para elas seria decisão de produto sem base nenhuma.
+ *
+ * `Record` completo, e não `Partial`, de propósito: uma parte nova em
+ * `EscopoPedido` sem entrada aqui não pode cair em silêncio no ramo mais
+ * permissivo ("qualquer vínculo decide") — o compilador tem que cobrar essa
+ * decisão de quem acrescentar a parte, e não escolhê-la por omissão.
  */
-const DONO_DA_PARTE: Partial<Record<keyof EscopoPedido, PapelPro>> = {
+const DONO_DA_PARTE: Record<keyof EscopoPedido, PapelPro | null> = {
   treinos: "coach",
   dieta: "nutri",
+  medidas: null,
+  fotos: null,
 };
 
 /** O papel dono de uma parte, ou `null` quando ela não tem um — ver `DONO_DA_PARTE`. */
 export function donoDaParte(parte: keyof EscopoPedido): PapelPro | null {
-  return DONO_DA_PARTE[parte] ?? null;
+  return DONO_DA_PARTE[parte];
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   ajustarEscopo,
   donoDaParte,
   encerrarVinculo,
+  type EscopoPedido,
   gerarConvite,
   parteAberta,
   quantosAlunos,
@@ -210,6 +211,30 @@ proRouter.get(
       .sort({ aceitoEm: -1 })
       .populate("client", "name username avatarUrl");
 
+    // `treinos` é decidido pela DUPLA, não pela linha — e a linha aqui é só
+    // um vínculo. Com `?papel=nutri`, `links` só teria o vínculo de nutri;
+    // filtrar por ele reabriria o vazamento que esta tela existe para
+    // fechar (o vínculo de coach que fechou o treino ficaria fora da conta),
+    // só que agora escondido atrás do filtro. Por isso é uma consulta à
+    // parte, sem `papel` no filtro, agrupada por aluno.
+    const idsDosAlunos = [
+      ...new Set(links.map((l) => (l.client as unknown as { _id: mongoose.Types.ObjectId })._id.toString())),
+    ].map((id) => new mongoose.Types.ObjectId(id));
+    const vinculosAtivosPorAluno = new Map<string, { papel: PapelPro; escopo?: EscopoPedido }[]>();
+    if (idsDosAlunos.length > 0) {
+      const ativos = await ProfessionalLink.find({
+        professional: req.user!._id,
+        status: "ativo",
+        client: { $in: idsDosAlunos },
+      }).select("client papel escopo");
+      for (const v of ativos) {
+        const chave = v.client.toString();
+        const lista = vinculosAtivosPorAluno.get(chave) ?? [];
+        lista.push({ papel: v.papel as PapelPro, escopo: v.escopo });
+        vinculosAtivosPorAluno.set(chave, lista);
+      }
+    }
+
     const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const data = await Promise.all(
@@ -223,7 +248,8 @@ proRouter.get(
 
         // Só quem abriu os treinos entra com número; para os outros, a lista
         // mostra o vínculo e diz que não há acesso, em vez de mentir zero.
-        const podeTreinos = parteAberta([link], "treinos");
+        const vinculosDaDupla = vinculosAtivosPorAluno.get(cliente._id.toString()) ?? [];
+        const podeTreinos = parteAberta(vinculosDaDupla, "treinos");
         const [ultimo, naSemana] = podeTreinos
           ? await Promise.all([
               Activity.findOne({ user: cliente._id }).sort({ startedAt: -1 }).select("startedAt"),
