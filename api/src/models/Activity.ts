@@ -153,6 +153,17 @@ const activitySchema = new Schema(
     metrics: { type: Schema.Types.Mixed, default: {} },
     // Rastreia a origem quando a atividade veio da migração do WorkoutLog (reversível).
     migratedFrom: { type: Schema.Types.ObjectId, index: true, sparse: true },
+    /**
+     * Identidade do ENVIO, gerada pelo app quando o treino COMEÇA.
+     *
+     * Começar acontece uma vez; salvar é o que se repete — a tela pode ser
+     * recarregada pelo navegador ou restaurada pelo sistema, e aí o mesmo
+     * treino é enviado de novo. Opcional porque todo treino já gravado não
+     * tem chave, e porque o APK instalado não a manda.
+     */
+    clientKey: { type: String, default: undefined },
+    /** Resumo estável do conteúdo — ver `services/impressaoDoTreino.ts`. */
+    impressao: { type: String, default: undefined, index: true },
   },
   { timestamps: true }
 );
@@ -172,6 +183,8 @@ export type ActivityDoc = HydratedDocument<{
   payload: unknown;
   metrics: Record<string, unknown>;
   migratedFrom?: mongoose.Types.ObjectId;
+  clientKey?: string;
+  impressao?: string;
 }>;
 
 // A evolução lê sempre "os treinos DESTA pessoa, nesta janela, em ordem".
@@ -181,5 +194,19 @@ activitySchema.index({ user: 1, startedAt: -1 });
 // O mesmo, quando a pergunta é só sobre um formato (força para carga e grupos
 // musculares, endurance para ritmo). Poupa varrer os outros esportes.
 activitySchema.index({ user: 1, kind: 1, startedAt: -1 });
+// NÃO troque por `sparse: true`: num índice COMPOSTO, sparse só pula o
+// documento quando TODOS os seus campos estão ausentes. `user` é obrigatório
+// e está sempre presente, então sparse aqui indexaria clientKey como null
+// mesmo assim — e o segundo treino SEM chave (todos os que já existem, vindos
+// do APK 1.2.0) seria recusado por "duplicata de null". partialFilterExpression
+// resolve porque filtra pelo próprio clientKey, não pela combinação dos dois.
+// `$type: "string"`, não `$exists: true`: com `$exists` os `clientKey: null`
+// explícitos entrariam no índice e colidiriam entre si do mesmo jeito.
+activitySchema.index(
+  { user: 1, clientKey: 1 },
+  { unique: true, partialFilterExpression: { clientKey: { $type: "string" } } }
+);
+// Serve a janela curta da rede contra repetição.
+activitySchema.index({ user: 1, impressao: 1, createdAt: -1 });
 
 export const Activity = mongoose.model("Activity", activitySchema);
