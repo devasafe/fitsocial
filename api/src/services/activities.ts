@@ -20,7 +20,7 @@ import { getSport } from "./sports.js";
 import { interpretarBlocos, normalizarWod } from "./crossfit.js";
 import { computeMetrics } from "./activityMetrics.js";
 import { preencherSlugs } from "./slug.js";
-import { detectPRs, recomputeUserPRs, type NewPR } from "./prEngine.js";
+import { detectPRs, recomputeUserPRs, mereceCelebracao, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
 import { impressaoDoTreino } from "./impressaoDoTreino.js";
 import { limparRastrosDePosts } from "./postModeration.js";
@@ -324,6 +324,21 @@ function temTrajetoGravado(atividade: InstanceType<typeof Activity>): boolean {
   return Array.isArray(pontos) && pontos.length >= 2;
 }
 
+/**
+ * O `payload` que está CHEGANDO pede um trajeto de GPS? `processTrack` só
+ * roda em `createActivity` — rodá-lo de novo aqui seria código caro num
+ * caminho que não precisa dele, e quem quer corrigir um trajeto errado quer
+ * outra coisa (registrar de novo). Sem esta checagem, um treino sem trajeto
+ * aceitaria `points` pela edição e os gravaria CRUS: sem `polyline`, sem
+ * `splits`, sem `bestEfforts`, com `computeMetrics` lendo `distanceM` no
+ * default 0 — distância e pace errados, em silêncio, ao lado de um trajeto
+ * que parece gravado mas não foi processado.
+ */
+function trazTrajeto(payload: unknown): boolean {
+  const pontos = (payload as { points?: unknown[] } | null | undefined)?.points;
+  return Array.isArray(pontos) && pontos.length >= 2;
+}
+
 export interface EditarAtividadePatch {
   title?: string;
   notes?: string;
@@ -382,6 +397,12 @@ export async function editarAtividade(
       "Este treino tem um percurso de GPS gravado — a distância e o pace vêm dele, não dá para corrigi-los à mão. Apague o treino e registre de novo se o trajeto estiver errado."
     );
   }
+  if (payloadMudou && atividade.kind === "endurance" && trazTrajeto(patch.payload)) {
+    throw new HttpError(
+      400,
+      "Trajeto de GPS vem do registro, não da edição. Apague o treino e registre de novo com o percurso certo."
+    );
+  }
 
   if (patch.title !== undefined) atividade.title = patch.title;
   if (patch.notes !== undefined) atividade.notes = patch.notes;
@@ -432,28 +453,40 @@ export async function editarAtividade(
 
   await atividade.save();
 
-  if (payloadMudou) {
+  // Recorde depende de payload E de duração (best_time/wod_time nascem de
+  // `durationSec` — ver `enduranceCandidates`/`computeWodMetrics`), a mesma
+  // condição de cima: corrigir só a duração de uma corrida sem GPS também
+  // pode ter derrubado ou destravado um recorde de tempo.
+  if (payloadMudou || durationMudou) {
     // Reconstrói os recordes da pessoa inteiros, porque baixar ou subir um
     // número aqui pode ter derrubado ou criado um recorde — igual a apagar.
     await recomputeUserPRs(userId);
 
-    // O resumo denormalizado é só o que este treino CONQUISTOU: o mesmo
-    // filtro de "celebrado" que `createActivity` usa. Um recorde de linha de
-    // base (`previousValue: null` — primeira vez que a pessoa faz aquele
-    // exercício) não é uma conquista, é só o único dado que existe; incluí-lo
-    // aqui faria até uma edição para BAIXO "criar" um selo de recorde.
+    // O resumo denormalizado é só o que este treino CONQUISTOU: os mesmos
+    // dois filtros que `applyCandidate` usa ao celebrar na criação.
+    //
+    // 1. `previousValue != null` exclui linha de base (primeira vez que a
+    //    pessoa faz aquele exercício) — não é uma conquista, é só o único
+    //    dado que existe.
+    // 2. `mereceCelebracao` (services/prEngine.ts) exclui melhora real mas
+    //    abaixo do limiar (100kg → 100,3kg sobe o recorde, mas não é selo).
+    //    Sem este segundo filtro, qualquer melhora — por menor que fosse —
+    //    entraria no resumo de uma edição mesmo que a MESMA melhora, na
+    //    criação, não virasse celebração nenhuma.
     const conquistados = await PersonalRecord.find({
       user: userId,
       activity: atividade._id,
       previousValue: { $ne: null },
     });
-    const resumo = conquistados.map((p) => ({
-      type: p.type,
-      exerciseName: p.exerciseName,
-      value: p.value,
-      previousValue: p.previousValue,
-      unit: p.unit,
-    }));
+    const resumo = conquistados
+      .filter((p) => mereceCelebracao(p.type, p.previousValue as number, p.value))
+      .map((p) => ({
+        type: p.type,
+        exerciseName: p.exerciseName,
+        value: p.value,
+        previousValue: p.previousValue,
+        unit: p.unit,
+      }));
     atividade.set("metrics", { ...atividade.metrics, prs: resumo });
     atividade.markModified("metrics");
     await atividade.save();

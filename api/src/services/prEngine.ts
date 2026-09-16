@@ -306,6 +306,32 @@ function meaningfulMax(newV: number, oldV: number): boolean {
   return newV - oldV >= Math.max(0.5, oldV * 0.01);
 }
 
+/**
+ * "Isto merece virar um selo de recorde?" — o limiar que decide se uma
+ * melhora é comemorada ou só silenciosamente vira o novo valor. Batia 100kg
+ * para 100,3kg é uma melhora real (o `PersonalRecord` sobe), mas não é
+ * celebração: o selo fica para melhoras de verdade.
+ *
+ * Vive aqui, exportada, para não duplicar em `editarAtividade`
+ * (services/activities.ts): o resumo denormalizado de uma edição precisa
+ * responder a MESMA pergunta que `applyCandidate` responde ao criar — se o
+ * limiar morasse em dois lugares, cedo ou tarde um dos dois ficaria
+ * desatualizado, e o resumo de uma edição passaria a anunciar (ou a
+ * silenciar) um recorde que a criação trataria diferente.
+ *
+ * Marcos (aulas/horas) só contam ao CRUZAR um limiar — `crossedMilestone` já
+ * responde isso. Os demais tipos usam o limiar de melhora: tempo (menor é
+ * melhor) exige pelo menos 1s de diferença; os outros, `meaningfulMax` (0,5
+ * ou 1%, o que for maior).
+ */
+export function mereceCelebracao(type: string, previousValue: number, value: number): boolean {
+  if (MILESTONES[type as PrType]) {
+    return crossedMilestone(type, previousValue, value) != null;
+  }
+  const isMin = MIN_TYPES.has(type as PrType);
+  return isMin ? previousValue - value >= 1 : meaningfulMax(value, previousValue);
+}
+
 async function applyCandidate(
   userId: mongoose.Types.ObjectId,
   activity: ActivityLike,
@@ -401,19 +427,20 @@ async function applyCandidate(
   });
 
   if (!celebrateEnabled) return null;
+  if (!mereceCelebracao(c.type, prevVal, c.value)) return null;
 
-  // Marcos (aulas/horas): só celebra ao cruzar um limiar.
+  // Marco cruzado (aulas/horas), quando houver — só para anexar o número ao
+  // retorno; `mereceCelebracao` já decidiu que este marco FOI cruzado.
   const milestone = crossedMilestone(c.type, prevVal, c.value);
-  if (MILESTONES[c.type]) {
-    return milestone
-      ? { type: c.type, exerciseName: c.exerciseName, repRange: c.repRange, value: c.value, previousValue: prevVal, unit: c.unit, milestone }
-      : null;
-  }
-
-  // Tempo: melhora de ao menos 1s. Demais: 0,5 / 1%.
-  const worthy = isMin ? prevVal - c.value >= 1 : meaningfulMax(c.value, prevVal);
-  if (!worthy) return null;
-  return { type: c.type, exerciseName: c.exerciseName, repRange: c.repRange, value: c.value, previousValue: prevVal, unit: c.unit };
+  return {
+    type: c.type,
+    exerciseName: c.exerciseName,
+    repRange: c.repRange,
+    value: c.value,
+    previousValue: prevVal,
+    unit: c.unit,
+    ...(milestone != null ? { milestone } : {}),
+  };
 }
 
 async function applyAll(

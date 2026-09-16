@@ -159,7 +159,38 @@ describe("PATCH /activities/:id — editar de verdade", () => {
 
     const a = await Activity.findById(id);
     const prs = ((a!.metrics as { prs?: { value: number }[] }).prs ?? []) as { value: number }[];
+    // As duas juntas: a original (nada sobrou) cobre mais que "não fala do
+    // valor antigo" sozinha — pega, por exemplo, uma linha de base indevida.
+    expect(prs).toHaveLength(0);
     expect(prs.some((p) => p.value === 100)).toBe(false);
+  });
+
+  it("melhora abaixo do limiar de celebração não vira selo no resumo, mas o recorde sobe de verdade", async () => {
+    // Precisa de um recorde PRÉVIO de verdade (não uma linha de base): com só
+    // uma atividade, o recompute sempre a vê como linha de base, e o filtro
+    // de `previousValue` sozinho já esconderia o problema — o que este teste
+    // quer prender é o SEGUNDO portão (o limiar), não o primeiro.
+    const dono = await registrar();
+    await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 100, { startedAt: "2026-09-01T10:00:00.000Z" }));
+    const segundo = await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 105, { startedAt: "2026-09-10T10:00:00.000Z" }));
+    const id = segundo.body.data.id;
+
+    // 100,3kg: sobe em relação ao recorde de 100kg do primeiro treino, mas
+    // fica abaixo do limiar de celebração (1kg = max(0,5; 1%) de 100).
+    await como(dono.token)
+      .patch(`/activities/${id}`)
+      .send({ payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 100.3, reps: 8 }] }] } })
+      .expect(200);
+
+    const a = await Activity.findById(id);
+    expect((a!.metrics as { prs?: unknown[] }).prs ?? []).toHaveLength(0);
+
+    const cargaMax = await PersonalRecord.findOne({ user: dono.id, type: "carga_max" });
+    expect(cargaMax!.value).toBe(100.3);
   });
 
   it("treino com trajeto de GPS não deixa editar os números — eles vêm do trajeto", async () => {
@@ -197,5 +228,39 @@ describe("PATCH /activities/:id — editar de verdade", () => {
     const m = a!.metrics as { avgPaceSecPerKm: number };
     // 5 km em 900 s = 180 s/km — não os 360 s/km da duração original.
     expect(m.avgPaceSecPerKm).toBe(180);
+  });
+
+  it("não dá para ACRESCENTAR um trajeto de GPS pela edição de um treino sem trajeto", async () => {
+    // `processTrack` só roda no registro. Aceitar `points` aqui os gravaria
+    // crus — sem polyline/splits/bestEfforts — com distância e pace errados
+    // em silêncio.
+    const dono = await registrar();
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 1800, payload: { distanceM: 5000 } });
+    const id = criado.body.data.id;
+
+    const r = await como(dono.token)
+      .patch(`/activities/${id}`)
+      .send({ payload: { points: track(10) } })
+      .expect(400);
+    expect(typeof r.body.error).toBe("string");
+
+    const a = await Activity.findById(id);
+    expect((a!.payload as { distanceM?: number; polyline?: string }).distanceM).toBe(5000);
+    expect((a!.payload as { polyline?: string }).polyline).toBeUndefined();
+  });
+
+  it("corrigir só a duração de uma corrida sem GPS também refaz o recorde de tempo", async () => {
+    const dono = await registrar();
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 1800, payload: { distanceM: 5000 } });
+    const id = criado.body.data.id;
+
+    await como(dono.token).patch(`/activities/${id}`).send({ durationSec: 900 }).expect(200);
+
+    const recorde = await PersonalRecord.findOne({ user: dono.id, type: "best_time", repRange: "5k" });
+    expect(recorde!.value).toBe(900);
   });
 });
