@@ -8,12 +8,11 @@ import {
   Tooltip,
 } from "recharts";
 import type { GrupoTreinado } from "../api";
+import { VERDE } from "./grafico-base";
 
 // O mesmo radar que o aluno vê na aba Progresso, desenhado com a lib que o
 // painel já carrega. O que precisa bater é o NÚMERO, não o traço: os dois lados
 // leem `/evolucao/grupos` e `/pro/alunos/:id/grupos`, que são a mesma função.
-
-const VERDE = "#3bcc06";
 
 /**
  * "Posterior de coxa" em doze eixos não cabe em lugar nenhum.

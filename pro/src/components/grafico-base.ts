@@ -1,5 +1,6 @@
 // O envelope tematizado do Recharts, compartilhado entre os gráficos do
-// painel — hoje `Grafico.tsx` (força/cardio) e `Nutricao.tsx` (kcal).
+// painel — hoje `Grafico.tsx` (força/cardio), `Radar.tsx` (grupos musculares)
+// e `Nutricao.tsx` (kcal).
 //
 // As decisões de desenho vêm de admin/src/components/Grafico.tsx, que já tinha
 // acertado: grade só na horizontal, eixo sem linha, área tênue sob a curva,
@@ -7,13 +8,17 @@
 // ainda está no lima antigo (#c8fa4b), e a marca é verde desde 11/09/2026.
 //
 // Extraído para cá porque `VERDE` já mudou de valor uma vez neste projeto (a
-// troca de 11/09), e há uma migração de cor em curso agora mesmo: com o valor
-// duplicado em dois arquivos, a próxima troca atualiza um e esquece o outro,
-// e o painel fica com dois verdes diferentes lado a lado — sem erro de
-// compilação, sem teste, e visível só para quem olhar as duas abas na mesma
-// tela.
+// troca de 11/09), e há uma migração de cor em curso agora mesmo. O valor em
+// si mora em `estilo.css` (`--verde`, `--verde-tenue`) — aqui só se aponta
+// para a variável, em vez de repetir o hex — porque o recharts recebe essas
+// strings como atributo SVG cru e o browser resolve a variável normalmente
+// (é o que `EIXO.stroke` já faz com `var(--texto-3)`, em produção). Sem essa
+// indireção, cada gráfico teria sua própria cópia do hex, e a próxima troca
+// de cor atualizaria um lugar e esqueceria os outros — o painel ficaria com
+// verdes diferentes lado a lado, sem erro de compilação, sem teste, e visível
+// só para quem olhar dois gráficos na mesma tela.
 
-export const VERDE = "#3bcc06";
+export const VERDE = "var(--verde)";
 
 export const EIXO = { stroke: "var(--texto-3)", fontSize: 11 };
 export const GRADE = { stroke: "var(--line)", strokeDasharray: "0" };
@@ -26,7 +31,7 @@ export const TOOLTIP = {
     fontSize: 13,
   },
   labelStyle: { color: "var(--texto-2)", marginBottom: 4 },
-  cursor: { fill: "rgba(59, 204, 6, 0.06)" },
+  cursor: { fill: "var(--verde-tenue)" },
 };
 
 /**

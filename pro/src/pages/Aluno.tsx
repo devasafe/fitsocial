@@ -32,15 +32,20 @@ import {
 } from "../api";
 import { Calendario } from "../components/Calendario";
 import { Conversa } from "../components/Conversa";
-import { Nutricao } from "../components/Nutricao";
 import { Prescrever } from "../components/Prescrever";
 
 // O Recharts sozinho pesa mais que o resto do painel inteiro. Separado, a
 // lista de alunos e a tela de convites não pagam por ele — e é a lista que
-// abre primeiro, todo dia.
+// abre primeiro, todo dia. `Nutricao` importa recharts direto (o gráfico de
+// kcal é escrito à mão ali, sem passar por `Grafico`), então ela entra na
+// mesma regra: importar estático desfaria o corte de bundle e o coach que
+// nunca abre a aba Nutrição pagaria pelo recharts mesmo assim.
 const Grafico = lazy(() => import("../components/Grafico").then((m) => ({ default: m.Grafico })));
 const RadarDeGrupos = lazy(() =>
   import("../components/Radar").then((m) => ({ default: m.RadarDeGrupos }))
+);
+const Nutricao = lazy(() =>
+  import("../components/Nutricao").then((m) => ({ default: m.Nutricao }))
 );
 
 type Aba = "evolucao" | "treino" | "nutricao" | "dieta" | "conversa";
@@ -630,7 +635,9 @@ export function Aluno({
 
       {aba === "nutricao" && (
         <div className="painel">
-          <Nutricao token={token} alunoId={perfil.aluno.id} janela={janela} />
+          <Suspense fallback={<p className="vazio">Carregando gráfico…</p>}>
+            <Nutricao token={token} alunoId={perfil.aluno.id} janela={janela} />
+          </Suspense>
         </div>
       )}
 
