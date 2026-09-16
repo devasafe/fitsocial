@@ -35,6 +35,18 @@ import { createHash } from "node:crypto";
 // essa premissa quebra e a impressão pode divergir entre o envio original e
 // o retry, em silêncio: reavalie esta função antes de ligar essa tela à
 // detecção de duplicação.
+//
+// `planLink` entra na impressão (Tarefa 3, 16/09/2026) porque `sessionDay`
+// É conteúdo, não metadado: "esta é a sessão Dia A do meu plano" e "esta é a
+// Dia B" são dois treinos diferentes mesmo com os mesmos exercícios, carga e
+// reps — o que é comum quando dias do plano reusam os mesmos acessórios.
+// Deixá-lo fora fazia o check-in de duas sessões distintas, feito em
+// sequência (ex.: registrar o dia de ontem e o de hoje na mesma sentada),
+// colidir e a segunda ser descartada em silêncio — um caso real de
+// produção, não só de teste. Isso não enfraquece a proteção: um reenvio de
+// verdade do MESMO check-in carrega o MESMO `sessionDay`, então a impressão
+// continua batendo e a duplicata continua sendo pega; só deixa de engolir
+// duas sessões genuinamente distintas.
 
 /** Entrada crua de um treino, tal como o cliente manda. */
 export interface EntradaDoTreino {
@@ -42,6 +54,7 @@ export interface EntradaDoTreino {
   sportId: string;
   durationSec?: number;
   payload: unknown;
+  planLink?: { planVersion?: number; sessionDay?: string };
 }
 
 /** Ordena as chaves de objetos recursivamente e remove `undefined`/`null`. */

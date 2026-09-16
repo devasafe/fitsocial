@@ -10,11 +10,60 @@ import { computeMetrics } from "./activityMetrics.js";
 import { preencherSlugs } from "./slug.js";
 import { detectPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
+import { impressaoDoTreino } from "./impressaoDoTreino.js";
 
 export interface CreatedActivity {
   activity: InstanceType<typeof Activity>;
   post: InstanceType<typeof Post> | null;
   newPRs: NewPR[];
+  repetido: boolean;
+}
+
+const JANELA_DA_REDE_MS = 10 * 60_000;
+
+/**
+ * Este treino já foi gravado?
+ *
+ * Duas perguntas, nesta ordem. A CHAVE é a resposta certa: ela vem do app e
+ * identifica o ENVIO, então não depende de adivinhar intenção. A IMPRESSÃO é
+ * rede para quem não a manda — o APK instalado, que não atualiza sozinho.
+ *
+ * A rede só pega conteúdo idêntico numa janela de dez minutos. Para engolir um
+ * treino legítimo, a pessoa teria de registrar dois treinos com exatamente os
+ * mesmos exercícios, pesos e repetições em menos de dez minutos — o que não é
+ * "treinei duas vezes", é o mesmo treino enviado duas vezes. `mesmoAssim`
+ * existe para o caso em que ela diz que foi outro.
+ */
+async function acharRepeticao(userId: mongoose.Types.ObjectId, input: ActivityCreateInput) {
+  if (input.mesmoAssim) return null;
+
+  if (input.clientKey) {
+    return Activity.findOne({ user: userId, clientKey: input.clientKey });
+  }
+
+  return Activity.findOne({
+    user: userId,
+    impressao: impressaoDoTreino(entradaDoTreino(input)),
+    createdAt: { $gte: new Date(Date.now() - JANELA_DA_REDE_MS) },
+  });
+}
+
+// Só os campos que definem o CONTEÚDO do treino, na forma exata da
+// interface `EntradaDoTreino` — nunca o `input` inteiro. `impressaoDoTreino`
+// serializa TODAS as chaves do objeto que recebe, então título, notas,
+// visibilidade, `clientKey`, `mesmoAssim` etc. entrariam na impressão se
+// fossem passados direto, e o mesmo treino com um campo de metadado a mais
+// (ex.: `mesmoAssim: false` explícito vs. ausente) deixaria de bater com sua
+// cópia — em silêncio.
+function entradaDoTreino(input: ActivityCreateInput) {
+  return {
+    kind: input.kind,
+    sportId: input.sportId,
+    durationSec: input.durationSec,
+    payload: input.payload,
+    // sessionDay É conteúdo — ver o comentário em impressaoDoTreino.ts.
+    planLink: input.planLink,
+  };
 }
 
 /**
@@ -26,6 +75,12 @@ export async function createActivity(
   userId: mongoose.Types.ObjectId,
   input: ActivityCreateInput
 ): Promise<CreatedActivity> {
+  // Reconhecer repetição vem ANTES de interpretar o WOD e processar o GPS: o
+  // trabalho caro não deve ser feito para ser jogado fora, e `processTrack`
+  // sobre um percurso longo não é barato.
+  const repetida = await acharRepeticao(userId, input);
+  if (repetida) return { activity: repetida, post: null, newPRs: [], repetido: true };
+
   // Precisa do documento para saber a preferência de visibilidade da pessoa.
   const dono = await User.findById(userId);
   if (!dono) throw new HttpError(404, "Usuário não encontrado");
@@ -79,22 +134,39 @@ export async function createActivity(
     };
   }
 
-  const activity = await Activity.create({
-    user: userId,
-    sportId: input.sportId,
-    kind: input.kind,
-    title: input.title ?? "",
-    startedAt: input.startedAt ?? new Date(),
-    durationSec,
-    // A escolha explícita manda; sem ela, vale a preferência da pessoa.
-    visibility: input.visibility ?? visibilidadeParaNovaAtividade(dono),
-    perceivedEffort: input.perceivedEffort,
-    feeling: input.feeling,
-    notes: input.notes ?? "",
-    planLink: input.planLink,
-    payload: storedPayload,
-    metrics,
-  });
+  let activity: InstanceType<typeof Activity>;
+  try {
+    activity = await Activity.create({
+      user: userId,
+      sportId: input.sportId,
+      kind: input.kind,
+      title: input.title ?? "",
+      startedAt: input.startedAt ?? new Date(),
+      durationSec,
+      // A escolha explícita manda; sem ela, vale a preferência da pessoa.
+      visibility: input.visibility ?? visibilidadeParaNovaAtividade(dono),
+      perceivedEffort: input.perceivedEffort,
+      feeling: input.feeling,
+      notes: input.notes ?? "",
+      planLink: input.planLink,
+      payload: storedPayload,
+      metrics,
+      clientKey: input.clientKey,
+      impressao: impressaoDoTreino(entradaDoTreino(input)),
+    });
+  } catch (err) {
+    // Corrida: dois envios simultâneos com a mesma chave passam os dois pelo
+    // `acharRepeticao` (nenhum viu o outro ainda) e chegam os dois aqui; o
+    // índice único derruba o segundo com E11000. É o MESMO resultado do
+    // caminho normal (o segundo clique devolve o primeiro treino), só que
+    // descoberto na gravação em vez de na consulta — não deve virar 500 na
+    // cara de quem só clicou duas vezes.
+    if ((err as { code?: number }).code === 11000 && input.clientKey) {
+      const existente = await Activity.findOne({ user: userId, clientKey: input.clientKey });
+      if (existente) return { activity: existente, post: null, newPRs: [], repetido: true };
+    }
+    throw err;
+  }
 
   // Detecção de PR (Fase 2c) — força, endurance e aulas, síncrona.
   //
@@ -142,5 +214,5 @@ export async function createActivity(
     post = await Post.create({ author: userId, text, activity: activity._id });
   }
 
-  return { activity, post, newPRs };
+  return { activity, post, newPRs, repetido: false };
 }

@@ -83,15 +83,18 @@ checkinsRouter.post(
       caption: body.shareToFeed
         ? body.shareText?.trim() || `Concluí o treino: ${body.sessionDay}`
         : undefined,
+      clientKey: body.clientKey,
+      mesmoAssim: body.mesmoAssim,
     });
 
-    const { activity, post, newPRs } = await createActivity(user._id, input);
-    res.status(201).json({
+    const { activity, post, newPRs, repetido } = await createActivity(user._id, input);
+    res.status(repetido ? 200 : 201).json({
       log: serializeLog(activity),
       post: post ? { id: post._id.toString() } : null,
       newPRs,
       // Atividade completa para o app anexar no compositor de post.
       activity: serializeActivity(activity),
+      repetido,
     });
   })
 );

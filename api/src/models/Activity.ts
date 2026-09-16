@@ -109,6 +109,12 @@ const baseCreateFields = {
   // Compartilhamento no feed (cria um Post referenciando a atividade).
   shareToFeed: z.boolean().optional(),
   caption: z.string().max(2000).optional(),
+  // Identidade do envio e escape da rede de repetição — ver
+  // services/activities.ts (acharRepeticao) e o comentário em clientKey no
+  // schema Mongoose abaixo. Opcionais: o APK 1.2.0 instalado não manda
+  // nenhum dos dois, e continua funcionando como hoje.
+  clientKey: z.string().min(8).max(100).optional(),
+  mesmoAssim: z.boolean().optional(),
 };
 
 export const activityCreateSchema = z.discriminatedUnion("kind", [

@@ -17,6 +17,10 @@ export const createLogSchema = z.object({
   notes: z.string().max(500).optional(),
   shareToFeed: z.boolean().optional(),
   shareText: z.string().max(2000).optional(),
+  // Repassados para o Activity por baixo — ver clientKey/mesmoAssim em
+  // models/Activity.ts. Opcionais, como lá.
+  clientKey: z.string().min(8).max(100).optional(),
+  mesmoAssim: z.boolean().optional(),
 });
 
 const workoutLogSchema = new Schema(

@@ -72,10 +72,13 @@ describe("Activities", () => {
   });
 
   it("compartilha no feed criando um Post que referencia a atividade", async () => {
+    // mesmoAssim: mesmo conteúdo do `strengthBody()` do teste acima, mesmo
+    // usuário, dentro da janela de 10 min da rede de repetição (Tarefa 3) —
+    // sem isto ela devolveria aquele treino em vez de gravar este.
     const res = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ shareToFeed: true, caption: "PR hoje!" }));
+      .send(strengthBody({ shareToFeed: true, caption: "PR hoje!", mesmoAssim: true }));
     expect(res.status).toBe(201);
     const postId = res.body.meta.sharedPostId;
     expect(postId).toBeTruthy();
@@ -112,10 +115,11 @@ describe("Activities", () => {
   // dizer é o que a pessoa TREINOU, e isso vem pronto do servidor pelo mesmo
   // formatador do feed e do perfil.
   it("a lista traz os exercícios escritos, e não só o esporte", async () => {
+    // mesmoAssim: idem — mesmo conteúdo repetido para o mesmo usuário.
     await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody());
+      .send(strengthBody({ mesmoAssim: true }));
 
     const r = await request(app).get("/activities?limit=1").set("Authorization", `Bearer ${tokenA}`);
 
@@ -131,14 +135,17 @@ describe("Activities", () => {
   });
 
   it("a lista diz quais treinos também viraram publicação", async () => {
+    // mesmoAssim nos dois: precisam ser duas atividades DISTINTAS para o
+    // teste fazer sentido, mas têm o mesmo conteúdo — sem isto a rede de
+    // repetição (Tarefa 3) devolveria treinos já criados antes no arquivo.
     const compartilhado = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ shareToFeed: true, caption: "foi" }));
+      .send(strengthBody({ shareToFeed: true, caption: "foi", mesmoAssim: true }));
     const guardado = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody());
+      .send(strengthBody({ mesmoAssim: true }));
 
     const r = await request(app).get("/activities?limit=50").set("Authorization", `Bearer ${tokenA}`);
 
@@ -171,10 +178,13 @@ describe("Activities", () => {
   });
 
   it("esconde atividade privada de outro usuário (404)", async () => {
+    // mesmoAssim: mesmo conteúdo de outros `strengthBody()` já criados neste
+    // arquivo para tokenA — sem isto a rede de repetição (Tarefa 3)
+    // devolveria um deles em vez de gravar este com `visibility: "private"`.
     const created = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ visibility: "private" }));
+      .send(strengthBody({ visibility: "private", mesmoAssim: true }));
     const id = created.body.data.id;
 
     const asB = await request(app).get(`/activities/${id}`).set("Authorization", `Bearer ${tokenB}`);
@@ -182,10 +192,14 @@ describe("Activities", () => {
   });
 
   it("mostra atividade pública para outro usuário (200)", async () => {
+    // mesmoAssim: a rede de repetição (Tarefa 3, 16/09/2026) trataria isto
+    // como reenvio do primeiro `strengthBody()` do arquivo — mesmo conteúdo,
+    // mesmo usuário, dentro da janela de 10 min — e devolveria aquele em vez
+    // de criar este, com outra `visibility`.
     const created = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ visibility: "public" }));
+      .send(strengthBody({ visibility: "public", mesmoAssim: true }));
     const id = created.body.data.id;
 
     const asB = await request(app).get(`/activities/${id}`).set("Authorization", `Bearer ${tokenB}`);
@@ -310,11 +324,15 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
   });
 
   it("outro usuário abre a atividade COMPARTILHADA, mas não a privada não compartilhada", async () => {
+    // mesmoAssim nos dois: mesmo motivo do teste acima — sem isso, a rede de
+    // repetição (Tarefa 3) devolveria um `strengthBody()` já criado antes
+    // neste arquivo em vez de gravar um novo com `shareToFeed`/`visibility`
+    // diferentes.
     // A compartilha um treino no feed → B consegue abrir.
     const shared = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ shareToFeed: true }));
+      .send(strengthBody({ shareToFeed: true, mesmoAssim: true }));
     const sharedId = shared.body.data.id;
     const okB = await request(app).get(`/activities/${sharedId}`).set("Authorization", `Bearer ${tokenB}`);
     expect(okB.status).toBe(200);
@@ -331,7 +349,7 @@ describe("Activities — formatos 2b (endurance/class/generic)", () => {
     const priv = await request(app)
       .post("/activities")
       .set("Authorization", `Bearer ${tokenA}`)
-      .send(strengthBody({ visibility: "private" }));
+      .send(strengthBody({ visibility: "private", mesmoAssim: true }));
     const privId = priv.body.data.id;
     const denyB = await request(app).get(`/activities/${privId}`).set("Authorization", `Bearer ${tokenB}`);
     expect(denyB.status).toBe(404);
