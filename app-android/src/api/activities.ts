@@ -183,6 +183,56 @@ export async function createActivity(
   return apiFetch("/activities", { method: "POST", body: input, token });
 }
 
+/**
+ * O que dá para corrigir num treino já salvo.
+ *
+ * Espelha `EditarAtividadePatch` do servidor (api/src/services/activities.ts):
+ * o envelope inteiro, mais o `payload` quando o tipo permite. `kind` e
+ * `sportId` não entram — trocar o tipo é outro treino, não edição, e o
+ * servidor recusa com 400 se chegarem aqui.
+ */
+export interface EditarAtividadePatch {
+  title?: string;
+  notes?: string;
+  visibility?: "private" | "followers" | "public";
+  durationSec?: number;
+  perceivedEffort?: number;
+  feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
+  /** ISO 8601. Nunca no futuro — o servidor recusa com 400. */
+  startedAt?: string;
+  /**
+   * Os números do treino, no formato do `kind` dele. Ausente = não mexe.
+   * Um treino de endurance com trajeto de GPS gravado recusa isto (400) —
+   * a tela não deve mandar `payload` nesse caso.
+   */
+  payload?: unknown;
+}
+
+export async function editarAtividade(
+  token: string,
+  id: string,
+  patch: EditarAtividadePatch
+): Promise<Activity> {
+  const res = await apiFetch<{ data: Activity }>(`/activities/${id}`, {
+    method: "PATCH",
+    token,
+    body: patch,
+  });
+  return res.data;
+}
+
+/**
+ * Apaga de vez: o post do compartilhamento (com curtidas e comentários) e o
+ * recorde que só existia por causa deste treino vão junto — ver
+ * `apagarAtividade` em api/src/services/activities.ts. Não tem volta.
+ */
+export async function apagarAtividade(token: string, id: string): Promise<void> {
+  await apiFetch<{ data: { deleted: boolean } }>(`/activities/${id}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
 export async function listActivities(
   token: string,
   cursor?: string

@@ -5,8 +5,10 @@ import { Txt, Screen, Card, ErrorState } from "../components/ui";
 import { Avatar } from "../components/Avatar";
 import { ActivityInteractions } from "../components/ActivityInteractions";
 import { RouteMap } from "../components/RouteMap";
+import { MenuSheet, type AcaoDoMenu } from "../components/MenuSheet";
 import { useAuth } from "../context/AuthContext";
-import { getActivity, type Activity } from "../api/activities";
+import { getActivity, apagarAtividade, type Activity } from "../api/activities";
+import { confirmDialog, notify } from "../lib/notify";
 import { colors, spacing, sportColor } from "../theme";
 import { DetalheDoTreino } from "../components/crossfit/DetalheDoTreino";
 import {
@@ -44,6 +46,37 @@ function mmss(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * O que a confirmação de apagar diz sobre o post ligado — só o que é
+ * verdade, sem número inventado (Tarefa 7, Passo 3).
+ *
+ * Sem post: nem menciona post. Com post sem interação: diz que ele some
+ * junto, sem números. Com interação: nomeia comentários e curtidas — só os
+ * que existem, nunca "0 comentários".
+ */
+function fraseDoPost(post: Activity["post"]): string | null {
+  if (!post) return null;
+  const { commentCount, likeCount } = post;
+  if (commentCount === 0 && likeCount === 0) {
+    return "O post deste treino também será apagado.";
+  }
+  const partes: string[] = [];
+  if (commentCount > 0) {
+    partes.push(`${commentCount} ${commentCount === 1 ? "comentário" : "comentários"}`);
+  }
+  if (likeCount > 0) {
+    partes.push(`${likeCount} ${likeCount === 1 ? "curtida" : "curtidas"}`);
+  }
+  return `O post deste treino, com ${partes.join(" e ")}, também será apagado.`;
+}
+
+/** Descreve o que acontece — nunca julga (docs/VISAO.md). Nada de "tem
+ *  certeza que quer perder seu progresso?": só o fato, e a pessoa decide. */
+function mensagemDeApagar(a: Activity): string {
+  const doPost = fraseDoPost(a.post ?? null);
+  return [doPost, "O treino é apagado de vez — não dá para desfazer."].filter(Boolean).join(" ");
+}
+
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 6 }}>
@@ -58,12 +91,14 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 export function ActivityDetailScreen({ route, navigation }: Props) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const passed = route.params.activity ?? null;
   const activityId = route.params.activityId;
   const [fetched, setFetched] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(!passed && !!activityId);
   const [error, setError] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [apagando, setApagando] = useState(false);
 
   useEffect(() => {
     if (passed || !activityId) return;
@@ -106,6 +141,66 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
     minute: "2-digit",
   });
 
+  // Quem pode editar/apagar. `owner` só falta quando a tela recebeu a
+  // atividade JÁ PRONTA de uma lista que só mostra as próprias (Minhas
+  // Atividades — `listActivities` filtra por dono) — aí não há dúvida.
+  // Quando `owner` vem (sempre que buscamos por id), ele é quem decide,
+  // mesmo abrindo o PRÓPRIO treino por id.
+  const souDono = a.owner ? a.owner.id === user?.id : true;
+
+  /**
+   * Depois de apagar, esta tela está mostrando um treino que não existe
+   * mais — precisa sair. `goBack()` normalmente devolve para a lista de
+   * origem, que já se recarrega sozinha ao ganhar foco de novo (Minhas
+   * Atividades, Perfil, Feed, Histórico — todas com `useFocusEffect`), então
+   * o treino apagado não fica fantasma nelas.
+   *
+   * Exceção: se a origem foi o DETALHE DE UM POST (abrir o treino a partir
+   * do card compartilhado), esse post também acabou de ser apagado junto —
+   * voltar para ele mostraria uma publicação que não existe mais. Pula mais
+   * uma tela nesse caso.
+   */
+  // Capturado num `const` à parte: dentro das funções abaixo (declaradas, e
+  // por isso hoisted) o TypeScript não confia que `a` continua não-nulo no
+  // momento em que forem chamadas — mesmo sabendo, aqui, que é sempre o caso.
+  const atividade: Activity = a;
+
+  function voltarAposApagar() {
+    const rotas = navigation.getState()?.routes ?? [];
+    const anterior = rotas[rotas.length - 2]?.name;
+    // pop(2) sai desta tela E do detalhe do post — precisa de mais uma tela
+    // abaixo dos dois para pousar nela (na prática, sempre tem: "Tabs" é a
+    // raiz da pilha do app).
+    if (anterior === "PostDetail" && rotas.length >= 3) {
+      navigation.pop(2);
+    } else if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate("Tabs");
+    }
+  }
+
+  function apagar() {
+    confirmDialog("Apagar este treino?", mensagemDeApagar(atividade), async () => {
+      setApagando(true);
+      try {
+        await apagarAtividade(token!, atividade.id);
+        voltarAposApagar();
+      } catch (err) {
+        notify("Não deu para apagar", (err as Error).message);
+      } finally {
+        setApagando(false);
+      }
+    }, "Apagar");
+  }
+
+  const acoesDoMenu: AcaoDoMenu[] = souDono
+    ? [
+        { chave: "editar", rotulo: "Editar treino", aoTocar: () => navigation.navigate("EditarTreino", { activity: atividade }) },
+        { chave: "apagar", rotulo: "Apagar treino", perigosa: true, aoTocar: apagar },
+      ]
+    : [];
+
   return (
     <Screen scroll underHeader contentStyle={{ gap: spacing.card }}>
       {/* Dono do treino (ao ver de outra pessoa) */}
@@ -127,15 +222,31 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       ) : null}
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: stroke }} />
-        <View>
-          <Txt variant="titleScreen">{a.title?.trim() || sportLabel(a.sportId)}</Txt>
-          <Txt variant="caption" color={colors.text3}>
-            {when}
-          </Txt>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 }}>
+          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: stroke }} />
+          <View style={{ flexShrink: 1 }}>
+            <Txt variant="titleScreen">{a.title?.trim() || sportLabel(a.sportId)}</Txt>
+            <Txt variant="caption" color={colors.text3}>
+              {when}
+            </Txt>
+          </View>
         </View>
+        {souDono ? (
+          <TouchableOpacity
+            onPress={() => setMenuAberto(true)}
+            disabled={apagando}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{ paddingHorizontal: spacing.sm, paddingVertical: 2 }}
+            accessibilityLabel="Opções do treino"
+          >
+            <Txt variant="titleCard" color={colors.text3}>
+              ···
+            </Txt>
+          </TouchableOpacity>
+        ) : null}
       </View>
+      <MenuSheet visivel={menuAberto} aoFechar={() => setMenuAberto(false)} acoes={acoesDoMenu} />
 
       {a.kind === "endurance" && p.points && p.points.length >= 2 ? (
         <RouteMap points={p.points} sportId={a.sportId} height={240} />

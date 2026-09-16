@@ -205,6 +205,54 @@ describe("Activities", () => {
     const asB = await request(app).get(`/activities/${id}`).set("Authorization", `Bearer ${tokenB}`);
     expect(asB.status).toBe(200);
   });
+
+  // Trava do contrato que a Tarefa 7 (apagar/editar na tela) passou a
+  // depender: a confirmação de apagar precisa saber se há post ligado e
+  // quantos comentários/curtidas ele tem. Esse dado já existe — o detalhe
+  // compõe `post` por cima do `serializeActivity` (ver a rota `/:id`) desde a
+  // feature de curtir/comentar direto do detalhe. Sem este teste, alguém
+  // poderia "unificar" isso movendo `post` para dentro do `serializeActivity`
+  // compartilhado, achando que está limpando duplicação — e a LISTA, que a
+  // pessoa abre todo dia, passaria a fazer uma consulta de post por linha
+  // (N+1).
+  it("o detalhe traz commentCount/likeCount do post; a lista não traz post nenhum", async () => {
+    const created = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ shareToFeed: true, caption: "treino de hoje", mesmoAssim: true }));
+    const id = created.body.data.id;
+    const postId = created.body.meta.sharedPostId;
+
+    // B curte e comenta o post compartilhado.
+    await request(app).post(`/social/posts/${postId}/like`).set("Authorization", `Bearer ${tokenB}`);
+    await request(app)
+      .post(`/social/posts/${postId}/comments`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ text: "mandou bem" });
+
+    const detalhe = await request(app).get(`/activities/${id}`).set("Authorization", `Bearer ${tokenA}`);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.data.post.id).toBe(postId);
+    expect(detalhe.body.data.post.likeCount).toBe(1);
+    expect(detalhe.body.data.post.commentCount).toBe(1);
+
+    // Treino sem post: `post` é null, não some do envelope.
+    const semPost = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ mesmoAssim: true }));
+    const detalheSemPost = await request(app)
+      .get(`/activities/${semPost.body.data.id}`)
+      .set("Authorization", `Bearer ${tokenA}`);
+    expect(detalheSemPost.body.data.post).toBeNull();
+
+    // A lista NUNCA traz `post` — é o que impede o N+1 na tela do dia a dia.
+    const lista = await request(app).get("/activities?limit=50").set("Authorization", `Bearer ${tokenA}`);
+    expect(lista.status).toBe(200);
+    for (const item of lista.body.data) {
+      expect(item.post).toBeUndefined();
+    }
+  });
 });
 
 describe("Activities — formatos 2b (endurance/class/generic)", () => {

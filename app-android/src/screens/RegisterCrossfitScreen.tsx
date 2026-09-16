@@ -42,8 +42,12 @@ const RASCUNHO = "fitsocial.rascunhoCrossfit";
 // no meio ainda está editando o MESMO rascunho, então é o mesmo envio.
 const CONTEXTO_DA_CHAVE = "crossfit";
 
+// `temAlgo` e `resumo` são exportados para a Tarefa 7 (EditarTreinoScreen):
+// corrigir um WOD já salvo reusa a MESMA regra de "bloco vazio some" e o
+// MESMO resumo do card, em vez de reimplementar os dois e divergir.
+
 /** Um bloco tem conteúdo quando tem modo, movimento, resultado ou nota. */
-function temAlgo(b: Bloco): boolean {
+export function temAlgo(b: Bloco): boolean {
   return !!(
     b.modo.trim() ||
     b.movimentos.some((m) => m.nome.trim()) ||
@@ -53,7 +57,7 @@ function temAlgo(b: Bloco): boolean {
 }
 
 /** As duas linhas que o card de cada bloco mostra. */
-function resumo(b: Bloco): string[] {
+export function resumo(b: Bloco): string[] {
   const linhas: string[] = [];
   const cabecalho = [b.nome?.trim(), resultadoEmTexto(b.resultado)].filter(Boolean).join(" — ");
   if (cabecalho) linhas.push(cabecalho);

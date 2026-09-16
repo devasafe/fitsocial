@@ -14,7 +14,9 @@ import { SportIcon } from "../components/SportIcon";
 
 type Props = NativeStackScreenProps<AppStackParams, "RegisterClass">;
 
-const SESSION_TYPES: { id: string; label: string }[] = [
+// Exportado para a Tarefa 7 (EditarTreinoScreen): editar um treino de aula
+// oferece a MESMA lista, em vez de uma cópia que diverge da primeira.
+export const SESSION_TYPES: { id: string; label: string }[] = [
   { id: "aula_completa", label: "Aula completa" },
   { id: "tecnica", label: "Técnica" },
   { id: "drill", label: "Drill" },
