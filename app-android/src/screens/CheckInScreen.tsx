@@ -171,7 +171,7 @@ export function CheckInScreen() {
   useEffect(() => {
     let alive = true;
     chaveDoTreino(session.day).then((k) => {
-      if (alive) clientKeyRef.current = k;
+      if (alive) clientKeyRef.current = k ?? null;
     });
     return () => {
       alive = false;

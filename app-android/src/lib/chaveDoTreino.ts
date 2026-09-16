@@ -21,12 +21,45 @@ const PREFIXO = "fitsocial.clientKey:";
  * do anterior — o novo conteúdo descartado em silêncio, o antigo devolvido no
  * lugar dele. O prazo limita essa janela a algumas horas em vez de deixá-la
  * aberta.
+ *
+ * (Segunda linha, não a única: o servidor também trata chave batendo com
+ * conteúdo diferente como chave velha, não repetição, e grava o treino novo —
+ * ver `acharRepeticao` em `api/src/services/activities.ts`. Esse conserto
+ * cobre a classe inteira sem depender de acertar este número; o prazo aqui
+ * continua valendo por cima, e por isso não é o mesmo raciocínio de "12h
+ * entre sessões" que valeria só para o contexto do plano.)
  */
 const VALIDADE_MS = 6 * 60 * 60 * 1000;
 
 interface ChaveArmazenada {
   chave: string;
   criadaEm: number;
+}
+
+/**
+ * Gera o identificador em si.
+ *
+ * `crypto.randomUUID()` quando existe. Quando não — alguns Android mais
+ * antigos não expõem o global — cai num identificador próprio: o instante em
+ * base 36 (cresce, quase não repete) mais duas fatias de `Math.random()`,
+ * sempre acima dos 8 caracteres que o servidor exige (`z.string().min(8)`).
+ *
+ * Aleatoriedade fraca é aceitável aqui DE PROPÓSITO: a chave não é segredo,
+ * é um identificador de ENVIO, e o índice que a usa no servidor é por PESSOA
+ * (`{user, clientKey}`). Adivinhar a chave de outra conta não dá nada a
+ * ninguém — enviar qualquer coisa em nome dela exige o TOKEN daquela conta,
+ * não a chave. Não "endurecer" isto depois achando que é uma falha de
+ * segurança: não é.
+ */
+function gerarChave(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return (
+    Date.now().toString(36) +
+    Math.random().toString(36).slice(2) +
+    Math.random().toString(36).slice(2)
+  );
 }
 
 /**
@@ -45,22 +78,34 @@ interface ChaveArmazenada {
  * depois de a tela travar e o processo recarregar (ver `acharRepeticao` em
  * `api/src/services/activities.ts`). Passado `VALIDADE_MS`, a chave guardada
  * é descartada e outra nasce em seu lugar — ver o comentário lá em cima.
+ *
+ * NUNCA rejeita. `AsyncStorage` pode falhar (modo privado no navegador, cota
+ * cheia) tanto quanto pode faltar `crypto.randomUUID` — e nos dois casos a
+ * resposta é a mesma: devolve `undefined`, não uma exceção. A chave é
+ * OPCIONAL (`clientKey?`); salvar o treino SEM ela é aceitável, porque o
+ * servidor ainda protege pela impressão do conteúdo. Travar o salvamento por
+ * causa da própria proteção contra duplicata seria pior que o problema que
+ * ela resolve.
  */
-export async function chaveDoTreino(contexto: string): Promise<string> {
+export async function chaveDoTreino(contexto: string): Promise<string | undefined> {
   const storageKey = PREFIXO + contexto;
-  const bruto = await AsyncStorage.getItem(storageKey);
-  if (bruto) {
-    try {
-      const armazenada = JSON.parse(bruto) as ChaveArmazenada;
-      if (Date.now() - armazenada.criadaEm < VALIDADE_MS) return armazenada.chave;
-    } catch {
-      // Formato antigo ou corrompido — cai para gerar uma nova abaixo, como
-      // se a chave tivesse expirado.
+  try {
+    const bruto = await AsyncStorage.getItem(storageKey);
+    if (bruto) {
+      try {
+        const armazenada = JSON.parse(bruto) as ChaveArmazenada;
+        if (Date.now() - armazenada.criadaEm < VALIDADE_MS) return armazenada.chave;
+      } catch {
+        // Formato antigo ou corrompido — cai para gerar uma nova abaixo, como
+        // se a chave tivesse expirado.
+      }
     }
+    const nova: ChaveArmazenada = { chave: gerarChave(), criadaEm: Date.now() };
+    await AsyncStorage.setItem(storageKey, JSON.stringify(nova));
+    return nova.chave;
+  } catch {
+    return undefined;
   }
-  const nova: ChaveArmazenada = { chave: crypto.randomUUID(), criadaEm: Date.now() };
-  await AsyncStorage.setItem(storageKey, JSON.stringify(nova));
-  return nova.chave;
 }
 
 /**
@@ -73,7 +118,15 @@ export async function chaveDoTreino(contexto: string): Promise<string> {
  * prazo acima), a resposta de repetição da tentativa seguinte já prova que a
  * chave tem dono no servidor, e limpar aqui fecha essa órfã antes que uma
  * TERCEIRA tentativa a herde.
+ *
+ * Também nunca rejeita: falhar ao limpar não pode derrubar a conclusão de um
+ * treino que JÁ foi salvo. Na pior das hipóteses a chave fica órfã, e o prazo
+ * de validade (ou a rede por impressão no servidor) cobre isso depois.
  */
 export async function limparChaveDoTreino(contexto: string): Promise<void> {
-  await AsyncStorage.removeItem(PREFIXO + contexto);
+  try {
+    await AsyncStorage.removeItem(PREFIXO + contexto);
+  } catch {
+    // Ver o comentário acima — intencional.
+  }
 }

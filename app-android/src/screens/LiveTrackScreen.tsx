@@ -87,7 +87,7 @@ export function LiveTrackScreen({ route, navigation }: Props) {
       notify("Localização necessária", "Libere o acesso à localização para gravar o percurso.");
       return;
     }
-    clientKeyRef.current = await chaveDoTreino(contextoDaChave);
+    clientKeyRef.current = (await chaveDoTreino(contextoDaChave)) ?? null;
     startTsRef.current = Date.now();
     elapsedBaseRef.current = 0;
     setPoints([]);

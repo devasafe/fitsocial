@@ -91,7 +91,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
   useEffect(() => {
     let alive = true;
     chaveDoTreino(CONTEXTO_DA_CHAVE).then((k) => {
-      if (alive) clientKeyRef.current = k;
+      if (alive) clientKeyRef.current = k ?? null;
     });
     return () => {
       alive = false;

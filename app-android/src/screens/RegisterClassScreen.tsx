@@ -40,7 +40,7 @@ export function RegisterClassScreen({ route }: Props) {
   useEffect(() => {
     let alive = true;
     chaveDoTreino(contextoDaChave).then((k) => {
-      if (alive) clientKeyRef.current = k;
+      if (alive) clientKeyRef.current = k ?? null;
     });
     return () => {
       alive = false;
