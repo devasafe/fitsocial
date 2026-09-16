@@ -1,9 +1,19 @@
 import type mongoose from "mongoose";
-import { Activity, type ActivityCreateInput } from "../models/Activity.js";
+import type { z } from "zod";
+import {
+  Activity,
+  type ActivityCreateInput,
+  strengthPayloadSchema,
+  endurancePayloadSchema,
+  classPayloadSchema,
+  genericPayloadSchema,
+  wodPayloadSchema,
+} from "../models/Activity.js";
 import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
+import { PersonalRecord } from "../models/PersonalRecord.js";
 import { HttpError } from "../utils/httpError.js";
 import { visibilidadeParaNovaAtividade } from "./activityVisibility.js";
 import { getSport } from "./sports.js";
@@ -282,4 +292,143 @@ export async function apagarAtividade(
   await recomputeUserPRs(userId);
 
   return true;
+}
+
+/**
+ * O schema de payload certo para cada `kind` — o mesmo usado em `createActivity`.
+ *
+ * Tipado como `ZodTypeAny` (não `as const`): a chave só se sabe em tempo de
+ * execução (vem do treino já gravado), então o retorno de `.parse()` aqui é
+ * sempre `any` — como em `createActivity`, que também faz esse cast na
+ * fronteira entre a união discriminada e o resto do código.
+ */
+const payloadSchemaPorKind: Record<string, z.ZodTypeAny> = {
+  strength: strengthPayloadSchema,
+  endurance: endurancePayloadSchema,
+  class: classPayloadSchema,
+  generic: genericPayloadSchema,
+  wod: wodPayloadSchema,
+};
+
+export interface EditarAtividadePatch {
+  title?: string;
+  notes?: string;
+  visibility?: "private" | "followers" | "public";
+  durationSec?: number;
+  perceivedEffort?: number;
+  feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
+  startedAt?: Date;
+  payload?: unknown;
+  // Só existem aqui para o service poder recusá-los com uma mensagem que
+  // explique o motivo — ver o `HttpError` abaixo. Se o schema da rota já os
+  // descartasse, a edição devolveria 200 fingindo que trocou o tipo do treino.
+  kind?: unknown;
+  sportId?: unknown;
+}
+
+/**
+ * Corrige um treino já registrado — "registrei o peso errado", "foi ontem, não
+ * hoje". `PATCH /activities/:id` fazia isso só para força, e nunca refazia o
+ * recorde: baixar o peso deixava o PR antigo de pé, apontando para um treino
+ * que não existe mais daquele jeito.
+ *
+ * `kind` e `sportId` não são editáveis: trocar um treino de força por uma
+ * corrida não é corrigir, é outro treino — e deixaria o payload incoerente
+ * com o tipo, dado impossível de interpretar depois (ver o desenho, "4.
+ * Editar"). Apague e registre de novo.
+ *
+ * Quando o `payload` muda, passa pelo MESMO caminho do `createActivity` —
+ * `preencherSlugs` para força, `interpretarBlocos(normalizarWod(...))` para
+ * WOD, `computeMetrics` para todos — reaproveitando as funções, não
+ * reescrevendo.
+ *
+ * Devolve `null` sem alterar nada quando o treino não existe ou não é da
+ * pessoa — a rota transforma isso em 404 (nunca 403, pelo mesmo motivo de
+ * `apagarAtividade`).
+ */
+export async function editarAtividade(
+  userId: mongoose.Types.ObjectId,
+  activityId: string,
+  patch: EditarAtividadePatch
+): Promise<InstanceType<typeof Activity> | null> {
+  const atividade = await Activity.findOne({ _id: activityId, user: userId });
+  if (!atividade) return null;
+
+  if (patch.kind !== undefined || patch.sportId !== undefined) {
+    throw new HttpError(
+      400,
+      "Não dá para trocar o tipo nem o esporte de um treino editando — isso é outro treino: apague este e registre de novo."
+    );
+  }
+
+  if (patch.title !== undefined) atividade.title = patch.title;
+  if (patch.notes !== undefined) atividade.notes = patch.notes;
+  if (patch.visibility !== undefined) atividade.visibility = patch.visibility;
+  if (patch.durationSec !== undefined) atividade.durationSec = patch.durationSec;
+  if (patch.perceivedEffort !== undefined) atividade.perceivedEffort = patch.perceivedEffort;
+  if (patch.feeling !== undefined) atividade.feeling = patch.feeling;
+  if (patch.startedAt !== undefined) atividade.startedAt = patch.startedAt;
+
+  const payloadMudou = patch.payload !== undefined;
+  if (payloadMudou) {
+    const schema = payloadSchemaPorKind[atividade.kind];
+    // Todo `kind` gravado hoje tem schema (ver ACTIVITY_KINDS): um treino sem
+    // um aqui é dado impossível, e 400 é melhor que 500 escondido.
+    if (!schema) throw new HttpError(400, "Tipo de treino desconhecido");
+    const payloadValidado = schema.parse(patch.payload);
+
+    // O interpretador e a identidade do exercício rodam no salvamento — nunca
+    // na digitação —, pelo mesmo motivo de `createActivity`: sem isto o card
+    // mostra o bloco cru, e o histórico do exercício fura em dois.
+    let storedPayload: unknown = payloadValidado;
+    if (atividade.kind === "wod") storedPayload = interpretarBlocos(normalizarWod(payloadValidado));
+    if (atividade.kind === "strength") storedPayload = preencherSlugs(payloadValidado);
+
+    atividade.payload = storedPayload;
+    atividade.markModified("payload");
+    // `computeMetrics` SUBSTITUI `metrics` inteiro — é por isso que o resumo
+    // de recorde (`metrics.prs`) só é regravado depois de recomputar os PRs,
+    // lá embaixo, nunca aqui.
+    atividade.set(
+      "metrics",
+      computeMetrics({
+        sportId: atividade.sportId,
+        kind: atividade.kind,
+        durationSec: atividade.durationSec,
+        payload: storedPayload,
+      } as ActivityCreateInput)
+    );
+    atividade.markModified("metrics");
+  }
+
+  await atividade.save();
+
+  if (payloadMudou) {
+    // Reconstrói os recordes da pessoa inteiros, porque baixar ou subir um
+    // número aqui pode ter derrubado ou criado um recorde — igual a apagar.
+    await recomputeUserPRs(userId);
+
+    // O resumo denormalizado é só o que este treino CONQUISTOU: o mesmo
+    // filtro de "celebrado" que `createActivity` usa. Um recorde de linha de
+    // base (`previousValue: null` — primeira vez que a pessoa faz aquele
+    // exercício) não é uma conquista, é só o único dado que existe; incluí-lo
+    // aqui faria até uma edição para BAIXO "criar" um selo de recorde.
+    const conquistados = await PersonalRecord.find({
+      user: userId,
+      activity: atividade._id,
+      previousValue: { $ne: null },
+    });
+    const resumo = conquistados.map((p) => ({
+      type: p.type,
+      exerciseName: p.exerciseName,
+      value: p.value,
+      previousValue: p.previousValue,
+      unit: p.unit,
+    }));
+    atividade.set("metrics", { ...atividade.metrics, prs: resumo });
+    atividade.markModified("metrics");
+    await atividade.save();
+  }
+
+  return atividade;
 }

@@ -11,13 +11,13 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { podeVerAtividade, podarRotaSePrivada } from "../services/activityVisibility.js";
 import { getSport } from "../services/sports.js";
-import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
+import { Activity, activityCreateSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
 import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
-import { createActivity, apagarAtividade } from "../services/activities.js";
-import { computeStrengthMetrics, musculosDoTreinoSalvo } from "../services/activityMetrics.js";
+import { createActivity, apagarAtividade, editarAtividade } from "../services/activities.js";
+import { musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
 import { movimentosDoCartao, totalDeMovimentos } from "../services/media/movimentosDoCartao.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
@@ -425,31 +425,30 @@ const updateSchema = z.object({
   durationSec: z.number().int().min(0).max(86_400).optional(),
   perceivedEffort: z.number().int().min(1).max(10).optional(),
   feeling: z.enum(["otimo", "bom", "normal", "ruim", "pessimo"]).optional(),
-  payload: strengthPayloadSchema.optional(),
+  // Corrige "registrei no dia errado" — nunca no futuro, que não é correção,
+  // é invenção. `Date.now()` avaliado a cada `parse`, não na carga do módulo.
+  startedAt: z.coerce
+    .date()
+    .refine((d) => d.getTime() <= Date.now(), "Não dá para registrar um treino no futuro")
+    .optional(),
+  // A forma certa depende do `kind` do treino, que só o service sabe (não
+  // veio no corpo — ver abaixo) — `editarAtividade` resolve pelo mapa
+  // kind→schema. Aqui só garante que é um objeto.
+  payload: z.record(z.string(), z.unknown()).optional(),
+  // Aceitos (e não validados) só para o service poder recusá-los com uma
+  // mensagem que explique o porquê. Se o zod já os descartasse aqui, a rota
+  // devolveria 200 fingindo que trocou o tipo do treino.
+  kind: z.unknown().optional(),
+  sportId: z.unknown().optional(),
 });
 
 activitiesRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const a = await Activity.findById(req.params.id);
-    if (!a || a.user.toString() !== req.user!._id.toString()) {
-      throw new HttpError(404, "Atividade não encontrada");
-    }
     const patch = updateSchema.parse(req.body);
-    if (patch.title !== undefined) a.title = patch.title;
-    if (patch.notes !== undefined) a.notes = patch.notes;
-    if (patch.visibility !== undefined) a.visibility = patch.visibility;
-    if (patch.durationSec !== undefined) a.durationSec = patch.durationSec;
-    if (patch.perceivedEffort !== undefined) a.perceivedEffort = patch.perceivedEffort;
-    if (patch.feeling !== undefined) a.feeling = patch.feeling;
-    if (patch.payload !== undefined) {
-      a.payload = patch.payload;
-      a.metrics = computeStrengthMetrics(patch.payload);
-      a.markModified("payload");
-      a.markModified("metrics");
-    }
-    await a.save();
+    const a = await editarAtividade(req.user!._id, req.params.id, patch);
+    if (!a) throw new HttpError(404, "Atividade não encontrada");
     res.json({ data: serializeActivity(a) });
   })
 );
