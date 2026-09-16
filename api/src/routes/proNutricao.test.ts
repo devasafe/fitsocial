@@ -538,4 +538,26 @@ describe("PUT /pro/alunos/:id/dieta", () => {
       .expect(400);
     expect(await Plan.countDocuments({ user: alunoObjId })).toBe(antes);
   });
+
+  it("passa por requirePro('nutri') mas vínculo COM AQUELE ALUNO é de coach → 403 (Tarefa 11c, 'Também')", async () => {
+    // A pessoa é nutricionista de verdade (tem `pro.nutri` ativo, passa o
+    // `requirePro`), mas o vínculo dela com ESTE aluno específico é de
+    // coach — cenário de quem acompanha gente diferente em papéis diferentes.
+    // A última porta antes do `Plan.create` (pro.ts, `if (link.papel !==
+    // "nutri")`) é o que barra: sem ela, o `requirePro` sozinho deixaria
+    // passar e a dieta seria gravada por quem só é treinador deste aluno.
+    const nutriQueSoTreinaEsteAluno = await registrarProfissional("nutri");
+    const u = (await User.findById(nutriQueSoTreinaEsteAluno.id))!;
+    u.set("pro.coach", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+    await vincular(nutriQueSoTreinaEsteAluno.token, aluno.token, { dieta: true, treinos: true }, "coach");
+
+    const antes = await Plan.countDocuments({ user: alunoObjId });
+    const r = await como(nutriQueSoTreinaEsteAluno.token)
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "x", diet: dieta })
+      .expect(403);
+    expect(r.body.error).toMatch(/nutricionista/i);
+    expect(await Plan.countDocuments({ user: alunoObjId })).toBe(antes);
+  });
 });
