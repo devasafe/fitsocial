@@ -116,6 +116,47 @@ describe("GET /pro/alunos — triagem do nutricionista", () => {
     expect(doCoach.body.data[0].treinos).toBeDefined();
     expect(doCoach.body.data[0].nutricao).toBeUndefined();
   });
+
+  it("a lista não traz nutrição quando o aluno fechou a dieta", async () => {
+    const nutri = await registrarProfissional("nutri");
+    const aluno = await registrar();
+    await vincular(nutri.token, aluno.token, { dieta: false }, "nutri");
+
+    const r = await como(nutri.token).get("/pro/alunos?papel=nutri").expect(200);
+    // A linha existe — o vínculo é real. O bloco é que não mente zero: seria
+    // afirmar algo sobre a vida do aluno (`diasComRegistroNaSemana: 0`) que
+    // ninguém tem como saber, porque o acesso está fechado.
+    expect(r.body.data).toHaveLength(1);
+    expect(r.body.data[0].nutricao).toBeNull();
+  });
+
+  it("espelho do vazamento de escopo da Tarefa 7b, agora para dieta: o coach com dieta aberta não vaza para a linha do nutri que fechou", async () => {
+    // A mesma pessoa acompanha o aluno como coach E como nutri. O vínculo de
+    // COACH abre dieta (ele não é dono da parte — pode pedir, mas quem decide
+    // é o dono); o vínculo de NUTRI, que É o dono, fecha. Uma leitura que
+    // não respeite "o dono decide sozinho quando existe" (um `some` cru sobre
+    // todos os vínculos da dupla, por exemplo) deixaria o `true` do coach
+    // vazar para a linha do nutri.
+    const ambos = await registrarProfissional("coach");
+    const u = (await User.findById(ambos.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+    const aluno = await registrar();
+
+    await vincular(ambos.token, aluno.token, { dieta: true }, "coach");
+    await vincular(ambos.token, aluno.token, { dieta: false }, "nutri");
+
+    const comoAmbos = como(ambos.token);
+
+    const linhas = await comoAmbos.get("/pro/alunos").expect(200);
+    const linhaNutri = linhas.body.data.find((l: { papel: string }) => l.papel === "nutri");
+    expect(linhaNutri.nutricao).toBeNull();
+
+    // O mesmo com `?papel=nutri`: foi o filtro que escondeu o vínculo de
+    // coach da consulta de escopo, da última vez.
+    const filtrado = await comoAmbos.get("/pro/alunos?papel=nutri").expect(200);
+    expect(filtrado.body.data[0].nutricao).toBeNull();
+  });
 });
 
 describe("GET /pro/alunos/:id/nutricao", () => {
