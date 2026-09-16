@@ -310,6 +310,20 @@ const payloadSchemaPorKind: Record<string, z.ZodTypeAny> = {
   wod: wodPayloadSchema,
 };
 
+/**
+ * Um treino de endurance com pontos de GPS gravados tem a distância e o pace
+ * DERIVADOS do trajeto — o mesmo `processTrack` que `createActivity` roda
+ * sobre `payload.points` para gravar `polyline`, `splits` e `bestEfforts`.
+ * Editar os números à mão desse treino os deixaria contradizendo o próprio
+ * trajeto que continua gravado ao lado; por isso o payload dele não é
+ * editável (o envelope — título, data, duração, esforço... — continua).
+ */
+function temTrajetoGravado(atividade: InstanceType<typeof Activity>): boolean {
+  if (atividade.kind !== "endurance") return false;
+  const pontos = (atividade.payload as { points?: unknown[] } | null | undefined)?.points;
+  return Array.isArray(pontos) && pontos.length >= 2;
+}
+
 export interface EditarAtividadePatch {
   title?: string;
   notes?: string;
@@ -361,6 +375,14 @@ export async function editarAtividade(
     );
   }
 
+  const payloadMudou = patch.payload !== undefined;
+  if (payloadMudou && temTrajetoGravado(atividade)) {
+    throw new HttpError(
+      400,
+      "Este treino tem um percurso de GPS gravado — a distância e o pace vêm dele, não dá para corrigi-los à mão. Apague o treino e registre de novo se o trajeto estiver errado."
+    );
+  }
+
   if (patch.title !== undefined) atividade.title = patch.title;
   if (patch.notes !== undefined) atividade.notes = patch.notes;
   if (patch.visibility !== undefined) atividade.visibility = patch.visibility;
@@ -369,7 +391,7 @@ export async function editarAtividade(
   if (patch.feeling !== undefined) atividade.feeling = patch.feeling;
   if (patch.startedAt !== undefined) atividade.startedAt = patch.startedAt;
 
-  const payloadMudou = patch.payload !== undefined;
+  let storedPayload: unknown = atividade.payload;
   if (payloadMudou) {
     const schema = payloadSchemaPorKind[atividade.kind];
     // Todo `kind` gravado hoje tem schema (ver ACTIVITY_KINDS): um treino sem
@@ -380,12 +402,19 @@ export async function editarAtividade(
     // O interpretador e a identidade do exercício rodam no salvamento — nunca
     // na digitação —, pelo mesmo motivo de `createActivity`: sem isto o card
     // mostra o bloco cru, e o histórico do exercício fura em dois.
-    let storedPayload: unknown = payloadValidado;
+    storedPayload = payloadValidado;
     if (atividade.kind === "wod") storedPayload = interpretarBlocos(normalizarWod(payloadValidado));
     if (atividade.kind === "strength") storedPayload = preencherSlugs(payloadValidado);
 
     atividade.payload = storedPayload;
     atividade.markModified("payload");
+  }
+
+  // O pace, a velocidade, o score do WOD... dependem da duração tanto quanto
+  // dos números do payload. Corrigir só a duração e deixar a métrica velha
+  // faria ela contradizer a duração nova na mesma tela.
+  const durationMudou = patch.durationSec !== undefined;
+  if (payloadMudou || durationMudou) {
     // `computeMetrics` SUBSTITUI `metrics` inteiro — é por isso que o resumo
     // de recorde (`metrics.prs`) só é regravado depois de recomputar os PRs,
     // lá embaixo, nunca aqui.

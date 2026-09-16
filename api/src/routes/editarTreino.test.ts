@@ -35,6 +35,13 @@ async function registrar(): Promise<{ token: string; id: string }> {
   return { token: r.body.token, id: r.body.user.id };
 }
 
+// Mesmo helper de activities.test.ts: 16 pontos de GPS a `secPerSeg` de intervalo.
+function track(secPerSeg: number) {
+  const points = [];
+  for (let i = 0; i <= 15; i++) points.push({ lat: 0, lng: i * 0.001, t: i * secPerSeg });
+  return points;
+}
+
 // `reps: 0` de propósito: com reps>0 o motor de PR também gera `rm_estimado` e
 // `carga_faixa` para o MESMO exercício — mesmo motivo do apagarTreino.test.ts.
 function strengthBody(exerciseName: string, weightKg: number, over: Record<string, unknown> = {}) {
@@ -139,7 +146,8 @@ describe("PATCH /activities/:id — editar de verdade", () => {
 
   it("o resumo de recorde gravado no treino acompanha a edição", async () => {
     // É denormalizado para o cartão de compartilhar não consultar o banco. Se
-    // ficar para trás, o cartão anuncia um recorde que não existe mais.
+    // ficar para trás, o cartão anuncia um recorde que não existe mais — o que
+    // este teste prende é isso: nada no resumo pode falar do 100kg antigo.
     const dono = await registrar();
     const criado = await como(dono.token).post("/activities").send(strengthBody("Supino", 100));
     const id = criado.body.data.id;
@@ -150,6 +158,44 @@ describe("PATCH /activities/:id — editar de verdade", () => {
       .expect(200);
 
     const a = await Activity.findById(id);
-    expect((a!.metrics as { prs?: unknown[] }).prs ?? []).toHaveLength(0);
+    const prs = ((a!.metrics as { prs?: { value: number }[] }).prs ?? []) as { value: number }[];
+    expect(prs.some((p) => p.value === 100)).toBe(false);
+  });
+
+  it("treino com trajeto de GPS não deixa editar os números — eles vêm do trajeto", async () => {
+    const dono = await registrar();
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send({ sportId: "corrida", kind: "endurance", payload: { points: track(10) } });
+    const id = criado.body.data.id;
+    const trajetoAntes = (await Activity.findById(id))!.payload;
+
+    const r = await como(dono.token)
+      .patch(`/activities/${id}`)
+      .send({ payload: { distanceM: 1 } })
+      .expect(400);
+    expect(typeof r.body.error).toBe("string");
+    expect((await Activity.findById(id))!.payload).toEqual(trajetoAntes);
+
+    // O envelope continua editável — é o que a pessoa realmente quer corrigir
+    // numa corrida com trajeto (título, data, esforço...), e o trajeto segue
+    // intocado.
+    await como(dono.token).patch(`/activities/${id}`).send({ title: "Corrida de sábado" }).expect(200);
+    expect((await Activity.findById(id))!.payload).toEqual(trajetoAntes);
+  });
+
+  it("corrigir só a duração também refaz o pace — ele depende dela, não só da distância", async () => {
+    const dono = await registrar();
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send({ sportId: "corrida", kind: "endurance", durationSec: 1800, payload: { distanceM: 5000 } });
+    const id = criado.body.data.id;
+
+    await como(dono.token).patch(`/activities/${id}`).send({ durationSec: 900 }).expect(200);
+
+    const a = await Activity.findById(id);
+    const m = a!.metrics as { avgPaceSecPerKm: number };
+    // 5 km em 900 s = 180 s/km — não os 360 s/km da duração original.
+    expect(m.avgPaceSecPerKm).toBe(180);
   });
 });
