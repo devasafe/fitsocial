@@ -200,9 +200,18 @@ export function PrescreverDieta({
 
     setSalvando(true);
     try {
-      await prescreverDieta(token, alunoId, resumo.trim(), diet, recado);
+      const r = await prescreverDieta(token, alunoId, resumo.trim(), diet, recado);
       setSalvo(true);
       setRecado("");
+      // Sem isto, o cabeçalho continuava dizendo "prescrita por outro
+      // profissional" (ou nem existia) depois de eu mesmo acabar de salvar —
+      // `origem` só vinha do GET inicial, e o formulário não recarrega a
+      // dieta sozinho. Atualizo com o que acabei de gravar, sem outra
+      // viagem à rede: o servidor não devolve `createdAt` no PUT, mas "agora"
+      // já é a data certa, e `existiaDieta` também precisa virar `true` para
+      // quem prescrevia pela primeira vez.
+      setOrigem({ createdBy: r.data.createdBy, em: new Date().toISOString() });
+      setExistiaDieta(true);
       aoSalvar();
     } catch (e) {
       // Inclui o 403 "Só o nutricionista prescreve dieta." (e o de escopo
