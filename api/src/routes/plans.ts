@@ -233,6 +233,28 @@ function recusarSeNadaParaEscrever(metades: { treino: boolean; dieta: boolean })
   }
 }
 
+/**
+ * `createdBy`/`disclaimer` são UM CAMPO POR DOCUMENTO para DUAS METADES
+ * independentes — mesma raiz que a Tarefa 11c já registrou em
+ * `PUT /alunos/:id/treino` e `/dieta` (ver os comentários lá; o que vem
+ * abaixo fica coerente com aquela decisão, não é um segundo raciocínio).
+ * A variação aqui é que, ao contrário daquelas duas rotas (que sempre
+ * preservam UMA metade e escrevem a outra), estas três podem escrever as
+ * DUAS metades de uma vez — e só nesse caso ninguém "assinou" nada, e o
+ * disclaimer genérico da IA está certo.
+ *
+ * Rodada 2 (correção de bug pós-11b): quando QUALQUER metade era preservada
+ * por ser de profissional, o `Plan.create` gravava sempre `createdBy: null`
+ * e `disclaimer: data.disclaimer` (o genérico da IA) — nenhuma das três
+ * rotas os condicionava. `recusarSeForDoTreinador`/
+ * `recusarSeForDoNutricionista` (as guardas de apagar) leem justamente
+ * `createdBy`: com ele sempre `null`, apagar o plano parava de ser barrado
+ * mesmo levando junto um treino ou dieta que um profissional escreveu —
+ * reabria a porta que a Tarefa 11b existe para fechar. E o disclaimer
+ * específico do profissional (ex.: aviso de dor de um treinador) era
+ * apagado por cima de uma metade que não mudou nesta chamada.
+ */
+
 // Gera um novo plano a partir da ficha do usuário e o salva como nova versão.
 // Geração é cara (IA); limite baixo por minuto.
 const generateLimiter = rateLimit({ windowMs: 60_000, max: 5, name: "plan-generate" });
@@ -289,7 +311,12 @@ plansRouter.post(
       // descartada e a corrente preservada — byte a byte, sem passar por
       // nenhuma transformação.
       diet: metades.dieta ? data.diet : (last?.diet ?? null),
-      disclaimer: data.disclaimer,
+      // Se as duas metades vieram da IA agora, ninguém assinou. Se alguma
+      // veio preservada, o plano novo continua contendo trabalho de
+      // profissional — a procedência da versão anterior vem junto, senão
+      // apagar o plano deixaria de ser barrado (ver comentário acima).
+      createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -346,7 +373,9 @@ plansRouter.post(
         ? preservarAgenda(current.workout as WorkoutData | null, data.workout)
         : (current.workout as WorkoutData | null),
       diet: metades.dieta ? data.diet : (current.diet as unknown),
-      disclaimer: data.disclaimer,
+      // Mesma procedência do `/generate` — ver o comentário lá.
+      createdBy: metades.treino && metades.dieta ? null : (current.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (current.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -400,7 +429,9 @@ plansRouter.post(
         ? preservarAgenda(last?.workout as WorkoutData | null, data.workout)
         : (last?.workout ?? null),
       diet: metades.dieta ? data.diet : (last?.diet ?? null),
-      disclaimer: data.disclaimer,
+      // Mesma procedência do `/generate` — ver o comentário lá.
+      createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
+      disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
     });
 
     res.status(201).json({ plan: serializePlan(plan) });

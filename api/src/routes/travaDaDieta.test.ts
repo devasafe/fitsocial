@@ -503,6 +503,77 @@ describe("as outras portas que escrevem a dieta inteira (generate/adjust/import)
   });
 });
 
+describe("Rodada 2 — a procedência da metade preservada sobrevive à geração parcial", () => {
+  // O conserto do Defeito 2 gravava `Plan.create({..., ...})` sem `createdBy`
+  // nem `disclaimer` condicionados — os dois caíam sempre no valor da IA
+  // (`null` e `data.disclaimer`), mesmo quando a metade PRESERVADA era de um
+  // profissional. `recusarSeForDoTreinador`/`recusarSeForDoNutricionista`
+  // (as guardas de apagar) leem justamente `createdBy` para decidir se
+  // travam — com ele sempre `null` depois de uma geração parcial, apagar o
+  // plano parava de ser barrado, mesmo levando junto o treino que o
+  // treinador escreveu. Reabria a porta que a Tarefa 11b existe para fechar.
+  it("apagar o plano continua barrado depois de uma geração parcial", async () => {
+    const coach = await registrarCoach();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: true });
+    await criarPlano(aluno.id, { workout: TREINO_VALIDO, createdBy: coach.id });
+    espiao.proximaResposta = PLANO_GERADO;
+
+    // Dieta livre (sem nutri) — a rota não recusa, e escreve a dieta.
+    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
+
+    // O plano novo carrega o treino do coach: apagar continua exigindo que
+    // ninguém tenha travado a metade.
+    await request(app).delete("/plans/current").set(auth(aluno.token)).expect(409);
+  });
+
+  it("apagar só o treino continua barrado depois de uma geração parcial", async () => {
+    const coach = await registrarCoach();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: true });
+    await criarPlano(aluno.id, { workout: TREINO_VALIDO, createdBy: coach.id });
+    espiao.proximaResposta = PLANO_GERADO;
+
+    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
+
+    await request(app).delete("/plans/current/workout").set(auth(aluno.token)).expect(409);
+  });
+
+  it("geração sem profissional nenhum continua assinando null", async () => {
+    // Não regride o caso comum: as duas metades livres, ninguém assinou.
+    const aluno = await registrar();
+    espiao.proximaResposta = PLANO_GERADO;
+
+    await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
+
+    const atual = await Plan.findOne({ user: aluno.id }).sort({ version: -1 });
+    expect(atual!.createdBy).toBeNull();
+
+    // E sem ninguém travando nada, apagar continua livre.
+    await request(app).delete("/plans/current").set(auth(aluno.token)).expect(200);
+  });
+
+  it("o aviso do profissional sobrevive à geração parcial", async () => {
+    const coach = await registrarCoach();
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, "coach", { treinos: true });
+    await criarPlano(aluno.id, {
+      workout: TREINO_VALIDO,
+      createdBy: coach.id,
+    });
+    await Plan.updateOne(
+      { user: aluno.id },
+      { $set: { disclaimer: "Aviso do treinador: evite dor lombar." } }
+    );
+    espiao.proximaResposta = PLANO_GERADO;
+
+    const r = await request(app).post("/plans/generate").set(auth(aluno.token)).send({}).expect(201);
+
+    // Não é o genérico da IA ("Aviso.", em PLANO_GERADO) — é o do treinador.
+    expect(r.body.plan.disclaimer).toBe("Aviso do treinador: evite dor lombar.");
+  });
+});
+
 describe("GET /plans/hoje avisa o app: podeEditarDieta", () => {
   it("sem nutricionista, podeEditarDieta é true", async () => {
     const aluno = await registrar();
