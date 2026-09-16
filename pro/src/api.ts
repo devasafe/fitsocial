@@ -150,6 +150,14 @@ export interface AlunoNaLista {
   aluno: { id: string; nome: string; username: string | null; avatarUrl: string };
   /** Nulo quando o aluno não abriu os treinos — diferente de não ter treinado. */
   treinos: { ultimoEm: string | null; naSemana: number } | null;
+  /**
+   * Só existe em linha de `papel: "nutri"` — a linha de coach nem traz a
+   * chave. Nulo quando a dupla não abriu a dieta, pelo mesmo motivo do
+   * `treinos` acima. `ultimoRegistroEm` é `yyyy-mm-dd` (fuso America/Sao_Paulo
+   * na borda), diferente do ISO de `treinos.ultimoEm` — vêm de fontes
+   * diferentes (`FoodLog.date` é string; `Activity.startedAt` é `Date`).
+   */
+  nutricao?: { ultimoRegistroEm: string | null; diasComRegistroNaSemana: number } | null;
 }
 
 export const listarAlunos = (token: string) => api<AlunoNaLista[]>("/pro/alunos", { token });

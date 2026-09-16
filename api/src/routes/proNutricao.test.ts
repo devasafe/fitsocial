@@ -10,6 +10,7 @@ import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
 import { Plan, type WorkoutData } from "../models/Plan.js";
 import { FoodLog } from "../models/FoodLog.js";
 import { ProMessage } from "../models/ProMessage.js";
+import { chaveDoDia } from "../utils/dia.js";
 
 const app = createApp();
 let mongod: MongoMemoryServer;
@@ -81,6 +82,41 @@ async function vincular(
   expect(r.status).toBe(201);
   return r.body.data.id as string;
 }
+
+describe("GET /pro/alunos — triagem do nutricionista", () => {
+  it("a lista do nutri traz dias sem registro de comida, e a do coach não muda", async () => {
+    const nutri = await registrarProfissional("nutri");
+    const coach = await registrarProfissional("coach");
+    const aluno = await registrar();
+
+    await vincular(nutri.token, aluno.token, { dieta: true, treinos: false }, "nutri");
+    await vincular(coach.token, aluno.token, { treinos: true, dieta: false }, "coach");
+
+    // Sem isto, `ultimoRegistroEm` sai `null` e `expect.anything()` rejeita —
+    // a pessoa precisa ter registrado algo para o sinal existir.
+    await FoodLog.create({
+      user: new mongoose.Types.ObjectId(aluno.id),
+      date: chaveDoDia(),
+      meal: "almoco",
+      name: "Arroz e feijão",
+      kcal: 500,
+    });
+
+    const comoNutri = como(nutri.token);
+    const comoCoach = como(coach.token);
+
+    const doNutri = await comoNutri.get("/pro/alunos?papel=nutri").expect(200);
+    // Para o nutri, "precisa de mim" é ter parado de registrar comida.
+    expect(doNutri.body.data[0].nutricao).toEqual(
+      expect.objectContaining({ ultimoRegistroEm: expect.anything() })
+    );
+
+    const doCoach = await comoCoach.get("/pro/alunos?papel=coach").expect(200);
+    // O lado do coach segue idêntico: o painel dele está no ar.
+    expect(doCoach.body.data[0].treinos).toBeDefined();
+    expect(doCoach.body.data[0].nutricao).toBeUndefined();
+  });
+});
 
 describe("GET /pro/alunos/:id/nutricao", () => {
   let nutri: { token: string; id: string };

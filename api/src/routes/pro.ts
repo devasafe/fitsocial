@@ -8,6 +8,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { User } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
+import { FoodLog } from "../models/FoodLog.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
 import { ProfessionalLink, PAPEIS_PRO, type PapelPro } from "../models/ProfessionalLink.js";
 import { limiteDeAlunos } from "../services/entitlement.js";
@@ -43,6 +44,7 @@ import { preservarAgenda } from "../services/agendaDeTreino.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
 import { decodeCursor, decodeCursorCriacao, encodeCursor, encodeCursorCriacao } from "../utils/cursor.js";
+import { ultimosDias } from "../utils/dia.js";
 
 /**
  * O aviso que acompanha um treino escrito por gente, e não pela IA.
@@ -237,6 +239,11 @@ proRouter.get(
     }
 
     const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // `FoodLog.date` é string yyyy-mm-dd (fuso America/Sao_Paulo na borda), não
+    // Date — a janela de "últimos 7 dias" para ela é por CHAVE de dia, e não
+    // por timestamp, senão a virada do dia em SP e em UTC desalinham. Mesma
+    // função que `evolucaoDeNutricao` usa para a mesma janela.
+    const seteDias = ultimosDias(7);
 
     const data = await Promise.all(
       links.map(async (link) => {
@@ -258,6 +265,32 @@ proRouter.get(
             ])
           : [null, 0];
 
+        // Irmão do bloco de treino, só que para o nutricionista: o sinal dele
+        // não é "sumiu do treino", é "parou de registrar comida". Só a LINHA
+        // de nutri ganha o bloco — quem é dono da parte é o escopo da DUPLA
+        // (`parteAberta`), não o `link.escopo` desta linha isolada.
+        let nutricao:
+          | { ultimoRegistroEm: string | null; diasComRegistroNaSemana: number }
+          | null
+          | undefined;
+        if (link.papel === "nutri") {
+          const podeDieta = parteAberta(vinculosDaDupla, "dieta");
+          if (podeDieta) {
+            const [ultimoLog, diasComRegistro] = await Promise.all([
+              FoodLog.findOne({ user: cliente._id }).sort({ date: -1 }).select("date"),
+              // Dias DISTINTOS, não documentos: quem registra quatro refeições
+              // por dia não pode aparecer com "28 na semana".
+              FoodLog.distinct("date", { user: cliente._id, date: { $gte: seteDias[0] } }),
+            ]);
+            nutricao = {
+              ultimoRegistroEm: ultimoLog?.date ?? null,
+              diasComRegistroNaSemana: diasComRegistro.length,
+            };
+          } else {
+            nutricao = null;
+          }
+        }
+
         return {
           id: link._id.toString(),
           papel: link.papel,
@@ -271,6 +304,7 @@ proRouter.get(
             avatarUrl: cliente.avatarUrl ?? "",
           },
           treinos: podeTreinos ? { ultimoEm: ultimo?.startedAt ?? null, naSemana } : null,
+          ...(link.papel === "nutri" ? { nutricao } : {}),
         };
       })
     );
