@@ -65,6 +65,13 @@ function entradaDoTreino(input: ActivityCreateInput) {
     payload: input.payload,
     // sessionDay É conteúdo — ver o comentário em impressaoDoTreino.ts.
     planLink: input.planLink,
+    // Registro retroativo é conteúdo, não metadado — ver o comentário em
+    // impressaoDoTreino.ts. `.toISOString()` AQUI, e não dentro de
+    // `impressaoDoTreino`: `normalizar()` não trata `Date` especialmente, e
+    // um `Date` cru viraria `{}` na impressão (colidindo datas diferentes
+    // na mesma impressão vazia). `input.startedAt` já chega como `Date`
+    // aqui — `activityCreateSchema` usa `z.coerce.date()`.
+    startedAt: input.startedAt?.toISOString(),
   };
 }
 
@@ -163,6 +170,14 @@ export async function createActivity(
     // caminho normal (o segundo clique devolve o primeiro treino), só que
     // descoberto na gravação em vez de na consulta — não deve virar 500 na
     // cara de quem só clicou duas vezes.
+    //
+    // `&& input.clientKey`: o único índice único hoje é `{user, clientKey}`
+    // (models/Activity.ts) — não existe índice único sobre a impressão, só o
+    // índice comum que sustenta a busca por janela. Um E11000 SEM
+    // `clientKey` no input não pode ter vindo desta corrida; tratá-lo aqui
+    // do mesmo jeito esconderia um defeito DIFERENTE atrás de "ah, é
+    // duplicata" — por isso relançamos (`throw err` abaixo) nesse caso, em
+    // vez de assumir que é sempre esta corrida.
     if ((err as { code?: number }).code === 11000 && input.clientKey) {
       const existente = await Activity.findOne({ user: userId, clientKey: input.clientKey });
       if (existente) return { activity: existente, post: null, newPRs: [], repetido: true };

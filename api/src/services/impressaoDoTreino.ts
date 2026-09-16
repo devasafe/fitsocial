@@ -47,6 +47,32 @@ import { createHash } from "node:crypto";
 // verdade do MESMO check-in carrega o MESMO `sessionDay`, então a impressão
 // continua batendo e a duplicata continua sendo pega; só deixa de engolir
 // duas sessões genuinamente distintas.
+//
+// `startedAt` entra na impressão (emenda de 16/09/2026 ao desenho, depois da
+// revisão da Tarefa 3) pelo mesmo motivo de `durationSec`: registro
+// retroativo é plausível (a pessoa lança o treino de segunda e o de quarta
+// na mesma sentada, mesma rotina, cada um com a sua data), e ambos são
+// treinos DIFERENTES mesmo com conteúdo idêntico. A saída original do
+// desenho era tirar `startedAt` informado da rede inteira, mas isso deixava
+// o próprio registro retroativo SEM proteção — reenviar duas vezes o treino
+// de segunda também ficaria fora da rede. Pôr `startedAt` na impressão
+// resolve os dois: dias diferentes geram impressões diferentes (não colide
+// mais), e um reenvio do MESMO registro carrega o MESMO `startedAt` (a
+// proteção continua valendo). A premissa é a mesma de `durationSec`:
+// pressupõe uma data ESCOLHIDA pela pessoa, não gerada no instante do
+// envio — se uma tela passar a mandar `startedAt: new Date()` no momento de
+// salvar, cada reenvio teria um valor diferente e a rede pararia de pegar
+// aquele caminho, em silêncio. Hoje nenhuma tela do app manda `startedAt`
+// na criação (verificado na revisão da Tarefa 3); reavalie esta premissa se
+// isso mudar.
+//
+// IMPORTANTE: `startedAt` chega aqui como STRING (ISO), já normalizado pelo
+// chamador — nunca como `Date`. `normalizar()` abaixo não trata `Date`
+// especialmente: `Object.keys(new Date())` é `[]`, então um `Date` cru
+// viraria `{}` na impressão, e DUAS DATAS DIFERENTES colidiriam na mesma
+// impressão vazia — o oposto do que este campo existe para resolver, e em
+// silêncio. Quem monta a entrada (`entradaDoTreino` em services/activities.ts)
+// converte com `.toISOString()` antes de chamar `impressaoDoTreino`.
 
 /** Entrada crua de um treino, tal como o cliente manda. */
 export interface EntradaDoTreino {
@@ -55,6 +81,8 @@ export interface EntradaDoTreino {
   durationSec?: number;
   payload: unknown;
   planLink?: { planVersion?: number; sessionDay?: string };
+  /** Já normalizado para ISO string pelo chamador — nunca um `Date` cru (ver acima). */
+  startedAt?: string;
 }
 
 /** Ordena as chaves de objetos recursivamente e remove `undefined`/`null`. */

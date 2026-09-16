@@ -225,4 +225,66 @@ describe("POST /activities: o servidor reconhece o mesmo treino enviado duas vez
     expect(dois.body.repetido).toBe(true);
     expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(1);
   });
+
+  // `startedAt` é CONTEÚDO (emenda de 16/09/2026 ao desenho): registro
+  // retroativo de dois dias diferentes, mesma rotina, é plausível — e são
+  // dois treinos, não um. Documenta a regra para ninguém tirar `startedAt`
+  // da impressão de volta (a saída original do desenho, corrigida depois da
+  // revisão, era desligar a rede inteira para quem manda `startedAt` — o que
+  // teria deixado o PRÓPRIO registro retroativo sem proteção nenhuma).
+  it("startedAt diferente, mesmo conteúdo: grava DOIS treinos", async () => {
+    const corpo = (startedAt: string) => ({
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      startedAt,
+      payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+    });
+    await como(token).post("/activities").send(corpo("2026-09-14T10:00:00.000Z")).expect(201);
+    await como(token).post("/activities").send(corpo("2026-09-16T10:00:00.000Z")).expect(201);
+    expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(2);
+  });
+
+  it("mesmo startedAt reenviado: grava UM treino só", async () => {
+    const corpo = {
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      startedAt: "2026-09-14T10:00:00.000Z",
+      payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+    };
+    await como(token).post("/activities").send(corpo).expect(201);
+    const dois = await como(token).post("/activities").send(corpo).expect(200);
+    expect(dois.body.meta.repetido).toBe(true);
+    expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(1);
+  });
+
+  // Dispara o `catch` de E11000 de verdade (não só por leitura): dois envios
+  // com a MESMA clientKey, de fato simultâneos, passam os dois pelo
+  // `acharRepeticao` antes de qualquer um ter gravado — nenhum vê o outro —
+  // e chegam os dois no `Activity.create`. O índice único derruba o segundo
+  // com E11000, e é esse caminho (não o `findOne` de `acharRepeticao`) que
+  // precisa devolver o treino existente em vez de estourar 500.
+  it("corrida de verdade: dois envios simultâneos com a mesma clientKey gravam UM treino, sem 500", async () => {
+    const corpo = {
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      clientKey: "corrida-de-verdade",
+      payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+    };
+    const [a, b] = await Promise.all([
+      como(token).post("/activities").send(corpo),
+      como(token).post("/activities").send(corpo),
+    ]);
+
+    // Nenhum dos dois pode ter estourado — é exatamente o 500 que este
+    // tratamento existe para evitar.
+    expect([a.status, b.status].every((s) => s === 200 || s === 201)).toBe(true);
+    // Um dos dois criou (201), o outro reconheceu a repetição (200) — a
+    // ordem entre eles não é determinística, por isso o `sort`.
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect(a.body.data.id).toBe(b.body.data.id);
+    expect(await Activity.countDocuments({ clientKey: "corrida-de-verdade" })).toBe(1);
+  });
 });
