@@ -84,9 +84,23 @@ hoje" — é o mesmo treino enviado duas vezes.
 isso quando a pessoa confirma "foi outro treino". O APK antigo não manda — e é justamente nele
 que a rede precisa valer.
 
-**Fora da rede:** `sportId` cuja natureza é repetir (se houver) e treinos com `startedAt`
-informado pela pessoa (registro retroativo de dois dias iguais é plausível). A rede olha só o
-que foi criado agora.
+**Emenda de 16/09, depois da revisão da Tarefa 3.** A versão original dizia: *"treinos com
+`startedAt` informado pela pessoa ficam fora da rede — registro retroativo de dois dias iguais é
+plausível"*. A intenção estava certa e a saída, errada. **`startedAt` passa a ENTRAR na
+impressão**, em vez de desligar a rede.
+
+O motivo é que a segunda opção domina a primeira. Desligar a rede resolve o falso positivo
+(segunda e quarta, mesma rotina, registradas em sequência) mas deixa o registro retroativo
+**sem proteção nenhuma** — quem enviar duas vezes o treino de segunda fica com dois. Pôr
+`startedAt` na impressão resolve o mesmo falso positivo (dias diferentes, impressões diferentes)
+**e mantém** a proteção: um reenvio do mesmo registro retroativo carrega o mesmo `startedAt`, e
+continua sendo pego.
+
+A premissa que isto assume — a mesma de `durationSec` — é que `startedAt` venha de uma data
+escolhida pela pessoa, não gerado no instante do envio. Se alguma tela passar a mandar
+`startedAt: new Date()` na hora de salvar, cada reenvio terá um valor diferente e a rede deixa
+de pegar aquele caminho. Hoje **nenhuma tela do app manda `startedAt` na criação** (verificado na
+revisão da Tarefa 3), então a premissa vale; ela precisa ser reavaliada se isso mudar.
 
 ### 3. Apagar
 
