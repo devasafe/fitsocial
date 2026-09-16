@@ -1051,6 +1051,16 @@ proRouter.put(
       workout: preservarAgenda(atual?.workout as WorkoutData | null, workout),
       // A dieta corrente é preservada: o plano tem duas metades independentes.
       diet: atual?.diet ?? null,
+      // O fallback (em vez de `DISCLAIMER_DO_COACH` direto) é de propósito, não
+      // descuido: `disclaimer` é UM CAMPO POR DOCUMENTO descrevendo DUAS
+      // METADES independentes. Se a dieta preservada acima foi prescrita por
+      // um nutricionista, o disclaimer da versão anterior é o dele — e
+      // sobrescrever sem condição apagaria o aviso da dieta (ex.: "procure seu
+      // nutricionista antes de mudar algo") por cima de uma dieta que não
+      // mudou nesta prescrição de treino. Mesmo problema, espelhado, na
+      // prescrição de dieta abaixo — ver o comentário lá. Raiz: `disclaimer`
+      // devia ser metadado POR METADE do plano, não do documento inteiro;
+      // registrado para tarefa própria, não para consertar aqui.
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
       createdBy: req.user!._id,
     });
@@ -1146,6 +1156,19 @@ proRouter.put(
       summary,
       workout: atual?.workout ?? null,
       diet,
+      // Fallback de propósito, não descuido — mesmo problema do comentário
+      // espelhado em `PUT /alunos/:id/treino` (`disclaimer: atual?.disclaimer
+      // ?? DISCLAIMER_DO_COACH`, acima): `disclaimer` é UM CAMPO POR
+      // DOCUMENTO para DUAS METADES independentes. O `workout` preservado
+      // acima pode ter sido prescrito por um coach, e o disclaimer da versão
+      // anterior é dele (aviso de dor). Trocar sem condição por
+      // `DISCLAIMER_DO_NUTRI` apagaria esse aviso sobre um treino que não
+      // mudou nesta prescrição de dieta — pior que o bug que isto pareceria
+      // consertar (dieta nova ficar com o disclaimer da IA). Entre os dois
+      // erros, o que fica é o mais cauteloso: aviso redundante > aviso de
+      // segurança apagado. Raiz real: `disclaimer` devia ser metadado POR
+      // METADE do plano, não do documento inteiro — tarefa própria, não para
+      // consertar aqui (Tarefa 11c, item 2).
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_NUTRI,
       createdBy: req.user!._id,
     });
