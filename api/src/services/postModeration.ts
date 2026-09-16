@@ -43,9 +43,53 @@ export async function editarPost(
   return post;
 }
 
-export interface ResultadoDaExclusao {
+export interface ResultadoDaLimpeza {
   notificacoesRemovidas: number;
   denunciasAtualizadas: number;
+}
+
+/** Mantido pelo nome antigo: é o formato que `excluirPost` sempre devolveu,
+ *  e a rota espalha isto em `meta` da resposta — trocar os nomes dos campos
+ *  quebraria quem já lê `meta.notificacoesRemovidas`/`meta.denunciasAtualizadas`. */
+export type ResultadoDaExclusao = ResultadoDaLimpeza;
+
+/**
+ * Limpa o que aponta para um conjunto de posts que acabaram de sumir:
+ * notificações que levavam a eles (não têm mais para onde levar) e denúncias
+ * pendentes sobre eles (o conteúdo já saiu do ar — a denúncia tem resposta).
+ *
+ * Extraído de `excluirPost` porque `apagarAtividade`
+ * (`services/activities.ts`) precisa do MESMO conhecimento quando o post some
+ * junto do treino que ele compartilhava: foi por faltar isto lá que a
+ * notificação e a denúncia ficaram órfãs da primeira vez. Duplicar as duas
+ * operações de novo era preparar o terceiro esquecimento.
+ */
+export async function limparRastrosDePosts(
+  postIds: mongoose.Types.ObjectId[],
+  resolvidoPor: mongoose.Types.ObjectId
+): Promise<ResultadoDaLimpeza> {
+  if (postIds.length === 0) return { notificacoesRemovidas: 0, denunciasAtualizadas: 0 };
+
+  // As notificações que levavam a estes posts não têm mais para onde levar.
+  const notifs = await Notification.deleteMany({ targetKind: "post", targetId: { $in: postIds } });
+
+  // Denúncias pendentes sobre eles já têm resposta: o conteúdo saiu do ar.
+  const denuncias = await Report.updateMany(
+    { targetKind: "post", targetId: { $in: postIds }, status: { $in: ["pendente", "analisando"] } },
+    {
+      $set: {
+        status: "resolvida",
+        decision: "removido",
+        resolvedBy: resolvidoPor,
+        resolvedAt: new Date(),
+      },
+    }
+  );
+
+  return {
+    notificacoesRemovidas: notifs.deletedCount ?? 0,
+    denunciasAtualizadas: denuncias.modifiedCount ?? 0,
+  };
 }
 
 /**
@@ -79,29 +123,15 @@ export async function excluirPost(
   post.deletedBy = quem._id;
   await post.save();
 
-  // As notificações que levavam a este post não têm mais para onde levar.
-  const notifs = await Notification.deleteMany({ targetKind: "post", targetId: post._id });
-
-  // Denúncias pendentes sobre ele já têm resposta: o conteúdo saiu do ar.
-  const denuncias = await Report.updateMany(
-    { targetKind: "post", targetId: post._id, status: { $in: ["pendente", "analisando"] } },
-    {
-      $set: {
-        status: "resolvida",
-        decision: "removido",
-        resolvedBy: quem._id,
-        resolvedAt: new Date(),
-      },
-    }
-  );
+  const resultado = await limparRastrosDePosts([post._id], quem._id);
 
   // Quem apagou o próprio post sabe que apagou. Quem teve o post removido pela
   // moderação, não — e descobrir sozinho que o conteúdo sumiu é pior do que ser
   // avisado. Vai sem ator: dizer QUAL administrador decidiu transforma uma
   // decisão da plataforma em briga com uma pessoa.
   //
-  // Depois da limpeza acima de propósito: aquele deleteMany apaga tudo que
-  // aponta para este post, e levaria este aviso junto.
+  // Depois da limpeza acima de propósito: `limparRastrosDePosts` apaga tudo
+  // que aponta para este post, e levaria este aviso junto.
   if (!ehAutor) {
     await createNotification({
       userId: post.author,
@@ -110,8 +140,5 @@ export async function excluirPost(
     });
   }
 
-  return {
-    notificacoesRemovidas: notifs.deletedCount ?? 0,
-    denunciasAtualizadas: denuncias.modifiedCount ?? 0,
-  };
+  return resultado;
 }

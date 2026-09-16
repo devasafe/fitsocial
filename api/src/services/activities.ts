@@ -13,6 +13,7 @@ import { preencherSlugs } from "./slug.js";
 import { detectPRs, recomputeUserPRs, type NewPR } from "./prEngine.js";
 import { processTrack } from "./trackProcessing.js";
 import { impressaoDoTreino } from "./impressaoDoTreino.js";
+import { limparRastrosDePosts } from "./postModeration.js";
 
 export interface CreatedActivity {
   activity: InstanceType<typeof Activity>;
@@ -239,14 +240,18 @@ export async function createActivity(
  *
  * Antes disto, `DELETE /activities/:id` fazia só `Activity.deleteOne`: o post
  * do compartilhamento sobrevivia apontando para um treino que não existe mais
- * (mentira no feed dos outros), e o recorde que aquele treino tinha batido
- * ficava para sempre no quadro de PRs, sem nenhum jeito de tirar.
+ * (mentira no feed dos outros), o recorde que aquele treino tinha batido
+ * ficava para sempre no quadro de PRs, e a notificação/denúncia que apontava
+ * para o post também ficava órfã — sem nenhum jeito de tirar nenhum dos três.
  *
  * A ordem importa: primeiro os comentários e curtidas dos posts ligados ao
- * treino, depois os posts, depois o treino, e só então `recomputeUserPRs` —
- * que reconstrói os recordes do ZERO a partir do que restou. Reconstruir é
- * mais simples que "desfazer" o recorde daquele treino especificamente, e não
- * tem caso de borda (ex.: dois treinos empatados no mesmo recorde).
+ * treino, depois os próprios posts (`limparRastrosDePosts`, a mesma limpeza
+ * de notificação/denúncia que `excluirPost` faz na moderação — ver
+ * `services/postModeration.ts`), depois o treino, e só então
+ * `recomputeUserPRs` — que reconstrói os recordes do ZERO a partir do que
+ * restou. Reconstruir é mais simples que "desfazer" o recorde daquele treino
+ * especificamente, e não tem caso de borda (ex.: dois treinos empatados no
+ * mesmo recorde).
  *
  * Constância, streak, total, calendário e os gráficos de evolução não
  * precisam de nada além disto: são calculados NA LEITURA a partir dos
@@ -270,6 +275,7 @@ export async function apagarAtividade(
     await Comment.deleteMany({ post: { $in: postIds } });
     await Like.deleteMany({ post: { $in: postIds } });
     await Post.deleteMany({ _id: { $in: postIds } });
+    await limparRastrosDePosts(postIds, userId);
   }
 
   await atividade.deleteOne();

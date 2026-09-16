@@ -14,6 +14,8 @@ import { Post } from "../models/Post.js";
 import { Comment } from "../models/Comment.js";
 import { Like } from "../models/Like.js";
 import { PersonalRecord } from "../models/PersonalRecord.js";
+import { Notification } from "../models/Notification.js";
+import { Report } from "../models/Report.js";
 import { User } from "../models/User.js";
 
 const app = createApp();
@@ -89,6 +91,8 @@ beforeEach(async () => {
     Comment.deleteMany({}),
     Like.deleteMany({}),
     PersonalRecord.deleteMany({}),
+    Notification.deleteMany({}),
+    Report.deleteMany({}),
   ]);
 });
 
@@ -118,6 +122,55 @@ describe("DELETE /activities/:id — apagar de verdade", () => {
     expect(await Post.countDocuments({ activity: atividadeId })).toBe(0);
     expect(await Comment.countDocuments({ post: postId })).toBe(0);
     expect(await Like.countDocuments({ post: postId })).toBe(0);
+  });
+
+  it("apagar o treino apaga as notificações que levavam ao post dele", async () => {
+    // Achado da revisão (rodada 1): faltava esta — a pessoa apaga o treino,
+    // o aviso "Fulano curtiu seu treino" continua na lista dela, e tocar nele
+    // leva a um post que não existe mais.
+    const dono = await registrar();
+    const outro = await registrar();
+
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 100, { shareToFeed: true }));
+    const atividadeId = criado.body.data.id;
+    const postId = criado.body.meta.sharedPostId;
+
+    // Curtir gera notificação para o dono do post (services/notifications.ts).
+    await como(outro.token).post(`/social/posts/${postId}/like`);
+    expect(await Notification.countDocuments({ targetKind: "post", targetId: postId })).toBe(1);
+
+    await como(dono.token).delete(`/activities/${atividadeId}`).expect(200);
+
+    expect(await Notification.countDocuments({ targetKind: "post", targetId: postId })).toBe(0);
+  });
+
+  it("apagar o treino resolve a denúncia pendente sobre o post dele", async () => {
+    // Achado da revisão (rodada 1), ao ler `excluirPost`: sem isto, uma
+    // denúncia sobre o post que a pessoa apagou fica pendente para sempre, e
+    // um moderador a abre para encontrar nada.
+    const dono = await registrar();
+    const denunciante = await registrar();
+
+    const criado = await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 100, { shareToFeed: true }));
+    const atividadeId = criado.body.data.id;
+    const postId = criado.body.meta.sharedPostId;
+
+    const den = await como(denunciante.token)
+      .post(`/social/posts/${postId}/report`)
+      .send({ reason: "spam" });
+    expect(den.status).toBe(201);
+    expect(await Report.countDocuments({ targetId: postId, status: "pendente" })).toBe(1);
+
+    await como(dono.token).delete(`/activities/${atividadeId}`).expect(200);
+
+    expect(await Report.countDocuments({ targetId: postId, status: "pendente" })).toBe(0);
+    const denuncia = await Report.findOne({ targetId: postId });
+    expect(denuncia!.status).toBe("resolvida");
+    expect(denuncia!.decision).toBe("removido");
   });
 
   it("apagar o treino derruba o recorde que só existia por causa dele", async () => {
@@ -150,6 +203,31 @@ describe("DELETE /activities/:id — apagar de verdade", () => {
     const prs = await PersonalRecord.find({ user: dono.id });
     expect(prs.length).toBe(1);
     expect(prs[0]!.value).toBe(100);
+  });
+
+  it("apagar o treino do MESMO exercício que detém o recorde cai para o segundo melhor", async () => {
+    // Achado Menor da revisão: o motivo citado no comentário de
+    // `apagarAtividade` (reconstruir em vez de desfazer, "sem caso de
+    // borda") não tinha teste nenhum na suíte. O teste acima usa exercícios
+    // diferentes — prova que não zera tudo, mas não prende o fallback.
+    const dono = await registrar();
+    const antigo = await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 80, { startedAt: "2026-09-01T10:00:00.000Z" }));
+    expect(antigo.status).toBe(201);
+    const recorde = await como(dono.token)
+      .post("/activities")
+      .send(strengthBody("Supino", 100, { startedAt: "2026-09-10T10:00:00.000Z" }));
+    expect(recorde.status).toBe(201);
+    const idDoRecorde = recorde.body.data.id;
+
+    expect((await PersonalRecord.findOne({ user: dono.id }))!.value).toBe(100);
+
+    await como(dono.token).delete(`/activities/${idDoRecorde}`).expect(200);
+
+    const prs = await PersonalRecord.find({ user: dono.id });
+    expect(prs.length).toBe(1);
+    expect(prs[0]!.value).toBe(80);
   });
 
   it("não dá para apagar o treino de outra pessoa, e a resposta é 404", async () => {
