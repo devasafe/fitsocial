@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -9,6 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import { buscarNutricao, ErroApi, type EvolucaoDeNutricao, type Janela } from "../api";
+import { diaEMes, EIXO, GRADE, TOOLTIP, VERDE } from "./grafico-base";
 
 // A aba de nutrição do nutricionista — a mesma regra da tela do aluno
 // (app-android/src/screens/NutricaoProgressoScreen.tsx), do outro lado do
@@ -27,31 +28,9 @@ import { buscarNutricao, ErroApi, type EvolucaoDeNutricao, type Janela } from ".
 //
 // O gráfico é escrito à mão em vez de reusar `Grafico.tsx`: aquele componente
 // tipa `valor` como `number`, e aqui o `null` do dia sem registro PRECISA
-// entrar na série — é o dado, não um buraco a preencher. As cores e a moldura
-// abaixo seguem a mesma forma de `Grafico.tsx` de propósito.
-
-const VERDE = "#3bcc06";
-const EIXO = { stroke: "var(--texto-3)", fontSize: 11 };
-const GRADE = { stroke: "var(--line)", strokeDasharray: "0" };
-const TOOLTIP = {
-  contentStyle: {
-    background: "var(--surface-2)",
-    border: "1px solid var(--line-forte)",
-    borderRadius: 10,
-    color: "var(--texto)",
-    fontSize: 13,
-  },
-  labelStyle: { color: "var(--texto-2)", marginBottom: 4 },
-  cursor: { fill: "rgba(59, 204, 6, 0.06)" },
-};
-
-/** "2026-09-09" vira "09/09" — mesmo formato do eixo em `Grafico.tsx`. */
-function diaEMes(v: unknown): string {
-  if (typeof v !== "string") return String(v ?? "");
-  const d = new Date(v.length <= 10 ? `${v}T12:00:00` : v);
-  if (Number.isNaN(d.getTime())) return v;
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+// entrar na série — é o dado, não um buraco a preencher. A moldura (cores,
+// grade, tooltip, formato de data) vem de `grafico-base.ts`, compartilhada
+// com `Grafico.tsx`, para as duas telas nunca divergirem de cor.
 
 export function Nutricao({
   token,
@@ -66,28 +45,41 @@ export function Nutricao({
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const carregar = useCallback(async () => {
+  // Guarda de resultado obsoleto, no mesmo padrão dos efeitos vizinhos em
+  // `Aluno.tsx` (`buscarSerie`, `buscarGrupos`, `buscarCardio`,
+  // `buscarSerieDeCardio`): trocar de janela duas vezes em sequência (90 → 30
+  // → 90, o gesto normal de comparar períodos) dispara duas requisições, e sem
+  // isto quem escreve o estado é quem CHEGA por último, não quem foi PEDIDO
+  // por último — o gráfico ficaria mostrando uma janela com o chip aceso
+  // dizendo outra, exatamente a mentira que esta tela existe para evitar.
+  useEffect(() => {
+    let vivo = true;
     setCarregando(true);
-    try {
-      // A janela `0` (Tudo) já chega convertida para 365 no rótulo da tela
-      // inteira — o backend faz o mesmo mapeamento nesta rota, então repassar
-      // `janela` direto é consistente com o resto de `Aluno.tsx`.
-      const r = await buscarNutricao(token, alunoId, janela);
-      setEvolucao(r.data);
-      setErro(null);
-    } catch (e) {
-      setErro(e instanceof ErroApi ? e.message : "Não foi possível carregar a nutrição.");
-    } finally {
-      setCarregando(false);
-    }
+    // A janela `0` (Tudo) já chega convertida para 365 no rótulo da tela
+    // inteira — o backend faz o mesmo mapeamento nesta rota, então repassar
+    // `janela` direto é consistente com o resto de `Aluno.tsx`.
+    buscarNutricao(token, alunoId, janela)
+      .then((r) => {
+        if (!vivo) return;
+        setEvolucao(r.data);
+        setErro(null);
+      })
+      .catch((e) => {
+        if (!vivo) return;
+        setErro(e instanceof ErroApi ? e.message : "Não foi possível carregar a nutrição.");
+      })
+      .finally(() => {
+        if (vivo) setCarregando(false);
+      });
+    return () => {
+      vivo = false;
+    };
   }, [token, alunoId, janela]);
 
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
-
   if (carregando) return <p className="vazio">Carregando…</p>;
-  if (erro || !evolucao) return <p className="erro">{erro}</p>;
+  if (erro || !evolucao) {
+    return <p className="erro">{erro ?? "Não foi possível carregar a nutrição."}</p>;
+  }
 
   const { dias, resumo } = evolucao;
   const semRegistro = resumo.diasComRegistro === 0;
