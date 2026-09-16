@@ -17,12 +17,23 @@ import { createHash } from "node:crypto";
 // de serializar), para que "não mandou o campo" e "mandou o campo como
 // null" produzam a mesma impressão — o cliente Android 1.2.0 pode omitir
 // campos que uma versão mais nova envia como null, ou vice-versa.
+//
+// `durationSec` entra na impressão porque, para corrida e para aula, a
+// duração É o conteúdo do treino — tirá-la faria duas corridas diferentes
+// colidirem. Isso PRESSUPÕE que `durationSec` venha de um campo digitado
+// pela pessoa (é o que todas as telas de registro fazem hoje: minutos
+// digitados × 60, ou o texto de duração convertido), nunca de um cronômetro
+// em andamento — um reenvio do mesmo clique manda o mesmo número. Se algum
+// dia uma tela passar a mandar tempo decorrido de verdade (por exemplo, lido
+// de um cronômetro no momento do reenvio), essa premissa quebra e a
+// impressão pode divergir entre o envio original e o retry, em silêncio:
+// reavalie esta função antes de ligar essa tela à detecção de duplicação.
 
 /** Entrada crua de um treino, tal como o cliente manda. */
 export interface EntradaDoTreino {
   kind: string;
   sportId: string;
-  durationSec: number;
+  durationSec?: number;
   payload: unknown;
 }
 
