@@ -202,6 +202,114 @@ describe("GET /pro/alunos/:id/dieta", () => {
     expect(r.body.data.createdBy).toBeNull();
   });
 
+  const dietaExemplo = {
+    dailyCalories: 2000,
+    macros: { proteinG: 150, carbsG: 200, fatG: 60 },
+    meals: [{ name: "Café", timeHint: "", items: [{ food: "Ovos", quantity: "2" }] }],
+    notes: "",
+  };
+
+  const treinoExemplo = {
+    split: "AB",
+    daysPerWeek: 2,
+    sessions: [
+      {
+        day: "A — Peito",
+        focus: "Superior",
+        exercises: [{ name: "Supino reto", sets: 3, reps: "8-12", restSeconds: 90, notes: "" }],
+      },
+    ],
+  };
+
+  it("a autoria da dieta sobrevive a uma prescrição de treino", async () => {
+    // Segunda: o nutricionista prescreve a dieta.
+    await comoNutri
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "Dieta inicial", diet: dietaExemplo })
+      .expect(201);
+    const versaoDaDieta = await Plan.findOne({ user: new mongoose.Types.ObjectId(alunoId) }).sort({
+      version: -1,
+    });
+
+    // Quarta: o treinador prescreve o treino — cria versão nova e COPIA a
+    // dieta corrente para ela, com o `createdBy` dele, não do nutricionista.
+    const coach = await registrarProfissional("coach");
+    await vincular(coach.token, aluno.token, { dieta: false, treinos: true }, "coach");
+    await como(coach.token)
+      .put(`/pro/alunos/${alunoId}/treino`)
+      .send({ summary: "Treino novo", workout: treinoExemplo })
+      .expect(201);
+
+    // Quinta: o nutricionista abre "Prescrever dieta" de novo. Tem que
+    // continuar vendo a si mesmo como autor, e a data de segunda — não a
+    // versão do treino de quarta, ainda que ela seja a mais nova.
+    const r = await comoNutri.get(`/pro/alunos/${alunoId}/dieta`).expect(200);
+    expect(r.body.data.createdBy).toBe(nutriId.toString());
+    expect(r.body.data.em).toBe(versaoDaDieta!.createdAt.toISOString());
+    expect(r.body.data.version).toBe(versaoDaDieta!.version + 1);
+  });
+
+  it("a autoria muda quando a dieta muda", async () => {
+    await comoNutri
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "Dieta inicial", diet: dietaExemplo })
+      .expect(201);
+
+    const coach = await registrarProfissional("coach");
+    await vincular(coach.token, aluno.token, { dieta: false, treinos: true }, "coach");
+    await como(coach.token)
+      .put(`/pro/alunos/${alunoId}/treino`)
+      .send({ summary: "Treino novo", workout: treinoExemplo })
+      .expect(201);
+
+    // Um segundo nutricionista prescreve dieta nova por cima.
+    const nutri2 = await registrarProfissional("nutri");
+    await vincular(nutri2.token, aluno.token, { dieta: true, treinos: false }, "nutri");
+    const dietaNova = { ...dietaExemplo, dailyCalories: 2400 };
+    await como(nutri2.token)
+      .put(`/pro/alunos/${alunoId}/dieta`)
+      .send({ summary: "Ajuste de volume", diet: dietaNova })
+      .expect(201);
+
+    const r = await comoNutri.get(`/pro/alunos/${alunoId}/dieta`).expect(200);
+    expect(r.body.data.createdBy).toBe(nutri2.id);
+    expect(r.body.data.diet.dailyCalories).toBe(2400);
+  });
+
+  it("dieta sem autor continua sem autor", async () => {
+    // O estado de todo plano que já existe hoje: gerado pela IA, sem prescrição.
+    await Plan.create({
+      user: new mongoose.Types.ObjectId(alunoSemDietaId),
+      version: 1,
+      summary: "plano da IA",
+      workout: null,
+      disclaimer: "aviso",
+      createdBy: null,
+      diet: dietaExemplo,
+    });
+
+    const r = await comoNutri.get(`/pro/alunos/${alunoSemDietaId}/dieta`).expect(200);
+    expect(r.body.data.diet.dailyCalories).toBe(2000);
+    expect(r.body.data.createdBy).toBeNull();
+  });
+
+  it("sem dieta, sem autor", async () => {
+    await Plan.create({
+      user: new mongoose.Types.ObjectId(alunoSemDietaId),
+      version: 1,
+      summary: "só treino",
+      workout: treinoExemplo,
+      diet: null,
+      disclaimer: "aviso",
+      createdBy: null,
+    });
+
+    const r = await comoNutri.get(`/pro/alunos/${alunoSemDietaId}/dieta`).expect(200);
+    expect(r.body.data.diet).toBeNull();
+    expect(r.body.data.createdBy).toBeNull();
+    expect(r.body.data.em).toBeNull();
+  });
+
   it("sem dieta aberta é 403", async () => {
     await comoNutriSemEscopo.get(`/pro/alunos/${alunoId}/dieta`).expect(403);
   });

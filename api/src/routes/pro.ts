@@ -38,6 +38,7 @@ import { PersonalRecordEvent } from "../models/PersonalRecordEvent.js";
 import { evolucaoDeNutricao } from "../services/nutricao.js";
 import { computeStats } from "../services/adherence.js";
 import { Plan, workoutSchema, dietSchema, type WorkoutData } from "../models/Plan.js";
+import { autoriaDaDieta } from "../services/autoriaDaDieta.js";
 import { preservarAgenda } from "../services/agendaDeTreino.js";
 import { ProMessage } from "../models/ProMessage.js";
 import { enviarPush } from "../services/push/index.js";
@@ -541,7 +542,15 @@ proRouter.get(
   })
 );
 
-/** A dieta que está valendo, e de quem ela é. */
+/**
+ * A dieta que está valendo, e de quem ela é.
+ *
+ * "De quem ela é" não é o `createdBy` da versão mais nova: esse campo é por
+ * DOCUMENTO, e `PUT /alunos/:id/treino` cria uma versão nova a cada
+ * prescrição de treino copiando a dieta corrente para ela, com o `createdBy`
+ * do treinador. `autoriaDaDieta` caminha pelo histórico até a versão em que a
+ * dieta corrente foi de fato escrita — ver `services/autoriaDaDieta.ts`.
+ */
 proRouter.get(
   "/alunos/:id/dieta",
   requirePro("coach", "nutri"),
@@ -552,16 +561,23 @@ proRouter.get(
       preferido: "nutri",
     });
 
-    const plan = await Plan.findOne({ user: clientId }).sort({ version: -1 });
+    const versoes = await Plan.find({ user: clientId })
+      .sort({ version: -1 })
+      .select("version diet createdBy createdAt")
+      .lean();
+
+    const atual = versoes[0] ?? null;
+    // `createdBy` null continua sendo "foi a IA, ou o próprio aluno" — é o que
+    // distingue uma prescrição de um plano auto-atribuído. O que muda é DE QUE
+    // VERSÃO ele vem: não necessariamente a mais nova.
+    const { createdBy, em } = autoriaDaDieta(versoes);
 
     res.json({
       data: {
-        diet: (plan?.diet as unknown) ?? null,
-        version: plan?.version ?? null,
-        // `createdBy` null é "foi a IA, ou o próprio aluno" — é o que distingue
-        // uma prescrição de um plano auto-atribuído.
-        createdBy: plan?.createdBy?.toString() ?? null,
-        em: plan?.createdAt?.toISOString() ?? null,
+        diet: (atual?.diet as unknown) ?? null,
+        version: atual?.version ?? null,
+        createdBy,
+        em,
       },
       meta: {},
     });
