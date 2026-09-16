@@ -34,6 +34,18 @@ export interface CreatedActivity {
 
 const JANELA_DA_REDE_MS = 10 * 60_000;
 
+interface ResultadoRepeticao {
+  /** A atividade já gravada, quando isto for repetição de verdade. */
+  repetida: InstanceType<typeof Activity> | null;
+  /**
+   * `false` só quando a `clientKey` do envio já pertence a OUTRO treino, de
+   * conteúdo diferente — "chave velha" (ver o comentário grande abaixo).
+   * `createActivity` usa isto para decidir se grava a `clientKey` recebida ou
+   * grava sem ela; um `true` cobre tanto "sem chave" quanto "chave nova".
+   */
+  clientKeyReaproveitavel: boolean;
+}
+
 /**
  * Este treino já foi gravado?
  *
@@ -46,19 +58,50 @@ const JANELA_DA_REDE_MS = 10 * 60_000;
  * mesmos exercícios, pesos e repetições em menos de dez minutos — o que não é
  * "treinei duas vezes", é o mesmo treino enviado duas vezes. `mesmoAssim`
  * existe para o caso em que ela diz que foi outro.
+ *
+ * **Chave velha (achado da revisão do app, 16/09/2026):** a `clientKey` só é
+ * apagada do aparelho DEPOIS do 201 — se o processo morre entre a resposta e
+ * a limpeza, ela sobrevive ao uso e fica no aparelho já com dono no servidor.
+ * O app pôs um prazo de 6h nela como paliativo, mas isso não fecha: duas
+ * aulas do MESMO esporte (`class:jiu_jitsu`, por exemplo) cabem dentro de 6h,
+ * e a chave velha reusada faria o servidor devolver o treino da MANHÃ como se
+ * fosse o da TARDE — engolindo o da tarde em silêncio, o mesmo bug que esta
+ * frente existe para consertar, por outra porta. Encurtar o prazo quebra
+ * treino longo; alongar piora isso — o número não tem conserto bom.
+ *
+ * A regra: chave igual com conteúdo diferente não é repetição, é chave
+ * velha. Quando a impressão não bate, este treino NÃO é repetição — e a
+ * proteção contra duplicata passa a ser a impressão (a rede de dez minutos
+ * acima), não mais aquela chave, que já tem dono.
  */
-async function acharRepeticao(userId: mongoose.Types.ObjectId, input: ActivityCreateInput) {
-  if (input.mesmoAssim) return null;
+async function acharRepeticao(
+  userId: mongoose.Types.ObjectId,
+  input: ActivityCreateInput
+): Promise<ResultadoRepeticao> {
+  if (input.mesmoAssim) return { repetida: null, clientKeyReaproveitavel: true };
 
   if (input.clientKey) {
-    return Activity.findOne({ user: userId, clientKey: input.clientKey });
+    const existente = await Activity.findOne({ user: userId, clientKey: input.clientKey });
+    if (!existente) return { repetida: null, clientKeyReaproveitavel: true };
+
+    const mesmoConteudo = existente.impressao === impressaoDoTreino(entradaDoTreino(input));
+    if (mesmoConteudo) return { repetida: existente, clientKeyReaproveitavel: true };
+
+    // Chave velha: aquele treino já existe, mas é OUTRO treino. Devolvê-lo
+    // aqui seria o próprio bug (o da tarde relatado como o da manhã); e
+    // gravar o novo com esta MESMA `clientKey` bateria no índice único
+    // `{user, clientKey}` (models/Activity.ts) — o treino antigo já a
+    // ocupa. `clientKeyReaproveitavel: false` diz a `createActivity` para
+    // gravar sem ela.
+    return { repetida: null, clientKeyReaproveitavel: false };
   }
 
-  return Activity.findOne({
+  const repetida = await Activity.findOne({
     user: userId,
     impressao: impressaoDoTreino(entradaDoTreino(input)),
     createdAt: { $gte: new Date(Date.now() - JANELA_DA_REDE_MS) },
   });
+  return { repetida, clientKeyReaproveitavel: true };
 }
 
 // Só os campos que definem o CONTEÚDO do treino, na forma exata da
@@ -98,8 +141,14 @@ export async function createActivity(
   // Reconhecer repetição vem ANTES de interpretar o WOD e processar o GPS: o
   // trabalho caro não deve ser feito para ser jogado fora, e `processTrack`
   // sobre um percurso longo não é barato.
-  const repetida = await acharRepeticao(userId, input);
+  const { repetida, clientKeyReaproveitavel } = await acharRepeticao(userId, input);
   if (repetida) return { activity: repetida, post: null, newPRs: [], repetido: true };
+
+  // Chave velha (ver o comentário grande em `acharRepeticao`): o treino é
+  // novo, mas a `clientKey` recebida já tem dono. Gravar SEM ela é o que
+  // evita o E11000 no índice único `{user, clientKey}` — a proteção deste
+  // envio passa a ser a impressão, não mais aquela chave.
+  const clientKeyParaGravar = clientKeyReaproveitavel ? input.clientKey : undefined;
 
   // Precisa do documento para saber a preferência de visibilidade da pessoa.
   const dono = await User.findById(userId);
@@ -171,7 +220,7 @@ export async function createActivity(
       planLink: input.planLink,
       payload: storedPayload,
       metrics,
-      clientKey: input.clientKey,
+      clientKey: clientKeyParaGravar,
       impressao: impressaoDoTreino(entradaDoTreino(input)),
     });
   } catch (err) {
@@ -182,15 +231,17 @@ export async function createActivity(
     // descoberto na gravação em vez de na consulta — não deve virar 500 na
     // cara de quem só clicou duas vezes.
     //
-    // `&& input.clientKey`: o único índice único hoje é `{user, clientKey}`
-    // (models/Activity.ts) — não existe índice único sobre a impressão, só o
-    // índice comum que sustenta a busca por janela. Um E11000 SEM
-    // `clientKey` no input não pode ter vindo desta corrida; tratá-lo aqui
-    // do mesmo jeito esconderia um defeito DIFERENTE atrás de "ah, é
-    // duplicata" — por isso relançamos (`throw err` abaixo) nesse caso, em
-    // vez de assumir que é sempre esta corrida.
-    if ((err as { code?: number }).code === 11000 && input.clientKey) {
-      const existente = await Activity.findOne({ user: userId, clientKey: input.clientKey });
+    // `&& clientKeyParaGravar`, não `input.clientKey`: o único índice único
+    // hoje é `{user, clientKey}` (models/Activity.ts) — não existe índice
+    // único sobre a impressão, só o índice comum que sustenta a busca por
+    // janela. Um E11000 sem `clientKey` NA GRAVAÇÃO não pode ter vindo desta
+    // corrida — nem quando `input.clientKey` existia (caso de chave velha,
+    // gravada sem ela de propósito): tratá-lo aqui do mesmo jeito esconderia
+    // um defeito DIFERENTE atrás de "ah, é duplicata" — por isso relançamos
+    // (`throw err` abaixo) nesse caso, em vez de assumir que é sempre esta
+    // corrida.
+    if ((err as { code?: number }).code === 11000 && clientKeyParaGravar) {
+      const existente = await Activity.findOne({ user: userId, clientKey: clientKeyParaGravar });
       if (existente) return { activity: existente, post: null, newPRs: [], repetido: true };
     }
     throw err;

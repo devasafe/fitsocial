@@ -259,6 +259,87 @@ describe("POST /activities: o servidor reconhece o mesmo treino enviado duas vez
     expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(1);
   });
 
+  // Achado da revisão do lado do app (16/09/2026): a `clientKey` é apagada do
+  // aparelho só DEPOIS do 201 — se o processo morre entre a resposta e a
+  // limpeza, ela sobrevive ao uso. O app pôs um prazo de 6h como paliativo,
+  // mas duas aulas do MESMO esporte cabem dentro de 6h — a chave velha
+  // reusada faria o servidor devolver o treino da manhã como se fosse o da
+  // tarde, engolindo o da tarde em silêncio. A regra: chave igual com
+  // conteúdo diferente não é repetição, é chave velha — grava o novo.
+  describe("chave velha: mesma clientKey, conteúdo diferente não é repetição", () => {
+    it("mesma chave, MESMO conteúdo: continua sendo um treino só (não pode regredir)", async () => {
+      const corpo = {
+        sportId: "musculacao",
+        kind: "strength",
+        durationSec: 3600,
+        clientKey: "chave-reusada-1",
+        payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+      };
+      const um = await como(token).post("/activities").send(corpo).expect(201);
+      const dois = await como(token).post("/activities").send(corpo).expect(200);
+
+      expect(dois.body.data.id).toBe(um.body.data.id);
+      expect(dois.body.meta.repetido).toBe(true);
+      expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(1);
+    });
+
+    it("mesma chave, conteúdo DIFERENTE: grava os DOIS, e o segundo sem clientKey", async () => {
+      const chave = "chave-reusada-2";
+      const manha = await como(token)
+        .post("/activities")
+        .send({
+          sportId: "musculacao",
+          kind: "strength",
+          durationSec: 3600,
+          clientKey: chave,
+          payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+        })
+        .expect(201);
+
+      const tarde = await como(token)
+        .post("/activities")
+        .send({
+          sportId: "musculacao",
+          kind: "strength",
+          durationSec: 3600,
+          clientKey: chave,
+          payload: { exercises: [{ name: "Agachamento", sets: [{ weightKg: 100, reps: 5 }] }] },
+        })
+        .expect(201);
+
+      expect(tarde.body.data.id).not.toBe(manha.body.data.id);
+      expect(tarde.body.meta.repetido).toBe(false);
+      expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(2);
+
+      const segundo = await Activity.findById(tarde.body.data.id);
+      expect(segundo!.clientKey).toBeUndefined();
+    });
+
+    it("caso concreto da revisão: dois check-ins do mesmo esporte reusam a chave com exercícios diferentes — os dois gravados", async () => {
+      const chave = "chave-reusada-checkin";
+      const manha = await como(token)
+        .post("/checkins")
+        .send({
+          sessionDay: "Musculação",
+          clientKey: chave,
+          entries: [{ exerciseName: "Supino", weightKg: 80, reps: 8 }],
+        });
+      expect(manha.status).toBe(201);
+
+      const tarde = await como(token)
+        .post("/checkins")
+        .send({
+          sessionDay: "Musculação",
+          clientKey: chave,
+          entries: [{ exerciseName: "Remada", weightKg: 60, reps: 10 }],
+        });
+      expect(tarde.status).toBe(201);
+      expect(tarde.body.repetido).toBeFalsy();
+
+      expect(await Activity.countDocuments({ user: idDoUsuario })).toBe(2);
+    });
+  });
+
   // Dispara o `catch` de E11000 de verdade (não só por leitura): dois envios
   // com a MESMA clientKey, de fato simultâneos, passam os dois pelo
   // `acharRepeticao` antes de qualquer um ter gravado — nenhum vê o outro —
