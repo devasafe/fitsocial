@@ -53,4 +53,36 @@ describe("POST /exercise-videos/resolve", () => {
       .send({ names: ["Agachamento", "agachamento"] });
     expect(await ExerciseVideo.countDocuments()).toBe(1);
   });
+
+  it("resolve UMA vez por nome normalizado, e não uma por grafia", async () => {
+    // A contagem de documentos acima só falhava às vezes: a rota deduplicava
+    // pelo texto cru, então duas grafias do mesmo exercício viravam duas
+    // resoluções EM PARALELO pela mesma chave do cache — e quem ganhava a
+    // corrida decidia se sobrava um documento ou dois. Contar as buscas torna
+    // o defeito determinístico: duas buscas no YouTube pelo mesmo exercício é
+    // desperdício mesmo quando a corrida termina bem.
+    let buscas = 0;
+    setYoutubeSearcher(async (q) => {
+      buscas++;
+      return { youtubeId: "v" + q.length, title: q };
+    });
+
+    await request(app)
+      .post("/exercise-videos/resolve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ names: ["Agachamento", "agachamento", "AGACHAMENTO ", "Supino"] });
+
+    expect(buscas).toBe(2);
+  });
+
+  it("a resposta continua vindo por nome original, mesmo com grafias diferentes", async () => {
+    // Deduplicar não pode mudar o contrato: o app procura pelo nome que mandou.
+    const res = await request(app)
+      .post("/exercise-videos/resolve")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ names: ["Agachamento", "agachamento"] });
+
+    expect(Object.keys(res.body.videos)).toEqual(["Agachamento", "agachamento"]);
+    expect(res.body.videos["Agachamento"]).toEqual(res.body.videos["agachamento"]);
+  });
 });
