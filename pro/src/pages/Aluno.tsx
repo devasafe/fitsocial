@@ -365,8 +365,13 @@ export function Aluno({
 
       {/* Some inteiro, não mostra zero: ausência é "não me deixou ver", e
           zero seria uma afirmação sobre a vida do aluno (mesma regra do
-          comentário em api/src/routes/pro.ts sobre omitir estes campos). */}
-      {perfil.constancia && (
+          comentário em api/src/routes/pro.ts sobre omitir estes campos).
+          E some também sem a aba "Evolução": `escopo.treinos` nasce `true`
+          por padrão no vínculo de nutri, então ele recebe `constancia` na
+          ficha sem ter aba nenhuma que explique os três números — não é o
+          caso de inventar uma aba nova para o nutricionista, é o de não
+          mostrar o que ninguém aqui vai aprofundar. */}
+      {perfil.constancia && unicas.some(([id]) => id === "evolucao") && (
         <div className="cartoes" style={{ marginBottom: 16 }}>
           <div className="cartao">
             <div className="num">{perfil.constancia.streak}</div>
