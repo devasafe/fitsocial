@@ -95,6 +95,20 @@ export async function analisarRefeicao(
       temperature: 0.2,
       feature: "meal_photo",
       userId: opts.userId,
+      /**
+       * Prazo próprio, porque esta é a chamada mais lenta do produto.
+       *
+       * O padrão de `env.aiTimeoutMs` é 25s e serve para uma resposta de coach.
+       * Sondando o Gemini ao vivo com a foto de um prato de sushi, uma resposta
+       * que voltou 200 levou 26,3s — ou seja, a análise terminava e era abortada
+       * mesmo assim, e a pessoa lia "a IA está demorando mais que o normal"
+       * sobre um trabalho que tinha dado certo.
+       *
+       * 45s é o mesmo prazo que `lerQuadro` já usa pelo mesmo motivo, e cabe no
+       * que o app aguarda (90s, `app-android/src/api/nutrition.ts`) mesmo
+       * somando a repetição que a camada HTTP faz quando vem 5xx.
+       */
+      timeoutMs: 45_000,
     },
     analiseDaFotoSchema,
     // A tela da foto espera 90s (app-android/src/api/nutrition.ts), e não 60s

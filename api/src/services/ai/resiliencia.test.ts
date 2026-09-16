@@ -371,3 +371,36 @@ describe("Resposta malformada", () => {
     }
   });
 });
+
+describe("a foto da refeição tem prazo próprio", () => {
+  afterEach(async () => {
+    const { setAIProvider } = await import("./index.js");
+    setAIProvider(null);
+  });
+
+  it("a chamada da foto NÃO usa o prazo padrão de 25s", async () => {
+    // Sondando o Gemini ao vivo com a foto de um prato: 26,3s numa resposta que
+    // deu 200. O padrão de `env.aiTimeoutMs` é 25s, então a chamada mais lenta
+    // do produto era abortada justamente quando ia dar certo — e a pessoa lia
+    // "a IA está demorando mais que o normal" sobre uma análise que tinha
+    // terminado. Ler o quadro do box já tinha prazo próprio (45s); a foto, não.
+    const { setAIProvider } = await import("./index.js");
+    const { analisarRefeicao } = await import("./refeicaoPorFoto.js");
+    const { env } = await import("../../config/env.js");
+
+    let visto: number | undefined;
+    setAIProvider({
+      name: "espiao",
+      aceitaImagem: true,
+      async generate(options: { timeoutMs?: number }) {
+        visto = options.timeoutMs;
+        return JSON.stringify({ itens: [], observacao: "" });
+      },
+    } as unknown as AIProvider);
+
+    await analisarRefeicao({ base64: "x", mimeType: "image/png" });
+
+    expect(visto).toBeDefined();
+    expect(visto!).toBeGreaterThan(env.aiTimeoutMs);
+  });
+});
