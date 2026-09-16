@@ -33,6 +33,7 @@ import {
 import { Calendario } from "../components/Calendario";
 import { Conversa } from "../components/Conversa";
 import { Prescrever } from "../components/Prescrever";
+import { PrescreverDieta } from "../components/PrescreverDieta";
 
 // O Recharts sozinho pesa mais que o resto do painel inteiro. Separado, a
 // lista de alunos e a tela de convites não pagam por ele — e é a lista que
@@ -638,6 +639,12 @@ export function Aluno({
           <Suspense fallback={<p className="vazio">Carregando gráfico…</p>}>
             <Nutricao token={token} alunoId={perfil.aluno.id} janela={janela} />
           </Suspense>
+        </div>
+      )}
+
+      {aba === "dieta" && (
+        <div className="painel">
+          <PrescreverDieta token={token} alunoId={perfil.aluno.id} euId={euId} aoSalvar={carregar} />
         </div>
       )}
 
