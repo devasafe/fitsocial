@@ -560,10 +560,17 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoDoProfissional(req, String(req.params.id), {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
       parte: "dieta",
       preferido: "nutri",
     });
+    // `parteAberta` acima só confere se ALGUÉM da dupla abriu a dieta — inclui
+    // o coach com `escopo.dieta` ligado, para o aluno que não tem nutricionista.
+    // Sem nutri no vínculo, não existe quem decida por "qualquer vínculo": o
+    // dado é de acompanhamento nutricional, e só o nutricionista o lê.
+    if (link.papel !== "nutri") {
+      throw new HttpError(403, "Este é o acompanhamento nutricional do aluno; você não é o nutricionista dele.");
+    }
 
     // `janelaDoAluno` aceita 0 como "tudo", mas `evolucaoDeNutricao` devolve UM
     // ITEM POR DIA: com dias=0, a resposta viraria um corpo de milhares de
@@ -590,10 +597,16 @@ proRouter.get(
   requirePro("coach", "nutri"),
   leituraDoAluno,
   asyncHandler(async (req, res) => {
-    const { clientId } = await alunoDoProfissional(req, String(req.params.id), {
+    const { link, clientId } = await alunoDoProfissional(req, String(req.params.id), {
       parte: "dieta",
       preferido: "nutri",
     });
+    // Mesma guarda de `GET /alunos/:id/nutricao`: sem nutri no vínculo, o
+    // treinador com `escopo.dieta` ligado não vira leitor da dieta por falta
+    // de concorrente — ver o comentário lá.
+    if (link.papel !== "nutri") {
+      throw new HttpError(403, "Este é o acompanhamento nutricional do aluno; você não é o nutricionista dele.");
+    }
 
     const versoes = await Plan.find({ user: clientId })
       .sort({ version: -1 })

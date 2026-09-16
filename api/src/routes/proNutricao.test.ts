@@ -392,6 +392,44 @@ describe("GET /pro/alunos/:id/dieta", () => {
   });
 });
 
+describe("GET /pro/alunos/:id/nutricao e /dieta — treinador não herda a dieta por falta de nutri (Tarefa 11c #1)", () => {
+  // Até esta correção, `escopo.dieta` do coach não gateava nada: sem
+  // vínculo de nutri na dupla, `parteAberta` cai no ramo "qualquer vínculo
+  // decide" e um coach com `{ dieta: true }` lia kcal, macros e a dieta
+  // corrente — dado de acompanhamento nutricional que ele nunca deveria ver.
+  let coach: { token: string; id: string };
+  let aluno: { token: string; id: string };
+  let alunoId: string;
+  let comoCoach: ReturnType<typeof como>;
+
+  beforeEach(async () => {
+    coach = await registrarProfissional("coach");
+    aluno = await registrar();
+    alunoId = aluno.id;
+    await vincular(coach.token, aluno.token, { dieta: true, treinos: true }, "coach");
+    comoCoach = como(coach.token);
+  });
+
+  it("coach com escopo.dieta e aluno sem nutricionista recebe 403 em /nutricao", async () => {
+    const r = await comoCoach.get(`/pro/alunos/${alunoId}/nutricao`).expect(403);
+    expect(r.body.error).toMatch(/nutricionista/i);
+  });
+
+  it("coach com escopo.dieta e aluno sem nutricionista recebe 403 em /dieta", async () => {
+    const r = await comoCoach.get(`/pro/alunos/${alunoId}/dieta`).expect(403);
+    expect(r.body.error).toMatch(/nutricionista/i);
+  });
+
+  it("espelho: nutricionista com escopo.dieta continua com 200 nas duas", async () => {
+    const nutri = await registrarProfissional("nutri");
+    await vincular(nutri.token, aluno.token, { dieta: true, treinos: false }, "nutri");
+    const comoNutri = como(nutri.token);
+
+    await comoNutri.get(`/pro/alunos/${alunoId}/nutricao`).expect(200);
+    await comoNutri.get(`/pro/alunos/${alunoId}/dieta`).expect(200);
+  });
+});
+
 describe("PUT /pro/alunos/:id/dieta", () => {
   let nutri: { token: string; id: string };
   let coach: { token: string; id: string };
