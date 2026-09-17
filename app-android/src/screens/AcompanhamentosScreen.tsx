@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button, ErrorState } from "../components/ui";
 import { EmptyState } from "../components/EmptyState";
 import { SkeletonLista } from "../components/Skeleton";
 import {
+  DONO_DA_PARTE,
   O_QUE_ABRE,
   ajustarEscopo,
   encerrarAcompanhamento,
@@ -218,22 +219,53 @@ export function AcompanhamentosScreen() {
             />
 
             <View style={{ marginTop: spacing.md, gap: spacing.s8 }}>
-              {O_QUE_ABRE.map((item) => (
-                <View
-                  key={item.chave}
-                  style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}
-                >
-                  <Txt variant="body" style={{ flex: 1 }}>
-                    {item.titulo}
-                  </Txt>
-                  <Switch
-                    value={a.escopo[item.chave]}
-                    onValueChange={(v) => mudar(a, item.chave, v)}
-                    trackColor={{ false: colors.surface3, true: colors.limeDeep }}
-                    thumbColor={a.escopo[item.chave] ? colors.lime : colors.text3}
-                  />
-                </View>
-              ))}
+              {O_QUE_ABRE.map((item) => {
+                // Quando a pessoa tem os dois papéis, quem decide "meus treinos"
+                // é o cartão do treinador e quem decide "minha alimentação" é o
+                // da nutricionista — é a regra do servidor. No OUTRO cartão,
+                // esse interruptor não manda em nada: deixá-lo ligável faria a
+                // pessoa desligar o acesso achando que fechou, e não ter
+                // fechado. Aqui ele aparece desligado para tocar e dizendo onde
+                // a decisão mora.
+                // O critério é por PROFISSIONAL, não global: o servidor decide
+                // pela dupla (você + aquela pessoa). Se o seu treinador e a sua
+                // nutricionista são pessoas DIFERENTES, cada cartão decide o
+                // próprio acesso e todos os interruptores valem. O interruptor
+                // só fica inerte quando a MESMA pessoa te acompanha nos dois
+                // papéis — aí ela tem dois cartões, e um deles é quem manda.
+                const dono = DONO_DA_PARTE[item.chave];
+                const mesmaPessoaNoOutroPapel =
+                  !!dono &&
+                  dono !== a.papel &&
+                  lista.some((o) => o.profissional.id === a.profissional.id && o.papel === dono);
+                const decideEmOutroCartao = mesmaPessoaNoOutroPapel;
+
+                return (
+                  <View key={item.chave} style={{ gap: 2 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+                      <Txt
+                        variant="body"
+                        color={decideEmOutroCartao ? colors.text3 : colors.text}
+                        style={{ flex: 1 }}
+                      >
+                        {item.titulo}
+                      </Txt>
+                      <Switch
+                        value={a.escopo[item.chave]}
+                        disabled={decideEmOutroCartao}
+                        onValueChange={(v) => mudar(a, item.chave, v)}
+                        trackColor={{ false: colors.surface3, true: colors.limeDeep }}
+                        thumbColor={a.escopo[item.chave] ? colors.lime : colors.text3}
+                      />
+                    </View>
+                    {decideEmOutroCartao ? (
+                      <Txt variant="caption" color={colors.text3}>
+                        Quem decide isto é o cartão do seu {rotuloDoPapel(dono!)}.
+                      </Txt>
+                    ) : null}
+                  </View>
+                );
+              })}
             </View>
 
             <Button

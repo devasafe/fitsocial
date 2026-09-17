@@ -502,4 +502,62 @@ export async function recomputeUserPRs(userId: mongoose.Types.ObjectId): Promise
   for (const a of activities) {
     await detectPRs(userId, a as unknown as ActivityLike, { celebrate: false });
   }
+
+  await regravarSelosDeRecorde(userId);
+}
+
+/**
+ * O selo que cada treino exibe ("este bateu recorde") é DERIVADO dos recordes
+ * — então quem reconstrói os recordes tem de reconstruir os selos.
+ *
+ * Ele vive em `metrics.prs`, denormalizado para o cartão de compartilhar não
+ * consultar o banco a cada montagem (ver `services/activities.ts`). Era gravado
+ * na criação e nunca revisto: apagar o treino que era a linha de base de um
+ * exercício fazia o SEGUINTE virar linha de base — sem ter batido recorde
+ * nenhum — e ele continuava exibindo o selo de quando bateu.
+ *
+ * Só toca os treinos que têm selo hoje ou que passam a ter: são poucos, e
+ * varrer o histórico inteiro a cada apagar custaria caro para nada.
+ */
+async function regravarSelosDeRecorde(userId: mongoose.Types.ObjectId): Promise<void> {
+  const recordes = await PersonalRecord.find({ user: userId }).select("activity type exerciseName value previousValue unit");
+
+  const porAtividade = new Map<string, Record<string, unknown>[]>();
+  for (const pr of recordes) {
+    if (!pr.activity) continue;
+    // Linha de base e melhora insignificante não viram selo — a MESMA regra da
+    // criação (`mereceCelebracao`), para o treino não se descrever de um jeito
+    // ao nascer e de outro depois de um recompute.
+    if (pr.previousValue == null) continue;
+    if (!mereceCelebracao(pr.type, pr.previousValue, pr.value)) continue;
+    const chave = pr.activity.toString();
+    const lista = porAtividade.get(chave) ?? [];
+    lista.push({
+      type: pr.type,
+      exerciseName: pr.exerciseName,
+      value: pr.value,
+      previousValue: pr.previousValue,
+      unit: pr.unit,
+    });
+    porAtividade.set(chave, lista);
+  }
+
+  const comSeloHoje = await Activity.find({
+    user: userId,
+    "metrics.prs.0": { $exists: true },
+  }).select("_id metrics");
+
+  const alvos = new Set<string>([...porAtividade.keys(), ...comSeloHoje.map((a) => a._id.toString())]);
+
+  for (const id of alvos) {
+    const certo = porAtividade.get(id) ?? [];
+    const doc = await Activity.findById(id);
+    if (!doc) continue;
+    const metrics = { ...((doc.metrics ?? {}) as Record<string, unknown>) };
+    if (certo.length > 0) metrics.prs = certo;
+    else delete metrics.prs;
+    doc.set("metrics", metrics);
+    doc.markModified("metrics");
+    await doc.save();
+  }
 }

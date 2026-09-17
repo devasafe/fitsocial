@@ -7,6 +7,7 @@ import { Txt, Screen, Card, Button } from "../components/ui";
 import { SuggestField, type Suggestion } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
 import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
+import { resolverRepeticao } from "../lib/repeticaoDeTreino";
 import { searchExercises, MUSCLE_GROUPS, type MuscleGroup, type ExerciseDef } from "../api/library";
 import { lastEntries, type LastEntry } from "../api/checkins";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
@@ -268,12 +269,15 @@ export function RegisterActivityScreen({ route }: Props) {
     try {
       const variant = STRENGTH_VARIANTS.includes(sportId) ? sportId : "musculacao";
       const clientKey = clientKeyRef.current ?? (await chaveDoTreino(contextoDaChave));
-      const res = await createActivity(token!, {
-        sportId,
-        kind: "strength",
-        payload: { variant, exercises: payloadExercises },
-        clientKey,
-      });
+      const corpo = { sportId, kind: "strength" as const, payload: { variant, exercises: payloadExercises } };
+      const primeira = await createActivity(token!, { ...corpo, clientKey });
+      // Se o servidor reconheceu repetição, pergunta antes de seguir. Esta tela
+      // é a do "Repetir Musculação", que traz o payload EXATO do último treino
+      // — é onde dois registros de conteúdo idêntico são mais plausíveis, e onde
+      // um falso positivo doeria mais. Ver `lib/repeticaoDeTreino.ts`.
+      const res = await resolverRepeticao(primeira, primeira.meta.repetido, () =>
+        createActivity(token!, { ...corpo, mesmoAssim: true })
+      );
       // O envio terminou: a chave sai do armazenamento E da memória. Sem zerar
       // o ref, um segundo treino registrado sem sair desta tela (o caso do
       // "Repetir Musculação") reusaria a MESMA chave, e o servidor o leria como

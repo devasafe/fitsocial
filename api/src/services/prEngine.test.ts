@@ -204,6 +204,79 @@ describe("marcos de aula (class)", () => {
     const horas = await PersonalRecord.findOne({ exerciseName: "jiu_jitsu", type: "horas" });
     expect(horas?.value).toBe(3); // 3 x 3600s = 3h
   });
+
+  it("a aula de número 50 CELEBRA o marco, com o campo `milestone` preenchido", async () => {
+    // O único caminho que exercita marcos de ponta a ponta. Até aqui só havia
+    // teste unitário de `crossedMilestone` — o campo `milestone` podia sumir do
+    // `NewPR` numa refatoração e ninguém saberia até alguém completar 100 aulas
+    // e não receber nada. Foi o que quase aconteceu ao extrair
+    // `mereceCelebracao`: o ramo de marco tinha retorno próprio.
+    //
+    // As 49 primeiras entram direto no banco: `classCandidates` conta
+    // documentos, então o caminho é o mesmo e o teste não gasta 50 rodadas do
+    // motor de recorde para chegar no que interessa.
+    const antes = Array.from({ length: 49 }, () => ({
+      user: userId,
+      sportId: "muay_thai",
+      kind: "class" as const,
+      startedAt: new Date(),
+      durationSec: 3600,
+      payload: { modality: "muay_thai" },
+      metrics: {},
+    }));
+    await Activity.insertMany(antes);
+    // Uma passada pelo motor sobre as 49 já inseridas, para o recorde de linha
+    // de base existir com valor 49. Sem isto a 50ª seria a PRIMEIRA vez que o
+    // motor vê este esporte — viraria linha de base (que não celebra) e o teste
+    // falharia por um motivo que não tem nada a ver com marcos.
+    await detectPRs(userId, (await Activity.findOne({ sportId: "muay_thai" }))!);
+
+    const quinquagesima = await Activity.create({
+      user: userId,
+      sportId: "muay_thai",
+      kind: "class",
+      startedAt: new Date(),
+      durationSec: 3600,
+      payload: { modality: "muay_thai" },
+      metrics: {},
+    });
+    const novos = await detectPRs(userId, quinquagesima);
+
+    const marcoDeAulas = novos.find((p) => p.type === "aulas");
+    expect(marcoDeAulas).toBeDefined();
+    expect(marcoDeAulas!.value).toBe(50);
+    expect(marcoDeAulas!.milestone).toBe(50);
+  });
+
+  it("a aula de número 51 NÃO celebra — marco só no cruzamento", async () => {
+    // O par do teste acima: sem ele, uma implementação que celebrasse toda aula
+    // acima de 50 passaria no primeiro e entupiria a pessoa de banner.
+    const antes = Array.from({ length: 50 }, () => ({
+      user: userId,
+      sportId: "boxe",
+      kind: "class" as const,
+      startedAt: new Date(),
+      durationSec: 3600,
+      payload: { modality: "boxe" },
+      metrics: {},
+    }));
+    await Activity.insertMany(antes);
+    // Mesma razão do teste acima: a linha de base precisa existir em 50.
+    await detectPRs(userId, (await Activity.findOne({ sportId: "boxe" }))!);
+
+    const quinquagesimaPrimeira = await Activity.create({
+      user: userId,
+      sportId: "boxe",
+      kind: "class",
+      startedAt: new Date(),
+      durationSec: 3600,
+      payload: { modality: "boxe" },
+      metrics: {},
+    });
+    const novos = await detectPRs(userId, quinquagesimaPrimeira);
+
+    expect(novos.find((p) => p.type === "aulas")).toBeUndefined();
+  });
 });
 
 describe("identidade do exercício (slug)", () => {
