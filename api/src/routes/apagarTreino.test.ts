@@ -205,6 +205,31 @@ describe("DELETE /activities/:id — apagar de verdade", () => {
     expect(prs[0]!.value).toBe(100);
   });
 
+  it("apagar um treino não pode deixar o SELO de recorde de outro mentindo", async () => {
+    // Achado da revisão final. `metrics.prs` é o resumo denormalizado que o
+    // cartão de compartilhar lê para dizer "este treino bateu recorde". Ele é
+    // gravado na criação e — até aqui — nunca era revisto ao apagar OUTRO
+    // treino.
+    //
+    // O caminho: o primeiro treino de um exercício é linha de base e não ganha
+    // selo; o segundo, mais pesado, ganha. Apagando o PRIMEIRO, o segundo passa
+    // a ser a linha de base — não bateu recorde nenhum —, mas continuava
+    // exibindo o selo de quando bateu.
+    const dono = await registrar();
+    const base = await como(dono.token).post("/activities").send(strengthBody("Remada", 60));
+    expect(base.status).toBe(201);
+    const recordista = await como(dono.token).post("/activities").send(strengthBody("Remada", 80));
+    expect(recordista.status).toBe(201);
+
+    const antes = await Activity.findById(recordista.body.data.id);
+    expect((antes!.metrics as { prs?: unknown[] }).prs?.length).toBeGreaterThan(0);
+
+    await como(dono.token).delete(`/activities/${base.body.data.id}`).expect(200);
+
+    const depois = await Activity.findById(recordista.body.data.id);
+    expect((depois!.metrics as { prs?: unknown[] }).prs ?? []).toHaveLength(0);
+  });
+
   it("apagar o treino do MESMO exercício que detém o recorde cai para o segundo melhor", async () => {
     // Achado Menor da revisão: o motivo citado no comentário de
     // `apagarAtividade` (reconstruir em vez de desfazer, "sem caso de
