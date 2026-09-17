@@ -180,7 +180,7 @@ describe("Sintoma 1+2 — autoria por metade sobrevive à prescrição da outra"
 });
 
 describe("Sintoma 2 — edição in place deixa de mentir", () => {
-  it("o aluno edita a própria dieta in place (sem nutricionista): dietCreatedBy vira o aluno, workoutCreatedBy não muda", async () => {
+  it("o aluno edita a própria dieta in place: dietEm avança para agora, dietCreatedBy é null (nenhum profissional escreveu), workoutCreatedBy não muda", async () => {
     const aluno = await registrar();
 
     // Plano semeado direto no banco, como um plano gerado pela IA de antes
@@ -206,7 +206,10 @@ describe("Sintoma 2 — edição in place deixa de mentir", () => {
     expect(r.body.plan.version).toBe(1); // edição in place — não cria versão
 
     const plan = await planoAtual(aluno.id);
-    expect(plan!.dietCreatedBy?.toString()).toBe(aluno.id.toString());
+    // `null`, e não o id do aluno: o campo responde "qual PROFISSIONAL
+    // escreveu isto", e aqui não há nenhum — ver a Correção (round 2) logo
+    // abaixo, que prova isto pela rota do painel, não só pelo documento.
+    expect(plan!.dietCreatedBy).toBeNull();
     expect(plan!.dietEm).toBeInstanceOf(Date);
     // O treino não foi tocado nesta chamada — a autoria dele continua a mesma.
     expect(plan!.workoutCreatedBy).toBeNull();
@@ -256,6 +259,49 @@ describe("Correção — POST /plans/diet grava autor null (é a IA que escreve,
       .set(auth(nutriB.token))
       .expect(200);
     expect(r.body.data.createdBy).toBeNull();
+  });
+});
+
+describe("Correção (round 2) — PUT /plans/current também grava autor null, não o id do aluno", () => {
+  // Mesma armadilha do round 1, num lugar que o describe anterior não testava
+  // pela ROTA do painel: o "Sintoma 2" acima confere `dietCreatedBy` direto
+  // no Mongo, e por isso não via a frase que `PrescreverDieta.tsx` realmente
+  // monta. `PUT /plans/current` não tem NENHUMA guarda de "existe
+  // nutricionista HOJE" além de recusar a escrita quando existe — quem edita
+  // a própria dieta sem nunca ter tido uma prescrição grava
+  // `dietCreatedBy = <id do aluno>`, e esse id cai na mesma terceira frase de
+  // `PrescreverDieta.tsx:246-250` ("prescrita por outro profissional") assim
+  // que uma nutricionista é vinculada depois.
+  it("aluno sem nutri edita a própria dieta por PUT /plans/current; nutri vinculada depois lê 'sem prescrição', não 'outro profissional'", async () => {
+    const aluno = await registrar();
+    // Nenhum profissional envolvido — plano da IA, como todo plano que já existe.
+    await Plan.create({
+      user: aluno.id,
+      version: 1,
+      summary: "plano da IA",
+      workout: null,
+      diet: dietaExemplo,
+      disclaimer: "aviso",
+      createdBy: null,
+    });
+
+    const dietaEditada = { ...dietaExemplo, dailyCalories: 1950 };
+    await request(app)
+      .put("/plans/current")
+      .set(auth(aluno.token))
+      .send({ diet: dietaEditada })
+      .expect(200);
+
+    // Só DEPOIS de editar é que uma nutricionista entra na história.
+    const nutri = await registrarProfissional("nutri");
+    await vincular(nutri.token, aluno.token, "nutri", { dieta: true, treinos: false });
+
+    const r = await request(app)
+      .get(`/pro/alunos/${aluno.id}/dieta`)
+      .set(auth(nutri.token))
+      .expect(200);
+    expect(r.body.data.createdBy).toBeNull();
+    expect(r.body.data.diet.dailyCalories).toBe(1950);
   });
 });
 
