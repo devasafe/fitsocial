@@ -62,13 +62,24 @@ os novos são aditivos.
 | `/plans/adjust` | idem | idem |
 | `POST /plans/diet`, `PUT /plans/current` | `diet*`/`workout*` = o próprio aluno | a outra intocada |
 
-**Leitura:** `GET /pro/alunos/:id/dieta` passa a devolver `dietCreatedBy`/`dietEm` diretamente —
-e `services/autoriaDaDieta.ts` **deixa de existir**, porque a pergunta que ele responde por
-inferência passa a estar gravada. Enquanto os campos forem ausentes (planos antigos), cai no
-`autoriaDaDieta` como hoje: é a ponte que evita ter de decidir a verdade sobre o passado.
+**Leitura:** `GET /pro/alunos/:id/dieta` passa a devolver `dietCreatedBy`/`dietEm` diretamente.
+`services/autoriaDaDieta.ts` **continua existindo** e continua sendo a resposta para todo plano
+gravado antes desta tarefa — o gate é `dietEm != null`, e enquanto ele for ausente a autoria
+vem da inferência, como sempre veio. (Uma versão anterior deste desenho dizia que o serviço
+seria apagado; seria apagar a ponte para o passado junto com a dívida.)
 
-**Os avisos:** `disclaimer` (documento) continua sendo gravado, para o APK antigo, com o da metade
-mais restritiva — na dúvida, o que fala de dor. A tela nova lê o da metade que está mostrando.
+**Quem escreveu não é profissional nenhum: o campo é `null`.** Vale para a IA e vale para o
+próprio aluno editando à mão — `createdBy` responde "qual PROFISSIONAL escreveu isto", e nos
+dois casos a resposta é "nenhum". Gravar ali o id do aluno faz o painel do nutricionista dizer
+"prescrita por outro profissional", porque a tela só distingue três casos: nulo, eu, e outro.
+Quem é o aluno já está no dono do plano.
+
+**Os avisos:** `disclaimer` (documento) continua sendo gravado para o APK antigo, exatamente como
+era antes desta tarefa — **não** foi implementada a escolha pela metade mais restritiva que uma
+versão anterior deste desenho prometia. Os campos por metade são gravados e preservados, mas
+ainda não são lidos por tela nenhuma. Escolher errado qual metade "vence" apagaria em silêncio
+o aviso de dor que o treinador deixou, e isso é pior que um aviso redundante — a mesma razão
+que já tinha decidido o sintoma 4. Fica para quando existir a tela que lê o aviso por metade.
 
 ## O que isto resolve, sintoma a sintoma
 
