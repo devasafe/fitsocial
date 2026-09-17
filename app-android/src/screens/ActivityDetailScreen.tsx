@@ -100,20 +100,34 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [apagando, setApagando] = useState(false);
 
+  // Vindo de uma lista, a atividade chega SEM `post` — a lista não o compõe, de
+  // propósito (seria uma consulta por linha na tela do dia a dia). Só que é o
+  // `post` que diz à confirmação de apagar quantos comentários e curtidas vão
+  // junto: sem ele, a confirmação omite isso numa ação irreversível.
+  //
+  // Então busca-se por id também nesse caso — em segundo plano, sem tela de
+  // carregando, porque já há o que mostrar. `undefined` é "não veio na
+  // resposta"; `null` é "não há post", que é resposta e não precisa de busca.
+  const precisaEnriquecer = !!passed && passed.post === undefined;
+  const idParaBuscar = activityId ?? passed?.id;
+
   useEffect(() => {
-    if (passed || !activityId) return;
+    if ((passed && !precisaEnriquecer) || !idParaBuscar) return;
     let alive = true;
-    setLoading(true);
-    getActivity(token!, activityId)
+    if (!passed) setLoading(true);
+    getActivity(token!, idParaBuscar)
       .then((res) => alive && (setFetched(res), setError(false)))
-      .catch(() => alive && setError(true))
+      // Falhar a busca de enriquecimento não pode apagar o que já está na
+      // tela: quem veio com a atividade pronta continua vendo o treino.
+      .catch(() => alive && !passed && setError(true))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [passed, activityId, token]);
+  }, [passed, precisaEnriquecer, idParaBuscar, token]);
 
-  const a = passed ?? fetched;
+  // O buscado tem precedência: ele é o completo.
+  const a = fetched ?? passed;
 
   if (loading) {
     return (

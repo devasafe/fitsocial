@@ -78,11 +78,20 @@ async function acharRepeticao(
   userId: mongoose.Types.ObjectId,
   input: ActivityCreateInput
 ): Promise<ResultadoRepeticao> {
-  if (input.mesmoAssim) return { repetida: null, clientKeyReaproveitavel: true };
+  // `mesmoAssim` é a saída de emergência: a pessoa afirmou que este treino é
+  // OUTRO. Gravar com a `clientKey` que veio no corpo daria E11000 contra o
+  // índice único se aquela chave já tiver dono — e o `catch` da corrida
+  // devolveria o treino ANTIGO com 200, descartando justamente o treino que ela
+  // acabou de confirmar ser diferente. A saída de emergência viraria a armadilha.
+  if (input.mesmoAssim) return { repetida: null, clientKeyReaproveitavel: false };
 
   if (input.clientKey) {
     const existente = await Activity.findOne({ user: userId, clientKey: input.clientKey });
-    if (!existente) return { repetida: null, clientKeyReaproveitavel: true };
+    // Chave sem dono NÃO encerra a checagem: se o armazenamento do app falhar
+    // entre dois envios do mesmo treino, um vai com chave e o outro sem — e
+    // parar aqui deixaria a duplicata passar justamente no caso em que a
+    // primeira linha de defesa já falhou. Cai na rede de conteúdo, abaixo.
+    if (!existente) return { repetida: await porImpressao(userId, input), clientKeyReaproveitavel: true };
 
     const mesmoConteudo = existente.impressao === impressaoDoTreino(entradaDoTreino(input));
     if (mesmoConteudo) return { repetida: existente, clientKeyReaproveitavel: true };
@@ -96,12 +105,16 @@ async function acharRepeticao(
     return { repetida: null, clientKeyReaproveitavel: false };
   }
 
-  const repetida = await Activity.findOne({
+  return { repetida: await porImpressao(userId, input), clientKeyReaproveitavel: true };
+}
+
+/** A rede: mesmo conteúdo do mesmo dono, criado há pouco. */
+function porImpressao(userId: mongoose.Types.ObjectId, input: ActivityCreateInput) {
+  return Activity.findOne({
     user: userId,
     impressao: impressaoDoTreino(entradaDoTreino(input)),
     createdAt: { $gte: new Date(Date.now() - JANELA_DA_REDE_MS) },
   });
-  return { repetida, clientKeyReaproveitavel: true };
 }
 
 // Só os campos que definem o CONTEÚDO do treino, na forma exata da
@@ -500,6 +513,28 @@ export async function editarAtividade(
       } as ActivityCreateInput)
     );
     atividade.markModified("metrics");
+
+    // A impressão descreve o CONTEÚDO: corrigido o conteúdo, ela tem de ser
+    // refeita. Deixá-la velha faria o treino corrigido guardar a digital do
+    // que ele NÃO é mais — e um treino novo, registrado em seguida com o
+    // conteúdo ANTIGO, seria lido como repetição dele e descartado.
+    atividade.impressao = impressaoDoTreino({
+      kind: atividade.kind,
+      sportId: atividade.sportId,
+      durationSec: atividade.durationSec,
+      payload: atividade.payload,
+      // `normalizar` (em impressaoDoTreino) descarta null/undefined, então o
+      // par vindo do documento produz a MESMA serialização que o par vindo do
+      // corpo da criação — é o que mantém criação e edição falando a mesma
+      // língua sobre o mesmo treino.
+      planLink: atividade.planLink
+        ? {
+            planVersion: atividade.planLink.planVersion ?? undefined,
+            sessionDay: atividade.planLink.sessionDay ?? undefined,
+          }
+        : undefined,
+      startedAt: atividade.startedAt?.toISOString(),
+    });
   }
 
   await atividade.save();

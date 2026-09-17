@@ -305,9 +305,20 @@ export function EditarTreinoScreen({ route, navigation }: Props) {
       title: titulo.trim(),
       notes: notas.trim(),
       visibility: visibilidade,
-      durationSec: Math.round((Number(duracaoMin.replace(",", ".")) || 0) * 60),
       startedAt: dataHora.toISOString(),
     };
+
+    // A duração só vai quando a pessoa MEXEU nela.
+    //
+    // O campo é em minutos e o treino é gravado em segundos: mandar sempre
+    // reescreveria todo treino arredondado ao minuto sem ninguém ter pedido —
+    // um Fran de 3:47 viraria 4:00 (e o recorde seria regravado arredondado), e
+    // uma corrida com GPS passaria a contradizer os próprios `splits`, que o
+    // servidor derivou do percurso.
+    const duracaoOriginalMin = activity.durationSec ? String(Math.round(activity.durationSec / 60)) : "";
+    if (duracaoMin !== duracaoOriginalMin) {
+      patch.durationSec = Math.round((Number(duracaoMin.replace(",", ".")) || 0) * 60);
+    }
     const rpe = paraInteiro(esforco);
     if (rpe != null) patch.perceivedEffort = rpe;
     if (sensacao) patch.feeling = sensacao;

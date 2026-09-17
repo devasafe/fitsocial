@@ -368,4 +368,71 @@ describe("POST /activities: o servidor reconhece o mesmo treino enviado duas vez
     expect(a.body.data.id).toBe(b.body.data.id);
     expect(await Activity.countDocuments({ clientKey: "corrida-de-verdade" })).toBe(1);
   });
+
+  it("`mesmoAssim` grava mesmo com a chave JÁ USADA — a saída de emergência não pode virar armadilha", async () => {
+    // A pessoa confirmou que este treino é OUTRO. Gravar com a mesma chave
+    // bateria no índice único, e o `catch` da corrida devolveria o treino
+    // ANTIGO com 200 — descartando justamente o que ela acabou de confirmar
+    // ser diferente. O segundo tem de entrar, e SEM aquela chave.
+    const corpo = {
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      clientKey: "chave-ja-usada",
+      payload: { exercises: [{ name: "Supino", sets: [{ weightKg: 80, reps: 8 }] }] },
+    };
+
+    await como(token).post("/activities").send(corpo).expect(201);
+    const dois = await como(token)
+      .post("/activities")
+      .send({ ...corpo, mesmoAssim: true })
+      .expect(201);
+
+    expect(await Activity.countDocuments({ user: new mongoose.Types.ObjectId(idDoUsuario) })).toBe(2);
+    expect((await Activity.findById(dois.body.data.id))!.clientKey).toBeUndefined();
+    expect(await Activity.countDocuments({ clientKey: "chave-ja-usada" })).toBe(1);
+  });
+
+  it("chave sem dono NÃO pula a rede: conteúdo idêntico recente ainda é repetição", async () => {
+    // Se o armazenamento do app falhar entre dois envios do mesmo treino, um
+    // vai com chave e o outro sem. Parar na chave deixaria a duplicata passar
+    // no exato caso em que a primeira linha de defesa já falhou.
+    const base = {
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      payload: { exercises: [{ name: "Remada", sets: [{ weightKg: 60, reps: 10 }] }] },
+    };
+
+    await como(token).post("/activities").send(base).expect(201);
+    const dois = await como(token)
+      .post("/activities")
+      .send({ ...base, clientKey: "chave-nova-em-folha" })
+      .expect(200);
+
+    expect(dois.body.meta.repetido).toBe(true);
+    expect(await Activity.countDocuments({ user: new mongoose.Types.ObjectId(idDoUsuario) })).toBe(1);
+  });
+
+  it("editar o treino refaz a impressão: o conteúdo ANTIGO deixa de ser reconhecido como ele", async () => {
+    // Sem regravar, o treino corrigido guarda a digital do que ele não é mais —
+    // e um treino novo com o conteúdo antigo seria lido como repetição dele.
+    const corpo = {
+      sportId: "musculacao",
+      kind: "strength",
+      durationSec: 3600,
+      payload: { exercises: [{ name: "Agachamento", sets: [{ weightKg: 100, reps: 5 }] }] },
+    };
+    const um = await como(token).post("/activities").send(corpo).expect(201);
+
+    await request(app)
+      .patch(`/activities/${um.body.data.id}`)
+      .set(auth(token))
+      .send({ payload: { exercises: [{ name: "Agachamento", sets: [{ weightKg: 110, reps: 5 }] }] } })
+      .expect(200);
+
+    // Mesmo conteúdo do ORIGINAL, logo em seguida: não é repetição de nada.
+    await como(token).post("/activities").send(corpo).expect(201);
+    expect(await Activity.countDocuments({ user: new mongoose.Types.ObjectId(idDoUsuario) })).toBe(2);
+  });
 });
