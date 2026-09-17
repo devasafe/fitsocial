@@ -454,7 +454,13 @@ export function HomeScreen() {
               </Txt>
             ) : null}
             {/* Descanso planejado não é falta: o cartão diz isso e oferece o
-                caminho, sem cobrar nada de ninguém (brief §7). */}
+                caminho, sem cobrar nada de ninguém (brief §7).
+                Por isso o botão daqui — e o "Falar com" do estado com
+                treinador — são secundários: a regra desta seção é UMA ação
+                primária por compromisso do dia, e nestes dois estados não há
+                compromisso de treino nenhum. Zero primário aqui é escolha, não
+                esquecimento: preencher o botão criaria urgência falsa num dia
+                em que a pessoa não deve nada. */}
             {ehDescanso ? (
               <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
                 Nada marcado para hoje. Se quiser treinar assim mesmo, é só escolher.
