@@ -127,6 +127,7 @@ async function vincular(
     .set(auth(alunoToken))
     .send(escopo);
   expect(r.status).toBe(201);
+  return r.body.data.id as string;
 }
 
 const dietaExemplo = {
@@ -210,6 +211,51 @@ describe("Sintoma 2 — edição in place deixa de mentir", () => {
     // O treino não foi tocado nesta chamada — a autoria dele continua a mesma.
     expect(plan!.workoutCreatedBy).toBeNull();
     expect(plan!.workoutEm?.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+});
+
+describe("Correção — POST /plans/diet grava autor null (é a IA que escreve, não o aluno)", () => {
+  // `PrescreverDieta.tsx` (painel do nutricionista) lê `createdBy` com TRÊS
+  // saídas: `null` → "gerada por IA ou pelo próprio aluno"; o id do
+  // profissional logado → "prescrita por você"; QUALQUER OUTRO valor →
+  // "prescrita por outro profissional". `dietCreatedBy = user._id` (o id do
+  // ALUNO) cai nessa terceira frase — inventa um colega que não existe. O
+  // sintoma 2 (autoria de A sobrevivendo à troca) já é resolvido pelo GATE de
+  // leitura ser `dietEm != null`, não pelo VALOR de `dietCreatedBy`: `null`
+  // resolve os dois ao mesmo tempo.
+  it("nutri prescreve, aluno dispensa e regenera pela IA: GET volta a dizer createdBy null, nunca o id do aluno", async () => {
+    const nutriA = await registrarProfissional("nutri");
+    const aluno = await registrar();
+    const linkId = await vincular(nutriA.token, aluno.token, "nutri", { dieta: true, treinos: false });
+
+    await request(app)
+      .put(`/pro/alunos/${aluno.id}/dieta`)
+      .set(auth(nutriA.token))
+      .send({ summary: "Dieta do nutri A", diet: dietaExemplo })
+      .expect(201);
+
+    // O aluno dispensa o nutri A — só depois disso `POST /plans/diet` deixa
+    // de ser recusado por `recusarSeTemNutricionista`.
+    await request(app)
+      .delete(`/pro/acompanhamentos/${linkId}`)
+      .set(auth(aluno.token))
+      .expect(200);
+
+    await request(app).post("/plans/diet").set(auth(aluno.token)).send({}).expect(201);
+
+    const plan = await planoAtual(aluno.id);
+    expect(plan!.dietCreatedBy).toBeNull();
+    expect(plan!.dietEm).toBeInstanceOf(Date);
+
+    // Um nutri B, vinculado depois, tem que ler "sem prescrição" — nunca "de
+    // outro profissional". É a leitura que o painel realmente faz.
+    const nutriB = await registrarProfissional("nutri");
+    await vincular(nutriB.token, aluno.token, "nutri", { dieta: true, treinos: false });
+    const r = await request(app)
+      .get(`/pro/alunos/${aluno.id}/dieta`)
+      .set(auth(nutriB.token))
+      .expect(200);
+    expect(r.body.data.createdBy).toBeNull();
   });
 });
 

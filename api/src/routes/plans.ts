@@ -914,19 +914,31 @@ plansRouter.post(
     const profile = profileDataSchema.parse(profileDoc.toObject());
     const data = await generateDiet(profile, user._id.toString());
 
-    // Metadado por metade: o desenho trata esta rota como `PUT /plans/current`
-    // (aluno escrevendo a própria dieta), não como `/generate` (a IA
-    // escrevendo por conta própria) — mesmo a dieta vindo da IA aqui, quem
-    // pediu e é dono do resultado é o próprio aluno, sem profissional
-    // envolvido. É o que resolve o sintoma 2: se havia um `dietCreatedBy` de
-    // um nutricionista dispensado, esta chamada precisa parar de dizer isso.
+    // Metadado por metade: quem ESCREVE esta dieta é a IA (`generateDiet`),
+    // não o aluno — mesmo sendo ele quem pediu. `dietCreatedBy: null` é o
+    // mesmo valor que `/generate` grava para uma metade que a IA escreveu
+    // (`metadadoDaMetade`, acima). Isto NÃO é a mesma coisa que
+    // `PUT /plans/current`, que edita à mão: lá quem digitou é a pessoa,
+    // aqui quem compôs é a IA — o agrupamento do desenho ("sem profissional
+    // envolvido") está certo, mas os dois têm autores diferentes.
+    //
+    // Autor `user._id` (o ALUNO) já foi tentado aqui e quebrou na tela do
+    // nutricionista: `PrescreverDieta.tsx` tem só três frases —
+    // `createdBy === null` ("gerada por IA ou pelo próprio aluno"),
+    // `createdBy === euId` ("prescrita por você") e QUALQUER OUTRO valor
+    // ("prescrita por outro profissional"). Um id de aluno cai na terceira,
+    // inventando um colega que não existe. O sintoma 2 (autoria de um
+    // nutricionista dispensado sobrevivendo à troca) já é resolvido pelo
+    // GATE de leitura ser `dietEm != null` (`pro.ts`) — não precisa que o
+    // VALOR seja o do aluno para parar de dizer o nome de quem já saiu.
     let plan;
     if (atual) {
       atual.diet = data.diet;
       // O resumo passa a falar da dieta só quando não há treino para resumir.
       if (!atual.workout) atual.summary = data.summary;
-      atual.dietCreatedBy = user._id;
+      atual.dietCreatedBy = null;
       atual.dietEm = new Date();
+      atual.dietDisclaimer = data.disclaimer;
       await atual.save();
       plan = atual;
     } else {
@@ -937,8 +949,9 @@ plansRouter.post(
         workout: null,
         diet: data.diet,
         disclaimer: data.disclaimer,
-        dietCreatedBy: user._id,
+        dietCreatedBy: null,
         dietEm: new Date(),
+        dietDisclaimer: data.disclaimer,
       });
     }
 
