@@ -270,6 +270,10 @@ export function CheckInScreen() {
       const res = await createCheckIn(token!, { sessionDay: session.day, entries, clientKey });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
       await limparChaveDoTreino(session.day); // idem para a chave — o envio terminou
+      // Sai do armazenamento E da memória: sem zerar o ref, um segundo
+      // treino registrado sem sair desta tela reusaria a MESMA chave, e o
+      // servidor o leria como reenvio do primeiro — sumiria em silêncio.
+      clientKeyRef.current = null;
       concluirTreino(res.activity, res.newPRs ?? []);
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);

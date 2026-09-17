@@ -83,6 +83,10 @@ export function RegisterClassScreen({ route }: Props) {
         clientKey,
       });
       await limparChaveDoTreino(contextoDaChave);
+      // Sai do armazenamento E da memória: sem zerar o ref, um segundo
+      // treino registrado sem sair desta tela reusaria a MESMA chave, e o
+      // servidor o leria como reenvio do primeiro — sumiria em silêncio.
+      clientKeyRef.current = null;
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

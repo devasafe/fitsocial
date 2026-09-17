@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, TextInput, TouchableOpacity } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button } from "../components/ui";
 import { SuggestField, type Suggestion } from "../components/SuggestField";
 import { createActivity } from "../api/activities";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { searchExercises, MUSCLE_GROUPS, type MuscleGroup, type ExerciseDef } from "../api/library";
 import { lastEntries, type LastEntry } from "../api/checkins";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
@@ -150,6 +151,27 @@ export function RegisterActivityScreen({ route }: Props) {
   const [buscandoEm, setBuscandoEm] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // A chave do envio nasce quando a tela abre, não no clique de salvar — ver
+  // `chaveDoTreino`. Por esporte: é o que essa tela registra.
+  //
+  // Esta tela é a mais usada do app e o botão "Repetir Musculação"
+  // (`RegistrarScreen`) traz para cá o payload EXATO do último treino: sem
+  // chave, dois registros iguais em menos de dez minutos seriam lidos como
+  // reenvio pela rede de conteúdo, e o segundo sumiria. Com chave, cada
+  // abertura da tela tem a sua e os dois entram.
+  const clientKeyRef = useRef<string | null>(null);
+  const contextoDaChave = `strength:${sportId}`;
+
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(contextoDaChave).then((k) => {
+      if (alive) clientKeyRef.current = k ?? null;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [contextoDaChave]);
+
   // Ao escolher um exercício, mostra a última vez e pré-preenche a 1ª série se vazia.
   //
   // Guarda também o id e o músculo do catálogo. O autocomplete já mostrava
@@ -245,11 +267,19 @@ export function RegisterActivityScreen({ route }: Props) {
     setSaving(true);
     try {
       const variant = STRENGTH_VARIANTS.includes(sportId) ? sportId : "musculacao";
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(contextoDaChave));
       const res = await createActivity(token!, {
         sportId,
         kind: "strength",
         payload: { variant, exercises: payloadExercises },
+        clientKey,
       });
+      // O envio terminou: a chave sai do armazenamento E da memória. Sem zerar
+      // o ref, um segundo treino registrado sem sair desta tela (o caso do
+      // "Repetir Musculação") reusaria a MESMA chave, e o servidor o leria como
+      // reenvio do primeiro — o segundo sumiria em silêncio.
+      await limparChaveDoTreino(contextoDaChave);
+      clientKeyRef.current = null;
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

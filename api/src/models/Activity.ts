@@ -169,7 +169,7 @@ const activitySchema = new Schema(
      */
     clientKey: { type: String, default: undefined },
     /** Resumo estável do conteúdo — ver `services/impressaoDoTreino.ts`. */
-    impressao: { type: String, default: undefined, index: true },
+    impressao: { type: String, default: undefined },
   },
   { timestamps: true }
 );
