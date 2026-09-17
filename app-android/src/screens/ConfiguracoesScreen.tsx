@@ -248,6 +248,11 @@ export function ConfiguracoesScreen() {
 
       <Secao titulo="Treino">
         <Linha
+          titulo="Sua ficha"
+          detalhe="Objetivo, dias, restrições"
+          onPress={() => nav.navigate("Ficha")}
+        />
+        <Linha
           titulo="Como você treina"
           detalhe={
             settings?.programacao === "propria"

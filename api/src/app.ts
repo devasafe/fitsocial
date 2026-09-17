@@ -5,6 +5,7 @@ import { uploadsRouter } from "./routes/uploads.js";
 import { UPLOADS_DIR } from "./services/storage/disk.js";
 import { authRouter } from "./routes/auth.js";
 import { onboardingRouter } from "./routes/onboarding.js";
+import { fichaRouter } from "./routes/ficha.js";
 import { plansRouter } from "./routes/plans.js";
 import { socialRouter } from "./routes/social.js";
 import { activitiesRouter } from "./routes/activities.js";
@@ -58,6 +59,7 @@ export function createApp() {
 
   app.use("/auth", authRouter);
   app.use("/onboarding", onboardingRouter);
+  app.use("/ficha", fichaRouter);
   app.use("/plans", plansRouter);
   app.use("/social", socialRouter);
   app.use("/activities", activitiesRouter);
