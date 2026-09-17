@@ -330,6 +330,56 @@ activitiesRouter.get(
   })
 );
 
+/**
+ * O detalhe de um treino: o treino serializado mais o que a TELA de detalhe
+ * precisa além dele.
+ *
+ * `owner` (cabeçalho, ao ver o treino de outra pessoa) e `post` (curtir e
+ * comentar direto do detalhe) NÃO saem de `serializeActivity` de propósito:
+ * cada um custa uma consulta, e o serializador compartilhado alimenta a lista
+ * e o feed — pôr os dois lá viraria uma consulta de post por linha na tela que
+ * a pessoa abre todo dia.
+ *
+ * Existe como função, e não copiada em cada rota, porque o GET e o PATCH
+ * precisam devolver a MESMA coisa. Quando o PATCH devolvia `serializeActivity`
+ * puro, quem editava um treino recebia um objeto sem `post` — e a tela, que
+ * não refaz a busca, perdia a seção de curtir/comentar e, pior, passava a
+ * omitir o post na confirmação de apagar. Duas montagens separadas divergem no
+ * próximo campo que alguém acrescentar, e o sintoma volta igual.
+ */
+async function detalheDaAtividade(
+  a: InstanceType<typeof Activity>,
+  me: mongoose.Types.ObjectId
+): Promise<Record<string, unknown>> {
+  const u = await User.findById(a.user).select("name username avatarUrl");
+  const owner = u
+    ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
+    : null;
+
+  const sharePost = await Post.findOne({ activity: a._id, deletedAt: null }).sort({ createdAt: 1 });
+  const post = sharePost
+    ? {
+        id: sharePost._id.toString(),
+        likeCount: sharePost.likeCount,
+        commentCount: sharePost.commentCount,
+        likedByMe: !!(await Like.exists({ user: me, post: sharePost._id })),
+      }
+    : null;
+
+  const serializada = serializeActivity(a);
+  return {
+    ...serializada,
+    // O traçado só sai se o dono tornou as rotas públicas.
+    payload: await podarRotaSePrivada(
+      (serializada.payload ?? {}) as Record<string, unknown>,
+      a.user,
+      me
+    ),
+    owner,
+    post,
+  };
+}
+
 // Detalhe — respeita a visibilidade (dono sempre; público; seguidores).
 activitiesRouter.get(
   "/:id",
@@ -349,37 +399,7 @@ activitiesRouter.get(
         throw new HttpError(404, "Atividade não encontrada");
       }
     }
-    // Dono do treino (para o cabeçalho do detalhe ao ver de outra pessoa).
-    const u = await User.findById(a.user).select("name username avatarUrl");
-    const owner = u
-      ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
-      : null;
-
-    // Post do compartilhamento (para curtir/comentar direto do detalhe).
-    const sharePost = await Post.findOne({ activity: a._id, deletedAt: null }).sort({ createdAt: 1 });
-    const post = sharePost
-      ? {
-          id: sharePost._id.toString(),
-          likeCount: sharePost.likeCount,
-          commentCount: sharePost.commentCount,
-          likedByMe: !!(await Like.exists({ user: me, post: sharePost._id })),
-        }
-      : null;
-
-    const serializada = serializeActivity(a);
-    res.json({
-      data: {
-        ...serializada,
-        // O traçado só sai se o dono tornou as rotas públicas.
-        payload: await podarRotaSePrivada(
-          (serializada.payload ?? {}) as Record<string, unknown>,
-          a.user,
-          me
-        ),
-        owner,
-        post,
-      },
-    });
+    res.json({ data: await detalheDaAtividade(a, me) });
   })
 );
 
@@ -449,7 +469,11 @@ activitiesRouter.patch(
     const patch = updateSchema.parse(req.body);
     const a = await editarAtividade(req.user!._id, req.params.id, patch);
     if (!a) throw new HttpError(404, "Atividade não encontrada");
-    res.json({ data: serializeActivity(a) });
+    // MESMO formato do `GET /:id`, e não `serializeActivity` puro: a tela de
+    // detalhe não refaz a busca depois de editar, então um objeto sem `post`
+    // faria a seção de curtir/comentar sumir e a confirmação de apagar deixar
+    // de avisar que o post vai junto — omissão numa ação irreversível.
+    res.json({ data: await detalheDaAtividade(a, req.user!._id) });
   })
 );
 

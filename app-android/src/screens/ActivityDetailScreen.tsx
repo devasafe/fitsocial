@@ -146,6 +146,16 @@ export function ActivityDetailScreen({ route, navigation }: Props) {
   // Atividades — `listActivities` filtra por dono) — aí não há dúvida.
   // Quando `owner` vem (sempre que buscamos por id), ele é quem decide,
   // mesmo abrindo o PRÓPRIO treino por id.
+  // Sem `owner` no objeto, assume-se que o treino é da própria pessoa — e isso
+  // SÓ vale porque a única tela que passa a atividade pronta por parâmetro
+  // (`MinhasAtividadesScreen`) lista apenas as próprias. Quem chega de fora vem
+  // por id e recebe o `owner` do servidor.
+  //
+  // Acrescentar uma tela que passe atividade de TERCEIRO por parâmetro exige
+  // mudar esta linha: o menu de editar/apagar apareceria para quem não pode.
+  // O servidor ainda recusa com 404 (nunca 403, para não confirmar que o treino
+  // existe), então não há exposição de dado — mas a tela mentiria sobre o que a
+  // pessoa pode fazer, que é o tipo de erro que só se descobre usando.
   const souDono = a.owner ? a.owner.id === user?.id : true;
 
   /**

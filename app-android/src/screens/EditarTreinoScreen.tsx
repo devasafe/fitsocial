@@ -375,6 +375,12 @@ export function EditarTreinoScreen({ route, navigation }: Props) {
         return;
       }
       patch.payload = {
+        // O payload cru vem primeiro, pelo mesmo motivo do editor de força: o
+        // PATCH SUBSTITUI o payload inteiro, não faz merge. Reconstruir só os
+        // campos que esta tela mostra apagaria em silêncio o que ela não
+        // mostra — hoje o `nome` do benchmark (raiz do schema de crossfit), e
+        // amanhã qualquer campo que alguém acrescente sem lembrar desta tela.
+        ...((activity.payload ?? {}) as Record<string, unknown>),
         v: 3,
         box: box.trim() || null,
         quadro: quadro.trim() || null,

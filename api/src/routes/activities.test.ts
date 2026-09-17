@@ -253,6 +253,36 @@ describe("Activities", () => {
       expect(item.post).toBeUndefined();
     }
   });
+
+  it("o PATCH devolve o MESMO formato do detalhe, com post e owner", async () => {
+    // A tela de detalhe não refaz a busca depois de editar: ela fica com o que
+    // o PATCH devolveu. Quando ele devolvia `serializeActivity` puro, quem
+    // editava um treino compartilhado perdia a seção de curtir/comentar — e,
+    // pior, a confirmação de apagar parava de avisar que o post e os
+    // comentários iam junto. Omissão numa ação irreversível.
+    const created = await request(app)
+      .post("/activities")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send(strengthBody({ shareToFeed: true, caption: "vou corrigir", mesmoAssim: true }));
+    const id = created.body.data.id;
+    const postId = created.body.meta.sharedPostId;
+
+    await request(app)
+      .post(`/social/posts/${postId}/comments`)
+      .set("Authorization", `Bearer ${tokenB}`)
+      .send({ text: "boa" });
+
+    const editado = await request(app)
+      .patch(`/activities/${id}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "título corrigido" });
+
+    expect(editado.status).toBe(200);
+    expect(editado.body.data.title).toBe("título corrigido");
+    expect(editado.body.data.post?.id).toBe(postId);
+    expect(editado.body.data.post?.commentCount).toBe(1);
+    expect(editado.body.data.owner?.id).toBeTruthy();
+  });
 });
 
 describe("Activities — formatos 2b (endurance/class/generic)", () => {
