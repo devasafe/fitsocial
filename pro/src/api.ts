@@ -571,7 +571,20 @@ export const buscarNaoLidas = (token: string) =>
  * mensagem carrega a URL. Nada de imagem em base64 dentro do corpo da
  * mensagem, que incharia o banco e a resposta de toda a conversa.
  */
-export async function enviarFoto(token: string, linkId: string, file: File): Promise<Mensagem> {
+export interface ImagemSubida {
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Só o primeiro passo: sobe o arquivo e devolve a URL.
+ *
+ * Está separado do envio porque o recado em lote sobe UMA vez e usa a mesma
+ * URL nas N mensagens. Subir por destinatário gastaria banda e armazenamento
+ * proporcionais à turma para guardar N cópias do mesmo arquivo.
+ */
+export async function subirImagem(token: string, file: File): Promise<ImagemSubida> {
   const form = new FormData();
   form.append("image", file);
 
@@ -585,15 +598,46 @@ export async function enviarFoto(token: string, linkId: string, file: File): Pro
     const d = (await up.json().catch(() => ({}))) as { error?: string };
     throw new ErroApi(up.status, d.error ?? "Não foi possível enviar a foto.");
   }
-  const { url, width, height } = (await up.json()) as {
-    url: string;
-    width?: number;
-    height?: number;
-  };
+  return (await up.json()) as ImagemSubida;
+}
+
+export async function enviarFoto(token: string, linkId: string, file: File): Promise<Mensagem> {
+  const { url, width, height } = await subirImagem(token, file);
 
   const r = await api<Mensagem>(`/pro/acompanhamentos/${linkId}/mensagens`, {
     method: "POST",
     body: { imageUrl: url, imageWidth: width, imageHeight: height },
+    token,
+  });
+  return r.data;
+}
+
+export interface ResultadoDoRecado {
+  enviados: number;
+  recusados: { linkId: string; motivo: string }[];
+}
+
+/**
+ * O mesmo recado para vários acompanhamentos de uma vez.
+ *
+ * Uma mensagem em CADA conversa, separada — não é grupo, e o aluno não
+ * descobre quem mais recebeu. A resposta traz quem ficou de fora e por quê:
+ * um lote que falha em silêncio é pior que um que não sai.
+ */
+export async function enviarRecadoEmLote(
+  token: string,
+  linkIds: string[],
+  texto: string,
+  file?: File | null
+): Promise<ResultadoDoRecado> {
+  const imagem = file ? await subirImagem(token, file) : null;
+  const r = await api<ResultadoDoRecado>("/pro/mensagens-em-lote", {
+    method: "POST",
+    body: {
+      linkIds,
+      ...(texto.trim() ? { texto: texto.trim() } : {}),
+      ...(imagem ? { imageUrl: imagem.url, imageWidth: imagem.width, imageHeight: imagem.height } : {}),
+    },
     token,
   });
   return r.data;
