@@ -134,6 +134,31 @@ const planSchema = new Schema(
      * significando "meu plano", e é o caso de todo plano que já existe.
      */
     createdBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    /**
+     * Metadado POR METADE — aditivo, ao lado de `createdBy`/`disclaimer` acima.
+     *
+     * `createdBy` é UM campo para DUAS metades independentes (`workout` e
+     * `diet`), e por isso mente sempre que uma prescrição de treino copia a
+     * dieta corrente para a versão nova: o documento passa a dizer "escrito
+     * por quem prescreveu o treino" sobre uma dieta que aquela pessoa nunca
+     * tocou. Ver `docs/superpowers/specs/2026-09-17-metadado-por-metade-do-plano-design.md`.
+     *
+     * SEM DEFAULT, de propósito: existe um APK 1.2.0 instalado que não
+     * atualiza sozinho, e todo plano gravado antes desta tarefa não tem estes
+     * seis campos — nem `null`, AUSENTES. Ausente significa "não sei", que é
+     * a verdade sobre o passado; dar um default aqui inventaria uma resposta
+     * para planos que nunca a tiveram. `createdBy`/`disclaimer` continuam
+     * sendo gravados do jeito que sempre foram — é o app antigo que os lê.
+     * `services/autoriaDaDieta.ts` continua existindo como a ponte para essa
+     * ausência: `GET /pro/alunos/:id/dieta` só cai nele quando `dietEm` não
+     * existe.
+     */
+    workoutCreatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    workoutEm: { type: Date },
+    workoutDisclaimer: { type: String },
+    dietCreatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    dietEm: { type: Date },
+    dietDisclaimer: { type: String },
   },
   { timestamps: true }
 );

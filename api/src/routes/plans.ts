@@ -255,6 +255,34 @@ function recusarSeNadaParaEscrever(metades: { treino: boolean; dieta: boolean })
  * apagado por cima de uma metade que não mudou nesta chamada.
  */
 
+/**
+ * O metadado de UMA metade (`workout*` ou `diet*`) na versão nova que
+ * `/generate`, `/adjust` e `/import` criam.
+ *
+ * Metade ESCRITA agora: autor `null` — a IA não é "alguém" — e o aviso é o
+ * genérico dela. Metade PRESERVADA: tudo vem, byte a byte, do que já
+ * existia — inclusive a AUSÊNCIA (`undefined`), quando a versão anterior é
+ * de antes desta tarefa e nunca teve estes campos. É o que faz o metadado
+ * novo nunca inventar uma resposta para o passado; ver o desenho em
+ * `docs/superpowers/specs/2026-09-17-metadado-por-metade-do-plano-design.md`.
+ */
+function metadadoDaMetade(
+  escrita: boolean,
+  anteriorCreatedBy: mongoose.Types.ObjectId | null | undefined,
+  anteriorEm: Date | null | undefined,
+  anteriorDisclaimer: string | null | undefined,
+  agora: Date,
+  disclaimerDaIA: string
+): {
+  createdBy: mongoose.Types.ObjectId | null | undefined;
+  em: Date | null | undefined;
+  disclaimer: string | null | undefined;
+} {
+  return escrita
+    ? { createdBy: null, em: agora, disclaimer: disclaimerDaIA }
+    : { createdBy: anteriorCreatedBy, em: anteriorEm, disclaimer: anteriorDisclaimer };
+}
+
 // Gera um novo plano a partir da ficha do usuário e o salva como nova versão.
 // Geração é cara (IA); limite baixo por minuto.
 const generateLimiter = rateLimit({ windowMs: 60_000, max: 5, name: "plan-generate" });
@@ -293,6 +321,24 @@ plansRouter.post(
     const profile = profileDataSchema.parse(profileDoc.toObject());
     const data = await generatePlan(profile, user._id.toString());
 
+    const agora = new Date();
+    const metaTreino = metadadoDaMetade(
+      metades.treino,
+      last?.workoutCreatedBy,
+      last?.workoutEm,
+      last?.workoutDisclaimer,
+      agora,
+      data.disclaimer
+    );
+    const metaDieta = metadadoDaMetade(
+      metades.dieta,
+      last?.dietCreatedBy,
+      last?.dietEm,
+      last?.dietDisclaimer,
+      agora,
+      data.disclaimer
+    );
+
     const plan = await Plan.create({
       user: user._id,
       version: (last?.version ?? 0) + 1,
@@ -317,6 +363,13 @@ plansRouter.post(
       // apagar o plano deixaria de ser barrado (ver comentário acima).
       createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
       disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
+      // Metadado por metade — aditivo, ver `metadadoDaMetade` acima.
+      workoutCreatedBy: metaTreino.createdBy,
+      workoutEm: metaTreino.em,
+      workoutDisclaimer: metaTreino.disclaimer,
+      dietCreatedBy: metaDieta.createdBy,
+      dietEm: metaDieta.em,
+      dietDisclaimer: metaDieta.disclaimer,
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -361,6 +414,23 @@ plansRouter.post(
     const adherence = buildAdherenceSummary(activities, currentData);
 
     const data = await adjustPlan(profile, currentData, adherence, user._id.toString());
+    const agora = new Date();
+    const metaTreino = metadadoDaMetade(
+      metades.treino,
+      current.workoutCreatedBy,
+      current.workoutEm,
+      current.workoutDisclaimer,
+      agora,
+      data.disclaimer
+    );
+    const metaDieta = metadadoDaMetade(
+      metades.dieta,
+      current.dietCreatedBy,
+      current.dietEm,
+      current.dietDisclaimer,
+      agora,
+      data.disclaimer
+    );
     const plan = await Plan.create({
       user: user._id,
       version: current.version + 1,
@@ -376,6 +446,13 @@ plansRouter.post(
       // Mesma procedência do `/generate` — ver o comentário lá.
       createdBy: metades.treino && metades.dieta ? null : (current.createdBy ?? null),
       disclaimer: metades.treino && metades.dieta ? data.disclaimer : (current.disclaimer ?? data.disclaimer),
+      // Metadado por metade — aditivo, ver `metadadoDaMetade` acima do `/generate`.
+      workoutCreatedBy: metaTreino.createdBy,
+      workoutEm: metaTreino.em,
+      workoutDisclaimer: metaTreino.disclaimer,
+      dietCreatedBy: metaDieta.createdBy,
+      dietEm: metaDieta.em,
+      dietDisclaimer: metaDieta.disclaimer,
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -416,6 +493,23 @@ plansRouter.post(
     const data = await importPlanFromText(text, profile, user._id.toString());
 
     const last = await Plan.findOne({ user: user._id }).sort({ version: -1 });
+    const agora = new Date();
+    const metaTreino = metadadoDaMetade(
+      metades.treino,
+      last?.workoutCreatedBy,
+      last?.workoutEm,
+      last?.workoutDisclaimer,
+      agora,
+      data.disclaimer
+    );
+    const metaDieta = metadadoDaMetade(
+      metades.dieta,
+      last?.dietCreatedBy,
+      last?.dietEm,
+      last?.dietDisclaimer,
+      agora,
+      data.disclaimer
+    );
     const plan = await Plan.create({
       user: user._id,
       version: (last?.version ?? 0) + 1,
@@ -432,6 +526,13 @@ plansRouter.post(
       // Mesma procedência do `/generate` — ver o comentário lá.
       createdBy: metades.treino && metades.dieta ? null : (last?.createdBy ?? null),
       disclaimer: metades.treino && metades.dieta ? data.disclaimer : (last?.disclaimer ?? data.disclaimer),
+      // Metadado por metade — aditivo, ver `metadadoDaMetade` acima do `/generate`.
+      workoutCreatedBy: metaTreino.createdBy,
+      workoutEm: metaTreino.em,
+      workoutDisclaimer: metaTreino.disclaimer,
+      dietCreatedBy: metaDieta.createdBy,
+      dietEm: metaDieta.em,
+      dietDisclaimer: metaDieta.disclaimer,
     });
 
     res.status(201).json({ plan: serializePlan(plan) });
@@ -466,10 +567,19 @@ plansRouter.put(
       // Sem isto, editar a ficha por ele apagaria a agenda em silêncio.
       plan.workout = preservarAgenda(plan.workout as WorkoutData | null, body.workout);
       plan.markModified("workout");
+      // Edição IN PLACE, sem versão nova — é o sintoma 2 do desenho: sem
+      // isto, um treino que era do treinador continuaria dizendo `workoutCreatedBy`
+      // dele depois de o próprio aluno tê-lo reescrito à mão.
+      plan.workoutCreatedBy = req.user!._id;
+      plan.workoutEm = new Date();
     }
     if (body.diet !== undefined) {
       plan.diet = body.diet;
       plan.markModified("diet");
+      // Espelho do treino, acima: quem editou por último é quem passa a
+      // responder por esta metade.
+      plan.dietCreatedBy = req.user!._id;
+      plan.dietEm = new Date();
     }
     if (body.summary !== undefined) plan.summary = body.summary;
     await plan.save();
@@ -718,6 +828,12 @@ plansRouter.post(
         diet: null,
         disclaimer: DISCLAIMER_PROPRIO,
         createdBy: null,
+        // Metadado por metade: este treino é tão "próprio" quanto o que
+        // `PUT /plans/current` edita à mão — é a mesma pessoa montando o
+        // treino dela, só que a partir de um treino já registrado.
+        workoutCreatedBy: user._id,
+        workoutEm: new Date(),
+        workoutDisclaimer: DISCLAIMER_PROPRIO,
       });
       criouPlano = true;
     } else {
@@ -726,6 +842,11 @@ plansRouter.post(
       // antigo" sem que nada tenha sido prescrito.
       doc.workout = workout;
       doc.markModified("workout");
+      // Mesmo raciocínio do `PUT /plans/current`: quem mexeu por último no
+      // treino passa a responder por ele — mesmo que só tenha acrescentado
+      // uma sessão, e não reescrito o resto.
+      doc.workoutCreatedBy = user._id;
+      doc.workoutEm = new Date();
       await doc.save();
     }
 
@@ -793,11 +914,19 @@ plansRouter.post(
     const profile = profileDataSchema.parse(profileDoc.toObject());
     const data = await generateDiet(profile, user._id.toString());
 
+    // Metadado por metade: o desenho trata esta rota como `PUT /plans/current`
+    // (aluno escrevendo a própria dieta), não como `/generate` (a IA
+    // escrevendo por conta própria) — mesmo a dieta vindo da IA aqui, quem
+    // pediu e é dono do resultado é o próprio aluno, sem profissional
+    // envolvido. É o que resolve o sintoma 2: se havia um `dietCreatedBy` de
+    // um nutricionista dispensado, esta chamada precisa parar de dizer isso.
     let plan;
     if (atual) {
       atual.diet = data.diet;
       // O resumo passa a falar da dieta só quando não há treino para resumir.
       if (!atual.workout) atual.summary = data.summary;
+      atual.dietCreatedBy = user._id;
+      atual.dietEm = new Date();
       await atual.save();
       plan = atual;
     } else {
@@ -808,6 +937,8 @@ plansRouter.post(
         workout: null,
         diet: data.diet,
         disclaimer: data.disclaimer,
+        dietCreatedBy: user._id,
+        dietEm: new Date(),
       });
     }
 
@@ -854,6 +985,18 @@ plansRouter.delete(
     if (!plan) throw new HttpError(404, "Nenhum plano para editar");
 
     plan.set(parte, null);
+    // O metadado da metade zerada some junto — senão o próximo prescritor
+    // veria "prescrito por Fulano" sobre um conteúdo que nem existe mais, a
+    // mesma mentira que os campos novos existem para acabar.
+    if (parte === "workout") {
+      plan.workoutCreatedBy = null;
+      plan.workoutEm = null;
+      plan.workoutDisclaimer = null;
+    } else {
+      plan.dietCreatedBy = null;
+      plan.dietEm = null;
+      plan.dietDisclaimer = null;
+    }
 
     // Sobrou nada: o documento não tem mais por que existir, e a pessoa volta a
     // escolher como treina.

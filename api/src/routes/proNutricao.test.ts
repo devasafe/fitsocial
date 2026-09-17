@@ -322,7 +322,13 @@ describe("GET /pro/alunos/:id/dieta", () => {
     // versão do treino de quarta, ainda que ela seja a mais nova.
     const r = await comoNutri.get(`/pro/alunos/${alunoId}/dieta`).expect(200);
     expect(r.body.data.createdBy).toBe(nutriId.toString());
-    expect(r.body.data.em).toBe(versaoDaDieta!.createdAt.toISOString());
+    // A resposta agora vem de `dietEm` (metadado por metade, gravado na hora
+    // da prescrição de segunda e preservado byte a byte pela prescrição de
+    // treino de quarta) — não mais de `createdAt`, que é o timestamp do
+    // DOCUMENTO e não bate por 1ms com um `new Date()` de aplicação gravado
+    // no mesmo `Plan.create`. `versaoDaDieta!.createdAt` continua sendo "por
+    // volta de segunda", só não é mais o valor exato que esta rota devolve.
+    expect(r.body.data.em).toBe(versaoDaDieta!.dietEm!.toISOString());
     expect(r.body.data.version).toBe(versaoDaDieta!.version + 1);
   });
 

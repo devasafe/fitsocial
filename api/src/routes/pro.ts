@@ -625,14 +625,21 @@ proRouter.get(
 
     const versoes = await Plan.find({ user: clientId })
       .sort({ version: -1 })
-      .select("version diet createdBy createdAt")
+      .select("version diet createdBy createdAt dietCreatedBy dietEm")
       .lean();
 
     const atual = versoes[0] ?? null;
-    // `createdBy` null continua sendo "foi a IA, ou o próprio aluno" — é o que
-    // distingue uma prescrição de um plano auto-atribuído. O que muda é DE QUE
-    // VERSÃO ele vem: não necessariamente a mais nova.
-    const { createdBy, em } = autoriaDaDieta(versoes);
+    // `dietEm` é o sinal de que este plano já foi gravado por esta tarefa: se
+    // ele existe, a resposta é gravada, não inferida — é o fim da autoria da
+    // dieta ser respondida pelo `createdBy` de UM DOCUMENTO para DUAS
+    // metades. Quando não existe (plano de antes desta tarefa, ou versão que
+    // só herdou treino sem nunca ter tido dieta gravada com metadado), cai em
+    // `autoriaDaDieta` — a ponte para o passado. Ver o desenho em
+    // `docs/superpowers/specs/2026-09-17-metadado-por-metade-do-plano-design.md`.
+    const { createdBy, em } =
+      atual?.diet != null && atual?.dietEm != null
+        ? { createdBy: atual.dietCreatedBy?.toString() ?? null, em: atual.dietEm.toISOString() }
+        : autoriaDaDieta(versoes);
 
     res.json({
       data: {
@@ -1078,6 +1085,17 @@ proRouter.put(
       // registrado para tarefa própria, não para consertar aqui.
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_COACH,
       createdBy: req.user!._id,
+      // Metadado por metade — aditivo, ver o desenho em
+      // `docs/superpowers/specs/2026-09-17-metadado-por-metade-do-plano-design.md`.
+      // O treino é escrito AGORA, pelo coach; a dieta é PRESERVADA — byte a
+      // byte, autor, data e aviso da versão anterior, sejam eles quais forem
+      // (inclusive ausentes, se a versão anterior é de antes desta tarefa).
+      workoutCreatedBy: req.user!._id,
+      workoutEm: new Date(),
+      workoutDisclaimer: DISCLAIMER_DO_COACH,
+      dietCreatedBy: atual?.dietCreatedBy,
+      dietEm: atual?.dietEm,
+      dietDisclaimer: atual?.dietDisclaimer,
     });
 
     // O aviso vai na conversa que já existe entre os dois, e não numa caixa
@@ -1186,6 +1204,15 @@ proRouter.put(
       // consertar aqui (Tarefa 11c, item 2).
       disclaimer: atual?.disclaimer ?? DISCLAIMER_DO_NUTRI,
       createdBy: req.user!._id,
+      // Metadado por metade — espelho de `PUT /alunos/:id/treino`, ver o
+      // comentário lá. A dieta é escrita AGORA, pelo nutricionista; o treino
+      // é PRESERVADO como estava.
+      dietCreatedBy: req.user!._id,
+      dietEm: new Date(),
+      dietDisclaimer: DISCLAIMER_DO_NUTRI,
+      workoutCreatedBy: atual?.workoutCreatedBy,
+      workoutEm: atual?.workoutEm,
+      workoutDisclaimer: atual?.workoutDisclaimer,
     });
 
     const aviso = await ProMessage.create({
