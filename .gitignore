@@ -30,3 +30,6 @@ app-android/credenciais/
 # projeto — a autorização vem das regras do Firebase, não dele — e viaja dentro
 # de todo APK distribuído, então guardá-lo seria encenação. Além disso, o EAS
 # Build só envia o que está versionado: ignorá-lo quebra o build.
+
+# scratch do fluxo de planos por subagente — nunca vai para o historico
+.superpowers/
