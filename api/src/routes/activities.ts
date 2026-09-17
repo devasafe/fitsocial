@@ -11,13 +11,13 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
 import { podeVerAtividade, podarRotaSePrivada } from "../services/activityVisibility.js";
 import { getSport } from "../services/sports.js";
-import { Activity, activityCreateSchema, strengthPayloadSchema } from "../models/Activity.js";
+import { Activity, activityCreateSchema } from "../models/Activity.js";
 import { Follow } from "../models/Follow.js";
 import { Post } from "../models/Post.js";
 import { Like } from "../models/Like.js";
 import { User } from "../models/User.js";
-import { createActivity } from "../services/activities.js";
-import { computeStrengthMetrics, musculosDoTreinoSalvo } from "../services/activityMetrics.js";
+import { createActivity, apagarAtividade, editarAtividade } from "../services/activities.js";
+import { musculosDoTreinoSalvo } from "../services/activityMetrics.js";
 import { parseGpx } from "../services/gpx.js";
 import { movimentosDoCartao, totalDeMovimentos } from "../services/media/movimentosDoCartao.js";
 import { encodeCursor, decodeCursor } from "../utils/cursor.js";
@@ -195,10 +195,10 @@ activitiesRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const input = activityCreateSchema.parse(req.body);
-    const { activity, post, newPRs } = await createActivity(req.user!._id, input);
-    res.status(201).json({
+    const { activity, post, newPRs, repetido } = await createActivity(req.user!._id, input);
+    res.status(repetido ? 200 : 201).json({
       data: serializeActivity(activity),
-      meta: { sharedPostId: post?._id.toString() ?? null, newPRs },
+      meta: { sharedPostId: post?._id.toString() ?? null, newPRs, repetido },
     });
   })
 );
@@ -244,16 +244,27 @@ activitiesRouter.post(
 );
 
 // Importa um arquivo GPX como atividade de endurance (o servidor deriva o track).
-const importGpxSchema = z.object({ sportId: z.string(), gpx: z.string().min(1) });
+const importGpxSchema = z.object({
+  sportId: z.string(),
+  gpx: z.string().min(1),
+  clientKey: z.string().min(8).max(100).optional(),
+  mesmoAssim: z.boolean().optional(),
+});
 activitiesRouter.post(
   "/import-gpx",
   asyncHandler(async (req, res) => {
-    const { sportId, gpx } = importGpxSchema.parse(req.body);
+    const { sportId, gpx, clientKey, mesmoAssim } = importGpxSchema.parse(req.body);
     const points = parseGpx(gpx);
     if (points.length < 2) throw new HttpError(400, "GPX sem pontos de trajeto suficientes");
-    const input = activityCreateSchema.parse({ sportId, kind: "endurance", payload: { points } });
-    const { activity, newPRs } = await createActivity(req.user!._id, input);
-    res.status(201).json({ data: serializeActivity(activity), meta: { newPRs } });
+    const input = activityCreateSchema.parse({
+      sportId,
+      kind: "endurance",
+      payload: { points },
+      clientKey,
+      mesmoAssim,
+    });
+    const { activity, newPRs, repetido } = await createActivity(req.user!._id, input);
+    res.status(repetido ? 200 : 201).json({ data: serializeActivity(activity), meta: { newPRs, repetido } });
   })
 );
 
@@ -319,6 +330,56 @@ activitiesRouter.get(
   })
 );
 
+/**
+ * O detalhe de um treino: o treino serializado mais o que a TELA de detalhe
+ * precisa além dele.
+ *
+ * `owner` (cabeçalho, ao ver o treino de outra pessoa) e `post` (curtir e
+ * comentar direto do detalhe) NÃO saem de `serializeActivity` de propósito:
+ * cada um custa uma consulta, e o serializador compartilhado alimenta a lista
+ * e o feed — pôr os dois lá viraria uma consulta de post por linha na tela que
+ * a pessoa abre todo dia.
+ *
+ * Existe como função, e não copiada em cada rota, porque o GET e o PATCH
+ * precisam devolver a MESMA coisa. Quando o PATCH devolvia `serializeActivity`
+ * puro, quem editava um treino recebia um objeto sem `post` — e a tela, que
+ * não refaz a busca, perdia a seção de curtir/comentar e, pior, passava a
+ * omitir o post na confirmação de apagar. Duas montagens separadas divergem no
+ * próximo campo que alguém acrescentar, e o sintoma volta igual.
+ */
+async function detalheDaAtividade(
+  a: InstanceType<typeof Activity>,
+  me: mongoose.Types.ObjectId
+): Promise<Record<string, unknown>> {
+  const u = await User.findById(a.user).select("name username avatarUrl");
+  const owner = u
+    ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
+    : null;
+
+  const sharePost = await Post.findOne({ activity: a._id, deletedAt: null }).sort({ createdAt: 1 });
+  const post = sharePost
+    ? {
+        id: sharePost._id.toString(),
+        likeCount: sharePost.likeCount,
+        commentCount: sharePost.commentCount,
+        likedByMe: !!(await Like.exists({ user: me, post: sharePost._id })),
+      }
+    : null;
+
+  const serializada = serializeActivity(a);
+  return {
+    ...serializada,
+    // O traçado só sai se o dono tornou as rotas públicas.
+    payload: await podarRotaSePrivada(
+      (serializada.payload ?? {}) as Record<string, unknown>,
+      a.user,
+      me
+    ),
+    owner,
+    post,
+  };
+}
+
 // Detalhe — respeita a visibilidade (dono sempre; público; seguidores).
 activitiesRouter.get(
   "/:id",
@@ -338,37 +399,7 @@ activitiesRouter.get(
         throw new HttpError(404, "Atividade não encontrada");
       }
     }
-    // Dono do treino (para o cabeçalho do detalhe ao ver de outra pessoa).
-    const u = await User.findById(a.user).select("name username avatarUrl");
-    const owner = u
-      ? { id: u._id.toString(), name: u.name, username: u.username ?? null, avatarUrl: u.avatarUrl ?? "" }
-      : null;
-
-    // Post do compartilhamento (para curtir/comentar direto do detalhe).
-    const sharePost = await Post.findOne({ activity: a._id, deletedAt: null }).sort({ createdAt: 1 });
-    const post = sharePost
-      ? {
-          id: sharePost._id.toString(),
-          likeCount: sharePost.likeCount,
-          commentCount: sharePost.commentCount,
-          likedByMe: !!(await Like.exists({ user: me, post: sharePost._id })),
-        }
-      : null;
-
-    const serializada = serializeActivity(a);
-    res.json({
-      data: {
-        ...serializada,
-        // O traçado só sai se o dono tornou as rotas públicas.
-        payload: await podarRotaSePrivada(
-          (serializada.payload ?? {}) as Record<string, unknown>,
-          a.user,
-          me
-        ),
-        owner,
-        post,
-      },
-    });
+    res.json({ data: await detalheDaAtividade(a, me) });
   })
 );
 
@@ -414,41 +445,47 @@ const updateSchema = z.object({
   durationSec: z.number().int().min(0).max(86_400).optional(),
   perceivedEffort: z.number().int().min(1).max(10).optional(),
   feeling: z.enum(["otimo", "bom", "normal", "ruim", "pessimo"]).optional(),
-  payload: strengthPayloadSchema.optional(),
+  // Corrige "registrei no dia errado" — nunca no futuro, que não é correção,
+  // é invenção. `Date.now()` avaliado a cada `parse`, não na carga do módulo.
+  startedAt: z.coerce
+    .date()
+    .refine((d) => d.getTime() <= Date.now(), "Não dá para registrar um treino no futuro")
+    .optional(),
+  // A forma certa depende do `kind` do treino, que só o service sabe (não
+  // veio no corpo — ver abaixo) — `editarAtividade` resolve pelo mapa
+  // kind→schema. Aqui só garante que é um objeto.
+  payload: z.record(z.string(), z.unknown()).optional(),
+  // Aceitos (e não validados) só para o service poder recusá-los com uma
+  // mensagem que explique o porquê. Se o zod já os descartasse aqui, a rota
+  // devolveria 200 fingindo que trocou o tipo do treino.
+  kind: z.unknown().optional(),
+  sportId: z.unknown().optional(),
 });
 
 activitiesRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const a = await Activity.findById(req.params.id);
-    if (!a || a.user.toString() !== req.user!._id.toString()) {
-      throw new HttpError(404, "Atividade não encontrada");
-    }
     const patch = updateSchema.parse(req.body);
-    if (patch.title !== undefined) a.title = patch.title;
-    if (patch.notes !== undefined) a.notes = patch.notes;
-    if (patch.visibility !== undefined) a.visibility = patch.visibility;
-    if (patch.durationSec !== undefined) a.durationSec = patch.durationSec;
-    if (patch.perceivedEffort !== undefined) a.perceivedEffort = patch.perceivedEffort;
-    if (patch.feeling !== undefined) a.feeling = patch.feeling;
-    if (patch.payload !== undefined) {
-      a.payload = patch.payload;
-      a.metrics = computeStrengthMetrics(patch.payload);
-      a.markModified("payload");
-      a.markModified("metrics");
-    }
-    await a.save();
-    res.json({ data: serializeActivity(a) });
+    const a = await editarAtividade(req.user!._id, req.params.id, patch);
+    if (!a) throw new HttpError(404, "Atividade não encontrada");
+    // MESMO formato do `GET /:id`, e não `serializeActivity` puro: a tela de
+    // detalhe não refaz a busca depois de editar, então um objeto sem `post`
+    // faria a seção de curtir/comentar sumir e a confirmação de apagar deixar
+    // de avisar que o post vai junto — omissão numa ação irreversível.
+    res.json({ data: await detalheDaAtividade(a, req.user!._id) });
   })
 );
 
+// Apaga de verdade: o post do compartilhamento (com curtidas e comentários) e
+// o recorde que só existia por causa deste treino vão junto — ver
+// `apagarAtividade` em services/activities.ts.
 activitiesRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     assertObjectId(req.params.id);
-    const r = await Activity.deleteOne({ _id: req.params.id, user: req.user!._id });
-    if (!r.deletedCount) throw new HttpError(404, "Atividade não encontrada");
+    const apagou = await apagarAtividade(req.user!._id, req.params.id);
+    if (!apagou) throw new HttpError(404, "Atividade não encontrada");
     res.json({ data: { deleted: true } });
   })
 );

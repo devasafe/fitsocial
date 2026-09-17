@@ -60,6 +60,7 @@ import { AcompanhamentosScreen } from "../screens/AcompanhamentosScreen";
 import { ConversaScreen } from "../screens/ConversaScreen";
 import { ConviteDoLink } from "../components/ConviteDoLink";
 import { ActivityDetailScreen } from "../screens/ActivityDetailScreen";
+import { EditarTreinoScreen } from "../screens/EditarTreinoScreen";
 import { DesafiosScreen } from "../screens/DesafiosScreen";
 import { CriarDesafioScreen } from "../screens/CriarDesafioScreen";
 import { DesafioDetailScreen } from "../screens/DesafioDetailScreen";
@@ -424,6 +425,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="ActivityDetail"
             component={ActivityDetailScreen}
             options={{ headerShown: true, title: "Atividade", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="EditarTreino"
+            component={EditarTreinoScreen}
+            options={{ ...transicaoDeFolha, headerShown: true, title: "Editar treino", ...headerStyle }}
           />
           <AppStack.Screen
             name="Desafios"

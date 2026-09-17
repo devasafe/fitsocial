@@ -45,6 +45,10 @@ export type AppStackParams = {
   Acompanhamentos: undefined;
   Conversa: { linkId: string; nome: string };
   ActivityDetail: { activity?: Activity; activityId?: string };
+  /** Corrigir o próprio treino (Tarefa 7). Só o dono chega aqui — a entrada
+   *  vive no menu do detalhe. Precisa da atividade inteira, não só do id: é
+   *  o que preenche o formulário sem uma segunda ida à rede. */
+  EditarTreino: { activity: Activity };
   Desafios: undefined;
   CriarDesafio: undefined;
   DesafioDetail: { id: string };

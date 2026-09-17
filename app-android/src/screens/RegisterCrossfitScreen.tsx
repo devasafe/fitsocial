@@ -12,7 +12,7 @@
 // só mostra resumos, a edição de cada bloco vive num sheet, e o rascunho é
 // salvo a cada mudança para dar para sair e voltar.
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { View, TouchableOpacity, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -28,6 +28,7 @@ import { blocoVazio, type Bloco, type PayloadDeCrossfit } from "../api/crossfit"
 import { comoNoQuadro, resultadoEmTexto, ehDescanso } from "../lib/crossfitResumo";
 import { anotarTreino } from "../lib/sugestoes";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { notify } from "../lib/notify";
 import { colors, radius, spacing } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
@@ -37,9 +38,16 @@ import { SportIcon } from "../components/SportIcon";
 type Props = NativeStackScreenProps<AppStackParams, "RegisterCrossfit">;
 
 const RASCUNHO = "fitsocial.rascunhoCrossfit";
+// Um slot só, como o rascunho acima — não por esporte: quem troca de esporte
+// no meio ainda está editando o MESMO rascunho, então é o mesmo envio.
+const CONTEXTO_DA_CHAVE = "crossfit";
+
+// `temAlgo` e `resumo` são exportados para a Tarefa 7 (EditarTreinoScreen):
+// corrigir um WOD já salvo reusa a MESMA regra de "bloco vazio some" e o
+// MESMO resumo do card, em vez de reimplementar os dois e divergir.
 
 /** Um bloco tem conteúdo quando tem modo, movimento, resultado ou nota. */
-function temAlgo(b: Bloco): boolean {
+export function temAlgo(b: Bloco): boolean {
   return !!(
     b.modo.trim() ||
     b.movimentos.some((m) => m.nome.trim()) ||
@@ -49,7 +57,7 @@ function temAlgo(b: Bloco): boolean {
 }
 
 /** As duas linhas que o card de cada bloco mostra. */
-function resumo(b: Bloco): string[] {
+export function resumo(b: Bloco): string[] {
   const linhas: string[] = [];
   const cabecalho = [b.nome?.trim(), resultadoEmTexto(b.resultado)].filter(Boolean).join(" — ");
   if (cabecalho) linhas.push(cabecalho);
@@ -80,6 +88,19 @@ export function RegisterCrossfitScreen({ route }: Props) {
   const [editando, setEditando] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [carregou, setCarregou] = useState(false);
+  // A chave nasce quando a tela abre — não quando "Salvar treino" é tocado —
+  // ver `chaveDoTreino`.
+  const clientKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(CONTEXTO_DA_CHAVE).then((k) => {
+      if (alive) clientKeyRef.current = k ?? null;
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const tamanhoDoTime = Math.max(1, paraInteiro(time) ?? 1);
   const emEquipe = tamanhoDoTime > 1;
@@ -142,6 +163,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
 
     setSalvando(true);
     try {
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(CONTEXTO_DA_CHAVE));
       const res = await createActivity(token!, {
         sportId,
         kind: "wod",
@@ -149,6 +171,7 @@ export function RegisterCrossfitScreen({ route }: Props) {
         durationSec: paraSegundos(duracao) ?? undefined,
         perceivedEffort: paraInteiro(rpe) ?? undefined,
         notes: notas.trim() || undefined,
+        clientKey,
       });
 
       // O acervo de sugestões se enche do que VOCÊ escreve, no salvamento —
@@ -159,6 +182,11 @@ export function RegisterCrossfitScreen({ route }: Props) {
       );
 
       limparRascunho();
+      await limparChaveDoTreino(CONTEXTO_DA_CHAVE);
+      // Sai do armazenamento E da memória: sem zerar o ref, um segundo
+      // treino registrado sem sair desta tela reusaria a MESMA chave, e o
+      // servidor o leria como reenvio do primeiro — sumiria em silêncio.
+      clientKeyRef.current = null;
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { notify } from "../lib/notify";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Card, Button, Field } from "../components/ui";
 import { createActivity, getLastActivity, type Activity } from "../api/activities";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { colors, spacing, sportColor } from "../theme";
 import { sportLabel } from "../lib/sportLabel";
 import type { AppStackParams } from "../navigation/types";
@@ -34,6 +35,21 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
   const [min, setMin] = useState("");
   const [last, setLast] = useState<Activity | null>(null);
   const [saving, setSaving] = useState(false);
+  // A chave nasce quando a tela abre — não quando "Salvar" é tocado — ver
+  // `chaveDoTreino`. Por esporte: é o que essa tela registra (o registro
+  // manual; a gravação com GPS tem a própria, em `LiveTrackScreen`).
+  const clientKeyRef = useRef<string | null>(null);
+  const contextoDaChave = `endurance:${sportId}`;
+
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(contextoDaChave).then((k) => {
+      if (alive) clientKeyRef.current = k ?? null;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [contextoDaChave]);
 
   const kmN = Number(km.replace(",", ".")) || 0;
   const minN = Number(min.replace(",", ".")) || 0;
@@ -70,12 +86,19 @@ export function RegisterEnduranceScreen({ route, navigation }: Props) {
     }
     setSaving(true);
     try {
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(contextoDaChave));
       const res = await createActivity(token!, {
         sportId,
         kind: "endurance",
         durationSec: Math.round(minN * 60),
         payload: { distanceM: Math.round(kmN * 1000) },
+        clientKey,
       });
+      await limparChaveDoTreino(contextoDaChave);
+      // Sai do armazenamento E da memória: sem zerar o ref, um segundo
+      // treino registrado sem sair desta tela reusaria a MESMA chave, e o
+      // servidor o leria como reenvio do primeiro — sumiria em silêncio.
+      clientKeyRef.current = null;
       concluirTreino(res.data, res.meta.newPRs ?? []);
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

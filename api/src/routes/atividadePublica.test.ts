@@ -299,7 +299,10 @@ describe("Preferências", () => {
 
     await registrarTreino(u.token); // antes de responder
     await tornarTreinosPublicos(u.token);
-    await registrarTreino(u.token); // depois de responder
+    // mesmoAssim: mesmo conteúdo do treino acima, mesmo usuário, dentro da
+    // janela de 10 min da rede de repetição (Tarefa 3) — sem isto ela
+    // devolveria o primeiro treino em vez de gravar este segundo.
+    await registrarTreino(u.token, { mesmoAssim: true }); // depois de responder
 
     const treinos = await Activity.find({ user: u.id }).sort({ createdAt: 1 });
     expect(treinos[0].visibility).toBe("followers"); // o antigo não mudou sozinho

@@ -13,6 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { createCheckIn, lastEntries, type CheckInEntry, type LastEntry } from "../api/checkins";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
+import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing, motion } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -84,6 +85,9 @@ export function CheckInScreen() {
   const [rows, setRows] = useState<Row[]>(makeRows);
   const [saving, setSaving] = useState(false);
   const loaded = useRef(false);
+  // A chave nasce quando a sessão abre, não quando "Finalizar" é tocado — ver
+  // `chaveDoTreino`. Guardada por dia da sessão, como o rascunho.
+  const clientKeyRef = useRef<string | null>(null);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [last, setLast] = useState<Record<string, LastEntry>>({}); // última vez por exercício
   const prefilled = useRef(false);
@@ -161,6 +165,18 @@ export function CheckInScreen() {
       setDraftLoaded(true);
     })();
   }, [storageKey]);
+
+  // A sessão "começou": nasce (ou recupera, se o processo recarregou com o
+  // envio em andamento) a chave deste treino.
+  useEffect(() => {
+    let alive = true;
+    chaveDoTreino(session.day).then((k) => {
+      if (alive) clientKeyRef.current = k ?? null;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session.day]);
 
   // Busca a última carga/reps de cada exercício (para dica + pré-preenchimento).
   useEffect(() => {
@@ -250,8 +266,14 @@ export function CheckInScreen() {
 
     setSaving(true);
     try {
-      const res = await createCheckIn(token!, { sessionDay: session.day, entries });
+      const clientKey = clientKeyRef.current ?? (await chaveDoTreino(session.day));
+      const res = await createCheckIn(token!, { sessionDay: session.day, entries, clientKey });
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
+      await limparChaveDoTreino(session.day); // idem para a chave — o envio terminou
+      // Sai do armazenamento E da memória: sem zerar o ref, um segundo
+      // treino registrado sem sair desta tela reusaria a MESMA chave, e o
+      // servidor o leria como reenvio do primeiro — sumiria em silêncio.
+      clientKeyRef.current = null;
       concluirTreino(res.activity, res.newPRs ?? []);
     } catch (err) {
       notify("Não foi possível salvar", (err as Error).message);

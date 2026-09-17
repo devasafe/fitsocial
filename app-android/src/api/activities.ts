@@ -30,6 +30,14 @@ interface CommonInput {
   /** RPE de 1 a 10. A API já aceitava; o cliente é que não expunha. */
   perceivedEffort?: number;
   feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
+  /** Identifica o ENVIO, não o conteúdo — nasce quando o treino começa. Gerada
+   *  por `chaveDoTreino` (`lib/chaveDoTreino.ts`). O servidor a usa para
+   *  devolver o treino já existente em vez de criar outro. */
+  clientKey?: string;
+  /** Confirma que é mesmo um segundo treino, quando o servidor suspeitou de
+   *  repetição sem chave (rede por impressão do conteúdo). Não usado ainda —
+   *  fica pronto para a tela que oferecer essa escolha à pessoa. */
+  mesmoAssim?: boolean;
 }
 
 export type CreateActivityInput =
@@ -166,8 +174,63 @@ export interface NewPR {
 export async function createActivity(
   token: string,
   input: CreateActivityInput
-): Promise<{ data: Activity; meta: { sharedPostId: string | null; newPRs: NewPR[] } }> {
+): Promise<{
+  data: Activity;
+  // `repetido` vem true quando o servidor reconheceu um envio já feito (por
+  // `clientKey` ou pela impressão do conteúdo) e devolveu o treino existente.
+  meta: { sharedPostId: string | null; newPRs: NewPR[]; repetido?: boolean };
+}> {
   return apiFetch("/activities", { method: "POST", body: input, token });
+}
+
+/**
+ * O que dá para corrigir num treino já salvo.
+ *
+ * Espelha `EditarAtividadePatch` do servidor (api/src/services/activities.ts):
+ * o envelope inteiro, mais o `payload` quando o tipo permite. `kind` e
+ * `sportId` não entram — trocar o tipo é outro treino, não edição, e o
+ * servidor recusa com 400 se chegarem aqui.
+ */
+export interface EditarAtividadePatch {
+  title?: string;
+  notes?: string;
+  visibility?: "private" | "followers" | "public";
+  durationSec?: number;
+  perceivedEffort?: number;
+  feeling?: "otimo" | "bom" | "normal" | "ruim" | "pessimo";
+  /** ISO 8601. Nunca no futuro — o servidor recusa com 400. */
+  startedAt?: string;
+  /**
+   * Os números do treino, no formato do `kind` dele. Ausente = não mexe.
+   * Um treino de endurance com trajeto de GPS gravado recusa isto (400) —
+   * a tela não deve mandar `payload` nesse caso.
+   */
+  payload?: unknown;
+}
+
+export async function editarAtividade(
+  token: string,
+  id: string,
+  patch: EditarAtividadePatch
+): Promise<Activity> {
+  const res = await apiFetch<{ data: Activity }>(`/activities/${id}`, {
+    method: "PATCH",
+    token,
+    body: patch,
+  });
+  return res.data;
+}
+
+/**
+ * Apaga de vez: o post do compartilhamento (com curtidas e comentários) e o
+ * recorde que só existia por causa deste treino vão junto — ver
+ * `apagarAtividade` em api/src/services/activities.ts. Não tem volta.
+ */
+export async function apagarAtividade(token: string, id: string): Promise<void> {
+  await apiFetch<{ data: { deleted: boolean } }>(`/activities/${id}`, {
+    method: "DELETE",
+    token,
+  });
 }
 
 export async function listActivities(
