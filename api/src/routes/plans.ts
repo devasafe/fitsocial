@@ -568,17 +568,23 @@ plansRouter.put(
       plan.workout = preservarAgenda(plan.workout as WorkoutData | null, body.workout);
       plan.markModified("workout");
       // Edição IN PLACE, sem versão nova — é o sintoma 2 do desenho: sem
-      // isto, um treino que era do treinador continuaria dizendo `workoutCreatedBy`
-      // dele depois de o próprio aluno tê-lo reescrito à mão.
-      plan.workoutCreatedBy = req.user!._id;
+      // isto, um treino que era do treinador continuaria dizendo
+      // `workoutCreatedBy` dele depois de o próprio aluno tê-lo reescrito à
+      // mão. `null`, e não `req.user!._id`: o campo responde "qual
+      // PROFISSIONAL escreveu isto", e quem digitou aqui foi o dono do
+      // plano — a mesma armadilha (e o mesmo conserto) de `POST /plans/diet`,
+      // ver o comentário lá. Um id de aluno cai na terceira frase de
+      // `PrescreverDieta.tsx` ("prescrita por outro profissional"), que
+      // inventa um colega que não existe assim que outro profissional é
+      // vinculado depois.
+      plan.workoutCreatedBy = null;
       plan.workoutEm = new Date();
     }
     if (body.diet !== undefined) {
       plan.diet = body.diet;
       plan.markModified("diet");
-      // Espelho do treino, acima: quem editou por último é quem passa a
-      // responder por esta metade.
-      plan.dietCreatedBy = req.user!._id;
+      // Espelho do treino, acima — mesmo motivo, `null` e não o id do aluno.
+      plan.dietCreatedBy = null;
       plan.dietEm = new Date();
     }
     if (body.summary !== undefined) plan.summary = body.summary;
@@ -830,8 +836,14 @@ plansRouter.post(
         createdBy: null,
         // Metadado por metade: este treino é tão "próprio" quanto o que
         // `PUT /plans/current` edita à mão — é a mesma pessoa montando o
-        // treino dela, só que a partir de um treino já registrado.
-        workoutCreatedBy: user._id,
+        // treino dela, só que a partir de um treino já registrado. `null`,
+        // não `user._id` — mesmo motivo de `PUT /plans/current`, ver o
+        // comentário lá: o campo responde "qual PROFISSIONAL escreveu isto",
+        // e aqui não há profissional nenhum. Sem consumidor hoje (nenhuma
+        // tela lê `workoutCreatedBy` ainda), mas é exatamente por isso que
+        // fica certo agora — quando a tela existir, ninguém vai lembrar de
+        // voltar aqui.
+        workoutCreatedBy: null,
         workoutEm: new Date(),
         workoutDisclaimer: DISCLAIMER_PROPRIO,
       });
@@ -842,10 +854,10 @@ plansRouter.post(
       // antigo" sem que nada tenha sido prescrito.
       doc.workout = workout;
       doc.markModified("workout");
-      // Mesmo raciocínio do `PUT /plans/current`: quem mexeu por último no
-      // treino passa a responder por ele — mesmo que só tenha acrescentado
-      // uma sessão, e não reescrito o resto.
-      doc.workoutCreatedBy = user._id;
+      // Mesmo raciocínio do `PUT /plans/current`, acima: quem mexeu por
+      // último no treino passa a responder por ele, e `null` é a resposta
+      // certa quando quem mexeu foi o próprio dono do plano.
+      doc.workoutCreatedBy = null;
       doc.workoutEm = new Date();
       await doc.save();
     }
