@@ -6,12 +6,12 @@ import { requirePro } from "../middleware/pro.js";
 import { rateLimit } from "../middleware/rateLimit.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { HttpError } from "../utils/httpError.js";
-import { User } from "../models/User.js";
+import { User, type UserDoc } from "../models/User.js";
 import { Activity } from "../models/Activity.js";
 import { FoodLog } from "../models/FoodLog.js";
 import { ProfessionalInvite } from "../models/ProfessionalInvite.js";
 import { ProfessionalLink, PAPEIS_PRO, type PapelPro } from "../models/ProfessionalLink.js";
-import { limiteDeAlunos } from "../services/entitlement.js";
+import { limiteDeAlunos, temCapacidade } from "../services/entitlement.js";
 import {
   aceitarConvite,
   ajustarEscopo,
@@ -206,13 +206,19 @@ proRouter.get(
   asyncHandler(async (req, res) => {
     const papel = req.query.papel ? papelSchema.parse(req.query.papel) : undefined;
 
-    const links = await ProfessionalLink.find({
+    const todos = await ProfessionalLink.find({
       professional: req.user!._id,
       status: { $ne: "encerrado" },
       ...(papel ? { papel } : {}),
     })
       .sort({ aceitoEm: -1 })
       .populate("client", "name username avatarUrl");
+
+    // Descarta as linhas cujo PAPEL a pessoa não tem mais capacidade para
+    // exercer — mesma suspensão de `alunoDoProfissional`. O vínculo continua
+    // `ativo` no banco (não é encerrado), só some da lista enquanto a
+    // capacidade daquele papel estiver desligada; volta sozinho se ela voltar.
+    const links = todos.filter((l) => temCapacidade(req.user!, l.papel as PapelPro));
 
     // `treinos` é decidido pela DUPLA, não pela linha — e a linha aqui é só
     // um vínculo. Com `?papel=nutri`, `links` só teria o vínculo de nutri;
@@ -350,9 +356,18 @@ const janelaDoAluno = z.preprocess(
  * quem tinha, de forma intermitente — o pior jeito de um bug de permissão
  * aparecer. Com `parte`, preferimos o vínculo do papel dono: é o dele que
  * `parteAberta` de fato avalia.
+ *
+ * Antes de escolher, descarta os vínculos cujo PAPEL a pessoa não tem mais
+ * capacidade para exercer. `requirePro("coach", "nutri")` só confere se
+ * QUALQUER UMA das duas está ativa — vira nutricionista sem perder o acesso
+ * ao painel, mas o vínculo de coach antigo continuava valendo aqui dentro,
+ * porque nada olhava para o PAPEL da linha depois do gate de entrada. Sobrando
+ * nenhum vínculo, o `!link` abaixo já devolve o 404 certo: o vínculo continua
+ * `ativo` no banco (é suspensão, não fim — a capacidade pode voltar), só some
+ * de quem não tem mais a capacidade daquele papel.
  */
 async function alunoDoProfissional(
-  req: { user?: { _id: mongoose.Types.ObjectId }; params: Record<string, string> },
+  req: { user?: UserDoc; params: Record<string, string> },
   id: string,
   opts: { parte?: "treinos" | "dieta"; preferido?: PapelPro } = {}
 ) {
@@ -364,9 +379,9 @@ async function alunoDoProfissional(
   // ordena, e sem isto o `links[0]` do fallback abaixo seguia a ordem natural
   // do Mongo — arbitrária, e por isso o `vinculo` singular da ficha podia
   // sair de qualquer um dos dois papéis de quem acompanha em dobro.
-  const links = (await vinculosAtivos(clientId, req.user!._id)).sort(
-    (a, b) => a.aceitoEm.getTime() - b.aceitoEm.getTime()
-  );
+  const links = (await vinculosAtivos(clientId, req.user!._id))
+    .filter((l) => temCapacidade(req.user!, l.papel as PapelPro))
+    .sort((a, b) => a.aceitoEm.getTime() - b.aceitoEm.getTime());
 
   const link =
     links.find((l) => l.papel === (parte ? donoDaParte(parte) : preferido)) ??

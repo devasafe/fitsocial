@@ -284,6 +284,108 @@ describe("a lista de alunos", () => {
   });
 });
 
+// Caso real: virou nutricionista, perdeu a capacidade de coach, e os alunos
+// de treino continuavam aparecendo no painel — porque `requirePro("coach",
+// "nutri")` passa com QUALQUER UMA ativa, e nada conferia se o PAPEL do
+// vínculo ainda correspondia a uma capacidade que a pessoa tem. A correção é
+// suspender, não encerrar: um cartão recusado por um dia não pode custar
+// todos os alunos de alguém, e a volta da capacidade tem de trazer a lista de
+// volta sem reconvite.
+describe("capacidade revogada suspende o vínculo daquele papel", () => {
+  it("quem perdeu a capacidade de coach não vê mais os alunos de treino na lista", async () => {
+    const pro = await registrarProfissional("coach");
+    const aluno = await registrar();
+    await vincular(pro.token, aluno.token, {}, "coach");
+
+    const u = (await User.findById(pro.id))!;
+    u.set("pro.coach.ativo", false);
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const r = await request(app).get("/pro/alunos").set(auth(pro.token));
+    expect(r.body.data).toHaveLength(0);
+  });
+
+  it("e a ficha daquele aluno responde 404", async () => {
+    const pro = await registrarProfissional("coach");
+    const aluno = await registrar();
+    await vincular(pro.token, aluno.token, {}, "coach");
+
+    const u = (await User.findById(pro.id))!;
+    u.set("pro.coach.ativo", false);
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const r = await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(pro.token));
+    expect(r.status).toBe(404);
+  });
+
+  it("o vínculo NÃO foi encerrado", async () => {
+    const pro = await registrarProfissional("coach");
+    const aluno = await registrar();
+    const linkId = await vincular(pro.token, aluno.token, {}, "coach");
+
+    const u = (await User.findById(pro.id))!;
+    u.set("pro.coach.ativo", false);
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    await request(app).get("/pro/alunos").set(auth(pro.token));
+    await request(app).get(`/pro/alunos/${aluno.id}`).set(auth(pro.token));
+
+    const link = await ProfessionalLink.findById(linkId);
+    expect(link!.status).toBe("ativo");
+  });
+
+  it("devolver a capacidade traz os alunos de volta, sem reconvite", async () => {
+    const pro = await registrarProfissional("coach");
+    const aluno = await registrar();
+    await vincular(pro.token, aluno.token, {}, "coach");
+
+    const u = (await User.findById(pro.id))!;
+    u.set("pro.coach.ativo", false);
+    // Nutri ativo só para o painel continuar acessível (`requirePro` exige
+    // QUALQUER capacidade) — o que este teste prova é a visibilidade do
+    // vínculo de coach indo e voltando, não o gate geral do painel.
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+    expect((await request(app).get("/pro/alunos").set(auth(pro.token))).body.data).toHaveLength(0);
+
+    u.set("pro.coach.ativo", true);
+    await u.save();
+
+    const r = await request(app).get("/pro/alunos").set(auth(pro.token));
+    expect(r.body.data).toHaveLength(1);
+    expect(r.body.data[0].aluno.id).toBe(aluno.id);
+  });
+
+  it("quem tem as duas capacidades continua vendo os dois papéis", async () => {
+    const pro = await registrarProfissional("coach");
+    const u = (await User.findById(pro.id))!;
+    u.set("pro.nutri", { ativo: true, origem: "manual", limiteDeAlunos: 10 });
+    await u.save();
+
+    const alunoDeCoach = await registrar();
+    const alunoDeNutri = await registrar();
+    await vincular(pro.token, alunoDeCoach.token, {}, "coach");
+    await vincular(pro.token, alunoDeNutri.token, {}, "nutri");
+
+    const r = await request(app).get("/pro/alunos").set(auth(pro.token));
+    expect(r.body.data).toHaveLength(2);
+    expect(r.body.data.map((d: { papel: string }) => d.papel).sort()).toEqual(["coach", "nutri"]);
+  });
+
+  it("quem só tem coach continua vendo os alunos de treino (não regride o painel em produção)", async () => {
+    const coach = await registrarProfissional("coach");
+    const aluno = await registrar();
+    await vincular(coach.token, aluno.token, {}, "coach");
+
+    const r = await request(app).get("/pro/alunos").set(auth(coach.token));
+    expect(r.body.data).toHaveLength(1);
+    expect(r.body.data[0].aluno.id).toBe(aluno.id);
+  });
+});
+
 describe("o perfil do aluno", () => {
   it("traz a evolução e a constância de quem autorizou", async () => {
     const coach = await registrarProfissional();
