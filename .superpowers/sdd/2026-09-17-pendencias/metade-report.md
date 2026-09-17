@@ -43,19 +43,27 @@ com a metade — sem isso, apagar o treino deixaria `workoutCreatedBy` apontando
 um `workout: null`, a mesma classe de mentira que esta tarefa existe para acabar. Está coberto
 pela suíte existente (não quebrou nada), mas não tem um teste próprio — se quiserem, escrevo um.
 
-## Decisão que tomei sem parar para perguntar (documentando o raciocínio)
+## Decisão revista — `POST /plans/diet` grava `dietCreatedBy: null`
 
-A tabela do desenho lista `POST /plans/diet` ao lado de `PUT /plans/current` como "grava
-`diet*`/`workout*` = o próprio aluno" — mas `POST /plans/diet` chama a IA (`generateDiet`) para
-produzir o conteúdo, diferente de `PUT /plans/current`, que é edição manual. Cheguei a cogitar que
-fosse inconsistência com `/generate` (que grava autor `null` quando a IA escreve), mas decidi
-seguir a tabela ao pé da letra: `dietCreatedBy = user._id` também em `POST /plans/diet`, porque é
-exatamente o cenário do sintoma 2 ("aluno dispensa o nutri A, [...] contrata o B") — ali o aluno
-pode regenerar a dieta pela IA, e o que importa é que o registro pare de dizer "A" depois disso,
-tanto faz se o conteúdo novo veio de um clique em "gerar" ou de digitação manual. Nenhum dos 7
-testes pedidos cobre esta rota especificamente, então não vi um jeito de confirmar por teste — se
-a leitura certa for "autor null, aviso da IA" (como `/generate`), é uma troca de uma linha em
-`plans.ts` (o bloco logo depois de `generateDiet`).
+Registrei esta preocupação, o team lead conferiu o consumidor (`pro/src/components/
+PrescreverDieta.tsx:246-250`) e confirmou: minha primeira escolha (`dietCreatedBy = user._id`)
+produzia uma frase FALSA na tela do nutricionista. O componente só tem três saídas —
+`createdBy === null` → "gerada por IA ou pelo próprio aluno"; `createdBy === euId` → "prescrita
+por você"; qualquer outro valor → "prescrita por outro profissional" — e o id do aluno caía na
+terceira, inventando um colega que não existe.
+
+**Corrigido:** `dietCreatedBy: null` nos dois ramos (`atual.save()` e `Plan.create`), mais
+`dietDisclaimer: data.disclaimer` nos dois (o ramo do `create` só gravava o `disclaimer` do
+documento). `dietEm` continua `new Date()`. O sintoma 2 (autoria de um nutricionista dispensado
+sobrevivendo à troca) continua resolvido — o GATE de leitura em `GET /pro/alunos/:id/dieta` é
+`dietEm != null`, não o VALOR de `dietCreatedBy`.
+
+Teste RED escrito e confirmado ANTES do conserto: `metadadoPorMetade.test.ts`, describe
+"Correção — POST /plans/diet grava autor null" — nutri A prescreve, aluno encerra o vínculo
+(`DELETE /pro/acompanhamentos/:linkId`), aluno chama `POST /plans/diet`, um nutri B (vinculado
+depois) lê `GET /pro/alunos/:id/dieta`. RED: `expected { Object (buffer) } to be null` (o
+ObjectId do aluno). GREEN depois do conserto, suíte inteira depois disso: 96/96 arquivos,
+1217/1217 testes, `saida=0`.
 
 ## Resumo dos testes
 
@@ -102,11 +110,17 @@ Depois disso: **`saida=0`, sem erros.**
 
 ## Preocupações
 
-1. A decisão sobre `POST /plans/diet` (acima) — gostaria de confirmação, ou de um teste que
-   decida por mim.
-2. O oitavo ponto de escrita (`POST /plans/current/sessoes`) não estava em nenhuma lista — vale
-   conferir se apareceu em outro levantamento paralelo desta frente, para não haver dois
-   consertos divergentes do mesmo ponto.
+1. ~~A decisão sobre `POST /plans/diet`~~ — resolvida, ver acima.
+2. ~~O oitavo ponto de escrita~~ — o team lead confirmou que nenhuma outra frente tocou
+   `api/src/routes/plans.ts` nesta leva (só `app-android/src/screens/HomeScreen.tsx` e
+   `api/src/routes/ficha.ts`, novo); não há conserto divergente do mesmo ponto.
 3. Não escrevi um teste dedicado para a correção de `DELETE /current/:parte` (zerar o metadado
    junto com a metade) — é uma extensão pequena e de baixo risco, mas fica fora da cobertura
    explícita se quiserem apertar.
+
+## Rebases
+
+Branch rebaseada na `main` local duas vezes durante o trabalho (sem conflito nas duas —
+nenhuma outra frente tocou os arquivos que mudei): uma vez antes do conserto de
+`POST /plans/diet`, outra depois. Commit final: `git log -1` na branch `feat/metadado-por-metade`
+em `D:\PROJETOS\fs-wt\metade`.
