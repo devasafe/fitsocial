@@ -13,7 +13,8 @@ export interface ChartPoint {
 }
 
 /**
- * Gráfico de linha de série única, com eixo X no TEMPO.
+ * Gráfico de linha, com eixo X no TEMPO — série principal e, opcionalmente,
+ * uma série de REFERÊNCIA (ex.: a meta do dia) desenhada por baixo dela.
  *
  * O eixo era por índice: dois treinos separados por três meses ficavam à mesma
  * distância de dois separados por um dia, e a linha contava uma história que
@@ -26,12 +27,25 @@ export interface ChartPoint {
  */
 export function LineChart({
   points,
+  secondary,
+  secondaryLabel = "referência",
   width,
   height = 200,
   formatValue = (v: number) => String(Math.round(v)),
   menorEhMelhor = false,
 }: {
   points: ChartPoint[];
+  /**
+   * Segunda série, de REFERÊNCIA — não protagonista. Desenhada tracejada, numa
+   * cor neutra, sem pontos e sem rótulo de último valor: quem manda no gráfico
+   * é `points`. Precisa ter o mesmo tamanho e as mesmas datas de `points`
+   * (ponto a ponto) — é o eixo X de `points` que decide onde cada `secondary[i]`
+   * cai. `null` quebra a linha aqui do mesmo jeito que em `points`: um dia sem
+   * meta não pode virar uma reta inventada.
+   */
+  secondary?: ChartPoint[];
+  /** Rótulo curto da série secundária no toque (ex.: "meta"). Só é lido quando `secondary` existe. */
+  secondaryLabel?: string;
   width: number;
   height?: number;
   formatValue?: (v: number) => string;
@@ -51,8 +65,15 @@ export function LineChart({
     const values = points.map((p) => p.value).filter((v): v is number => v != null);
     // Todos nulos: não há escala possível, e quem trata o vazio é a tela.
     if (values.length === 0) return null;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    // A referência entra na MESMA escala — senão uma meta de 2000 kcal fica
+    // fora da faixa vertical de um consumo que nunca passou de 1500, e a linha
+    // tracejada desenharia colada no teto (ou some) em vez de mostrar a
+    // distância real até ela.
+    const valoresSecundarios = (secondary ?? [])
+      .map((p) => p.value)
+      .filter((v): v is number => v != null);
+    const min = Math.min(...values, ...valoresSecundarios);
+    const max = Math.max(...values, ...valoresSecundarios);
     const span = max - min || 1; // evita divisão por zero se todos iguais
 
     const tempos = points.map((p) => new Date(p.date).getTime());
@@ -95,32 +116,46 @@ export function LineChart({
       valorDoTopo,
       valorDaBase,
       coords: points.map((p, i) => ({ px: x(i), py: y(p.value), v: p.value, ehPR: !!p.ehPR, date: p.date })),
+      // O `x(i)` usa o ÍNDICE e o TEMPO de `points` — é por isso que `secondary`
+      // precisa ter o mesmo tamanho e as mesmas datas: aqui não se relê a data
+      // de `secondary`, só se reaproveita a posição já calculada para `points`.
+      coordsSecundaria: (secondary ?? []).map((p, i) => ({ px: x(i), py: y(p.value), v: p.value })),
       // valorDoTopo/valorDaBase vêm de min/max dos valores não nulos: nunca são
       // nulos, mas a assinatura de `y` é (number | null) => number | null.
       yTopo: y(valorDoTopo) as number,
       yBase: y(valorDaBase) as number,
     };
-  }, [points, plotW, plotH, menorEhMelhor]);
+  }, [points, secondary, plotW, plotH, menorEhMelhor]);
 
   if (points.length === 0 || g === null) return null;
 
   // A linha quebra onde não houve medida. Um trecho de um ponto só não desenha
   // segmento nenhum — e está certo: o círculo daquele dia continua aparecendo,
   // então um dia solto entre dois buracos aparece como ponto, não some.
-  const segmentos: string[] = [];
-  let atual: string[] = [];
-  for (const c of g.coords) {
-    if (c.py == null) {
-      if (atual.length) segmentos.push(atual.join(" "));
-      atual = [];
-    } else {
-      atual.push(`${c.px},${c.py}`);
+  // Mesma regra para a série secundária — inclusive quando ela é a única
+  // ausente: um dia com consumo registrado mas sem meta não pode herdar a
+  // meta do dia vizinho.
+  const emSegmentos = (coords: { px: number; py: number | null }[]): string[] => {
+    const segs: string[] = [];
+    let atual: string[] = [];
+    for (const c of coords) {
+      if (c.py == null) {
+        if (atual.length) segs.push(atual.join(" "));
+        atual = [];
+      } else {
+        atual.push(`${c.px},${c.py}`);
+      }
     }
-  }
-  if (atual.length) segmentos.push(atual.join(" "));
+    if (atual.length) segs.push(atual.join(" "));
+    return segs;
+  };
+
+  const segmentos = emSegmentos(g.coords);
+  const segmentosSecundaria = emSegmentos(g.coordsSecundaria);
 
   const last = [...g.coords].reverse().find((c) => c.py != null) ?? null;
   const sel = tocado != null ? g.coords[tocado] : null;
+  const selSecundaria = tocado != null ? (g.coordsSecundaria[tocado] ?? null) : null;
 
   const fmtDate = (iso: string) => {
     const d = new Date(iso);
@@ -145,7 +180,16 @@ export function LineChart({
     setTocado(melhor);
   };
 
-  const rotulo = sel && sel.v != null ? `${formatValue(sel.v)} · ${fmtDate(sel.date)}` : "";
+  // A referência entra no MESMO rótulo do toque, e não num balão à parte: é
+  // ali, comparando lado a lado, que "1800 kcal" deixa de ser só um número e
+  // vira "1800 kcal, contra uma meta de 2000" — sem isso o toque conta só
+  // metade da história que o próprio gráfico já desenha.
+  const rotulo =
+    sel && sel.v != null
+      ? `${formatValue(sel.v)}${
+          selSecundaria && selSecundaria.v != null ? ` · ${secondaryLabel} ${formatValue(selSecundaria.v)}` : ""
+        } · ${fmtDate(sel.date)}`
+      : "";
   const larguraRotulo = Math.max(rotulo.length * 8 + 16, 70);
   const xRotulo = sel ? Math.min(Math.max(sel.px - larguraRotulo / 2, 2), width - larguraRotulo - 2) : 0;
 
@@ -181,6 +225,25 @@ export function LineChart({
         {sel && (
           <Line x1={sel.px} y1={padT} x2={sel.px} y2={padT + plotH} stroke={colors.lineStrong} strokeWidth={1} />
         )}
+
+        {/* A referência, atrás da linha principal e sem pontos — ela é o pano
+            de fundo, não a informação que este gráfico existe para contar.
+            Tracejada e numa cor neutra (não a cor da marca) para que a régua
+            visual do gráfico continue sendo o que a pessoa fez, e não o que
+            era pedido dela. Mesma quebra por segmento que a série principal:
+            um dia sem meta não vira uma reta inventada. */}
+        {segmentosSecundaria.map((pts, i) => (
+          <Polyline
+            key={`sec-${i}`}
+            points={pts}
+            fill="none"
+            stroke={colors.textMuted}
+            strokeWidth={1.5}
+            strokeDasharray="4,4"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
 
         {/* A linha, quebrada em um trecho por intervalo contínuo de medidas —
             <Polyline> não tem como ter buraco no meio. */}
