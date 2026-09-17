@@ -18,16 +18,23 @@ export function confirmDialog(
   title: string,
   message: string,
   onConfirm: () => void,
-  confirmText = "OK"
+  confirmText = "OK",
+  // Quem precisa SABER que a pessoa disse não — e não só deixar de agir — passa
+  // isto. Sem ele, quem espera resposta dos dois lados (uma promessa, por
+  // exemplo) fica pendurado para sempre no caminho do cancelar.
+  onCancel?: () => void
 ): void {
   if (Platform.OS === "web") {
     if (typeof window !== "undefined" && typeof window.confirm === "function") {
       if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+      else onCancel?.();
+    } else {
+      onCancel?.();
     }
     return;
   }
   Alert.alert(title, message, [
-    { text: "Cancelar", style: "cancel" },
+    { text: "Cancelar", style: "cancel", onPress: onCancel },
     { text: confirmText, onPress: onConfirm },
   ]);
 }

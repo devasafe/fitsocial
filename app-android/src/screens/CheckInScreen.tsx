@@ -14,6 +14,7 @@ import { useAuth } from "../context/AuthContext";
 import { createCheckIn, lastEntries, type CheckInEntry, type LastEntry } from "../api/checkins";
 import { useConclusaoDeTreino } from "../lib/aoConcluirTreino";
 import { chaveDoTreino, limparChaveDoTreino } from "../lib/chaveDoTreino";
+import { resolverRepeticao } from "../lib/repeticaoDeTreino";
 import { Txt, Button, Card } from "../components/ui";
 import { colors, radius, spacing, motion } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -267,7 +268,13 @@ export function CheckInScreen() {
     setSaving(true);
     try {
       const clientKey = clientKeyRef.current ?? (await chaveDoTreino(session.day));
-      const res = await createCheckIn(token!, { sessionDay: session.day, entries, clientKey });
+      const primeira = await createCheckIn(token!, { sessionDay: session.day, entries, clientKey });
+      // Se o servidor reconheceu repetição, pergunta antes de seguir: sem isso,
+      // um falso positivo mostraria "Treino concluído" com o treino ANTIGO e o
+      // desta vez sumiria sem nada na tela — ver `lib/repeticaoDeTreino.ts`.
+      const res = await resolverRepeticao(primeira, primeira.repetido, () =>
+        createCheckIn(token!, { sessionDay: session.day, entries, mesmoAssim: true })
+      );
       await AsyncStorage.removeItem(storageKey); // limpa o rascunho ao concluir
       await limparChaveDoTreino(session.day); // idem para a chave — o envio terminou
       // Sai do armazenamento E da memória: sem zerar o ref, um segundo
