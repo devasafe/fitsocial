@@ -31,6 +31,24 @@ export function rotuloDoPapel(papel: PapelPro): string {
   return papel === "coach" ? "treinador" : "nutricionista";
 }
 
+/**
+ * Quem DECIDE cada parte, quando a pessoa tem mais de um profissional.
+ *
+ * Espelha `DONO_DA_PARTE` em `api/src/services/vinculos.ts`, e precisa
+ * continuar espelhando: o servidor decide `treinos` pelo vínculo do treinador e
+ * `dieta` pelo do nutricionista quando eles existem. Sem isto, a tela mostraria
+ * quatro interruptores em cada cartão e dois deles não fariam nada — a pessoa
+ * desligaria "meus treinos" no cartão da nutricionista achando que fechou o
+ * acesso, e não teria fechado.
+ *
+ * `medidas` e `fotos` não têm dono: são sobre o corpo, não sobre o ofício de
+ * ninguém, e cada cartão decide o seu.
+ */
+export const DONO_DA_PARTE: Partial<Record<keyof Escopo, PapelPro>> = {
+  treinos: "coach",
+  dieta: "nutri",
+};
+
 /** O que cada parte do escopo abre, dito para quem vai decidir. */
 export const O_QUE_ABRE: { chave: keyof Escopo; titulo: string; explica: string }[] = [
   {
