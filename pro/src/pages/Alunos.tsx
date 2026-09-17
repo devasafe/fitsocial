@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { buscarNaoLidas, listarAlunos, type AlunoNaLista } from "../api";
+import {
+  buscarNaoLidas,
+  enviarRecadoEmLote,
+  listarAlunos,
+  type AlunoNaLista,
+  type ResultadoDoRecado,
+} from "../api";
 
 /** Quantos dias desde o último treino. Nulo quando nunca treinou. */
 function diasSemTreinar(ultimoEm: string | null): number | null {
@@ -67,6 +73,18 @@ export function Alunos({ token, abrir }: { token: string; abrir: (alunoId: strin
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
+  // Modo de recado: escrever uma vez e mandar para vários. Começa com NINGUÉM
+  // marcado de propósito — o custo de esquecer de marcar é um recado que não
+  // sai; o de vir tudo marcado é a turma inteira recebendo o que era para uma
+  // pessoa só, e isso não tem desfazer.
+  const [selecionando, setSelecionando] = useState(false);
+  const [marcados, setMarcados] = useState<string[]>([]);
+  const [texto, setTexto] = useState("");
+  const [foto, setFoto] = useState<File | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoDoRecado | null>(null);
+  const [erroDoRecado, setErroDoRecado] = useState<string | null>(null);
+
   const carregar = useCallback(async () => {
     try {
       const r = await listarAlunos(token);
@@ -89,6 +107,45 @@ export function Alunos({ token, abrir }: { token: string; abrir: (alunoId: strin
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  function alternarMarcado(linkId: string) {
+    setMarcados((atual) =>
+      atual.includes(linkId) ? atual.filter((x) => x !== linkId) : [...atual, linkId]
+    );
+  }
+
+  // Sair do modo limpa TUDO, inclusive o texto já digitado: um recado meio
+  // escrito que sobrevive até a próxima vez é candidato a sair para a turma
+  // errada.
+  function sairDoModo() {
+    setSelecionando(false);
+    setMarcados([]);
+    setTexto("");
+    setFoto(null);
+    setErroDoRecado(null);
+  }
+
+  async function mandarRecado(linkIds: string[]) {
+    setEnviando(true);
+    setErroDoRecado(null);
+    try {
+      const r = await enviarRecadoEmLote(token, linkIds, texto, foto);
+      setResultado(r);
+      setSelecionando(false);
+      setMarcados([]);
+      setTexto("");
+      setFoto(null);
+      // As não lidas do painel não mudam com o que EU mando, mas a lista traz
+      // "último contato" — que acabou de mudar para todo mundo que recebeu.
+      carregar();
+    } catch (e) {
+      setErroDoRecado(
+        e instanceof Error ? e.message : "Não foi possível enviar o recado."
+      );
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   if (carregando) return <p className="vazio">Carregando…</p>;
   if (erro) return <p className="erro">{erro}</p>;
@@ -122,18 +179,131 @@ export function Alunos({ token, abrir }: { token: string; abrir: (alunoId: strin
   return (
     <>
       <h1>Alunos</h1>
-      <p className="sub" style={{ marginBottom: 24 }}>
+      <p className="sub" style={{ marginBottom: 16 }}>
         {lista.length} {lista.length === 1 ? "pessoa" : "pessoas"}
         {precisam > 0 && ` · ${precisam} ${precisam === 1 ? "precisa" : "precisam"} de atenção`}
       </p>
+
+      {/* O resultado do último envio fica na tela até ser dispensado. Some
+          sozinho seria a pior opção: quando alguém ficou de fora, é a única
+          chance de o profissional saber disso. */}
+      {resultado && (
+        <div className="painel" style={{ marginBottom: 16 }}>
+          <p style={{ marginTop: 0, marginBottom: resultado.recusados.length ? 8 : 0 }}>
+            Recado enviado para {resultado.enviados}{" "}
+            {resultado.enviados === 1 ? "pessoa" : "pessoas"}.
+          </p>
+          {resultado.recusados.length > 0 && (
+            <p className="sub" style={{ marginBottom: 8 }}>
+              {resultado.recusados.length}{" "}
+              {resultado.recusados.length === 1 ? "não recebeu" : "não receberam"}:{" "}
+              {resultado.recusados[0].motivo}
+            </p>
+          )}
+          <button className="discreto" onClick={() => setResultado(null)}>
+            Fechar
+          </button>
+        </div>
+      )}
+
+      {!selecionando ? (
+        <button
+          className="discreto"
+          style={{ marginBottom: 16 }}
+          onClick={() => {
+            setResultado(null);
+            setSelecionando(true);
+          }}
+        >
+          Mandar recado para vários
+        </button>
+      ) : (
+        <div className="painel" style={{ marginBottom: 16 }}>
+          <p className="sub" style={{ marginTop: 0 }}>
+            Cada pessoa recebe o recado na conversa dela, em separado. Ninguém vê quem mais
+            recebeu, e a resposta chega só para você.
+          </p>
+
+          <div className="campo">
+            <label htmlFor="recado">Recado</label>
+            <textarea
+              id="recado"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Amanhã o treino começa 7h."
+              rows={3}
+              maxLength={2000}
+            />
+          </div>
+
+          <div className="campo">
+            <label htmlFor="recado-foto">Foto (opcional)</label>
+            <input
+              id="recado-foto"
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFoto(e.target.files?.[0] ?? null)}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              className="primario"
+              disabled={enviando || marcados.length === 0 || (!texto.trim() && !foto)}
+              onClick={() => mandarRecado(marcados)}
+            >
+              {enviando
+                ? "Enviando…"
+                : `Enviar para ${marcados.length} ${marcados.length === 1 ? "pessoa" : "pessoas"}`}
+            </button>
+            <button
+              className="discreto"
+              disabled={enviando}
+              onClick={() =>
+                setMarcados(marcados.length === ordenada.length ? [] : ordenada.map((a) => a.id))
+              }
+            >
+              {marcados.length === ordenada.length ? "Desmarcar todos" : "Marcar todos"}
+            </button>
+            <button className="discreto" disabled={enviando} onClick={sairDoModo}>
+              Cancelar
+            </button>
+          </div>
+
+          {erroDoRecado && (
+            <p className="erro" style={{ marginBottom: 0 }}>
+              {erroDoRecado}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="painel">
         <div className="linhas">
           {ordenada.map((a) => {
             const s = situacao(a);
             const naoLidasAqui = naoLidas[a.id] ?? 0;
+            const marcado = marcados.includes(a.id);
             return (
-              <button key={a.id} className="linha" onClick={() => abrir(a.aluno.id)}>
+              // No modo de recado a linha marca em vez de abrir: com os dois
+              // comportamentos juntos, um toque distraído levaria embora da
+              // tela levando a seleção inteira junto.
+              <button
+                key={a.id}
+                className="linha"
+                aria-pressed={selecionando ? marcado : undefined}
+                onClick={() => (selecionando ? alternarMarcado(a.id) : abrir(a.aluno.id))}
+              >
+                {selecionando && (
+                  <input
+                    type="checkbox"
+                    checked={marcado}
+                    readOnly
+                    tabIndex={-1}
+                    aria-hidden
+                    style={{ width: 18, height: 18, flex: "none" }}
+                  />
+                )}
                 {a.aluno.avatarUrl ? (
                   <img className="avatar" src={a.aluno.avatarUrl} alt="" />
                 ) : (

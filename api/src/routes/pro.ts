@@ -1374,6 +1374,106 @@ proRouter.post(
   })
 );
 
+/**
+ * O mesmo recado para vários alunos de uma vez.
+ *
+ * NÃO é um grupo. A conversa É o vínculo (ver `models/ProMessage.ts`), e este
+ * lote grava uma mensagem em CADA conversa, separada: o aluno lê como
+ * mensagem normal do profissional, responde em privado, e nunca descobre quem
+ * mais recebeu. Não é pudor de produto — a lista de alunos de um coach diz
+ * quem treina com quem, e um grupo a entregaria a todos de graça.
+ *
+ * Por isso também não existe "mensagem de lote" gravada em lugar nenhum: nada
+ * no banco liga as N mensagens umas às outras. Se um dia isto precisar de
+ * "reenviar para quem não leu", a ligação nasce aí, explicitamente.
+ */
+const recadoEmLoteSchema = z
+  .object({
+    // O teto existe para o caso comum não esconder o acidental: 200 vínculos
+    // num POST é pedido malformado ou script, não um coach avisando a turma.
+    linkIds: z.array(z.string()).min(1).max(100),
+    texto: z.string().max(2000).optional(),
+    imageUrl: z.string().max(500).optional(),
+    imageWidth: z.number().int().positive().max(10000).optional(),
+    imageHeight: z.number().int().positive().max(10000).optional(),
+  })
+  .refine((m) => Boolean(m.texto?.trim()) || Boolean(m.imageUrl), {
+    message: "Escreva algo ou anexe uma foto.",
+  });
+
+proRouter.post(
+  "/mensagens-em-lote",
+  requirePro("coach", "nutri"),
+  // Limite próprio, e mais baixo que o da mensagem avulsa (40/min): ali cada
+  // requisição grava UMA mensagem, aqui uma requisição grava até cem e dispara
+  // até cem avisos. O mesmo número nos dois lugares seria o mesmo número para
+  // custos que diferem em duas ordens de grandeza.
+  rateLimit({ windowMs: 60_000, max: 6, name: "pro-recado-em-lote" }),
+  asyncHandler(async (req, res) => {
+    const body = recadoEmLoteSchema.parse(req.body ?? {});
+    const eu = req.user!._id;
+    const texto = body.texto?.trim() ?? "";
+
+    // Ids repetidos na mesma chamada viram um envio só: a tela pode mandar
+    // duplicado por descuido, e dois balões idênticos na conversa do aluno
+    // pareceriam o profissional gaguejando.
+    const pedidos = [...new Set(body.linkIds)];
+    const validos = pedidos.filter((id) => mongoose.isValidObjectId(id));
+
+    // Uma consulta para todos os vínculos, não uma por aluno. Trinta alunos
+    // seriam trinta idas ao banco antes de a primeira mensagem existir.
+    const links = await ProfessionalLink.find({ _id: { $in: validos }, professional: eu });
+    const porId = new Map(links.map((l) => [l._id.toString(), l]));
+
+    const recusados: { linkId: string; motivo: string }[] = [];
+    const aEnviar = [];
+    for (const id of pedidos) {
+      const link = porId.get(id);
+      // Mesma resposta para "não existe" e "não é seu": um lote com ids
+      // chutados não pode virar sonda para descobrir quais acompanhamentos
+      // existem no sistema.
+      if (!link) {
+        recusados.push({ linkId: id, motivo: "Acompanhamento não encontrado." });
+        continue;
+      }
+      if (link.status === "encerrado") {
+        recusados.push({ linkId: id, motivo: "Este acompanhamento foi encerrado." });
+        continue;
+      }
+      aEnviar.push(link);
+    }
+
+    const criadas = aEnviar.length
+      ? await ProMessage.insertMany(
+          aEnviar.map((link) => ({
+            link: link._id,
+            autor: eu,
+            texto,
+            imageUrl: body.imageUrl ?? "",
+            imageWidth: body.imageWidth ?? null,
+            imageHeight: body.imageHeight ?? null,
+          }))
+        )
+      : [];
+
+    // Avisa cada aluno, fora do caminho quente e sem `await` — mesma regra da
+    // mensagem avulsa: push é best-effort, e uma falha da Expo não pode fazer
+    // mensagens já gravadas parecerem não enviadas.
+    for (const link of aEnviar) {
+      void enviarPush(link.client, "mensagem_pro", {
+        title: req.user!.name,
+        body: texto || "Mandou uma foto",
+        data: { tipo: "mensagem_pro", link: link._id.toString() },
+      });
+    }
+
+    res.status(201).json({
+      data: { enviados: criadas.length, recusados },
+      meta: {},
+    });
+  })
+);
+
 /** Quantas mensagens não lidas em cada acompanhamento — a bolinha da lista. */
 proRouter.get(
   "/nao-lidas",

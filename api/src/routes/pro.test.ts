@@ -1482,3 +1482,139 @@ describe("quem tem treinador não recebe treino da IA", () => {
     expect(r.body.plan.autor.nome).toBeTruthy();
   });
 });
+
+/**
+ * Mandar o mesmo recado para vários alunos de uma vez.
+ *
+ * A conversa É o vínculo, então "mandar para vários" não inventa um grupo:
+ * grava uma mensagem em CADA conversa, separada. O aluno lê como mensagem
+ * normal do profissional, responde em privado, e nunca descobre quem mais
+ * recebeu — a lista de alunos de um coach é informação de saúde por
+ * associação, e um grupo a entregaria de graça.
+ */
+describe("recado em lote", () => {
+  const emLote = (token: string, body: Record<string, unknown>) =>
+    request(app).post("/pro/mensagens-em-lote").set(auth(token)).send(body);
+
+  const ler = (token: string, linkId: string) =>
+    request(app).get(`/pro/acompanhamentos/${linkId}/mensagens`).set(auth(token));
+
+  async function turma(quantos: number) {
+    const coach = await registrarProfissional();
+    const alunos = [];
+    for (let i = 0; i < quantos; i++) {
+      const aluno = await registrar();
+      const linkId = await vincular(coach.token, aluno.token);
+      alunos.push({ ...aluno, linkId });
+    }
+    return { coach, alunos };
+  }
+
+  it("uma escrita, uma mensagem em cada conversa", async () => {
+    const { coach, alunos } = await turma(3);
+
+    const r = await emLote(coach.token, {
+      linkIds: alunos.map((a) => a.linkId),
+      texto: "Amanhã o treino é às 7h",
+    });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.enviados).toBe(3);
+    expect(r.body.data.recusados).toHaveLength(0);
+
+    for (const a of alunos) {
+      const lido = await ler(a.token, a.linkId);
+      expect(lido.body.data).toHaveLength(1);
+      expect(lido.body.data[0].texto).toBe("Amanhã o treino é às 7h");
+    }
+  });
+
+  // O que o aluno NÃO recebe é tão importante quanto o que ele recebe.
+  it("ninguém fica sabendo quem mais recebeu", async () => {
+    const { coach, alunos } = await turma(2);
+
+    await emLote(coach.token, { linkIds: alunos.map((a) => a.linkId), texto: "Recado" });
+
+    const lido = await ler(alunos[0].token, alunos[0].linkId);
+    // Primeiro prova que ele RECEBEU: sem isto o teste passaria com a rota
+    // quebrada, porque conversa vazia também não menciona ninguém.
+    expect(lido.body.data).toHaveLength(1);
+    const corpo = JSON.stringify(lido.body);
+    expect(corpo).not.toContain(alunos[1].id);
+    expect(corpo).not.toContain(alunos[1].linkId);
+  });
+
+  // O lote não pode virar a porta dos fundos para escrever na conversa alheia.
+  it("vínculo de outro profissional é recusado, e nada é gravado nele", async () => {
+    const { coach, alunos } = await turma(1);
+    const outro = await registrarProfissional();
+    const alunoDoOutro = await registrar();
+    const linkAlheio = await vincular(outro.token, alunoDoOutro.token);
+
+    const r = await emLote(coach.token, {
+      linkIds: [alunos[0].linkId, linkAlheio],
+      texto: "Recado",
+    });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.enviados).toBe(1);
+    expect(r.body.data.recusados).toHaveLength(1);
+    expect(r.body.data.recusados[0].linkId).toBe(linkAlheio);
+
+    const alheia = await ler(alunoDoOutro.token, linkAlheio);
+    expect(alheia.body.data).toHaveLength(0);
+  });
+
+  // Falha parcial não derruba o resto: quem podia receber, recebe.
+  it("acompanhamento encerrado é pulado, e os outros recebem", async () => {
+    const { coach, alunos } = await turma(2);
+    await request(app)
+      .delete(`/pro/acompanhamentos/${alunos[0].linkId}`)
+      .set(auth(alunos[0].token))
+      .expect(200);
+
+    const r = await emLote(coach.token, {
+      linkIds: alunos.map((a) => a.linkId),
+      texto: "Recado",
+    });
+
+    expect(r.status).toBe(201);
+    expect(r.body.data.enviados).toBe(1);
+    expect(r.body.data.recusados[0].linkId).toBe(alunos[0].linkId);
+    expect(r.body.data.recusados[0].motivo).toBeTruthy();
+
+    expect((await ler(alunos[1].token, alunos[1].linkId)).body.data).toHaveLength(1);
+  });
+
+  it("a foto vai para todo mundo", async () => {
+    const { coach, alunos } = await turma(2);
+
+    const r = await emLote(coach.token, {
+      linkIds: alunos.map((a) => a.linkId),
+      imageUrl: "https://fitcdn.satriz.club/aviso.jpg",
+      imageWidth: 1080,
+      imageHeight: 1350,
+    });
+
+    expect(r.status).toBe(201);
+    for (const a of alunos) {
+      const lido = await ler(a.token, a.linkId);
+      expect(lido.body.data[0].imageUrl).toBe("https://fitcdn.satriz.club/aviso.jpg");
+    }
+  });
+
+  it("recado vazio e lista vazia são recusados na borda", async () => {
+    const { coach, alunos } = await turma(1);
+
+    expect((await emLote(coach.token, { linkIds: [alunos[0].linkId], texto: "   " })).status).toBe(400);
+    expect((await emLote(coach.token, { linkIds: [], texto: "Oi" })).status).toBe(400);
+  });
+
+  // Mandar em lote é capacidade de quem acompanha, não de quem é acompanhado.
+  it("aluno não manda recado em lote", async () => {
+    const { alunos } = await turma(1);
+
+    const r = await emLote(alunos[0].token, { linkIds: [alunos[0].linkId], texto: "Oi" });
+    expect(r.status).toBe(403);
+  });
+});
