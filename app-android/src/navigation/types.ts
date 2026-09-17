@@ -28,6 +28,9 @@ export type AppStackParams = {
   TreinoConcluido: { activity: Activity; newPRs?: NewPR[] };
   CreatePost: { activity?: Activity; newPRs?: NewPR[] } | undefined;
   EditProfile: undefined;
+  /** A ficha (objetivo, dias de treino, restrições...) — separada de
+   *  EditProfile, que é identidade (nome, foto, bio). */
+  Ficha: undefined;
   Configuracoes: undefined;
   AlterarSenha: undefined;
   ExcluirConta: undefined;

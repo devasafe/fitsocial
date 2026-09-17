@@ -42,6 +42,7 @@ import { TodayWorkoutScreen } from "../screens/TodayWorkoutScreen";
 import { HistoryScreen } from "../screens/HistoryScreen";
 import { ChooseUsernameScreen } from "../screens/ChooseUsernameScreen";
 import { EditProfileScreen } from "../screens/EditProfileScreen";
+import { EditarFichaScreen } from "../screens/EditarFichaScreen";
 import { ConfiguracoesScreen } from "../screens/ConfiguracoesScreen";
 import { AlterarSenhaScreen } from "../screens/AlterarSenhaScreen";
 import { ExcluirContaScreen } from "../screens/ExcluirContaScreen";
@@ -340,6 +341,11 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             name="EditProfile"
             component={EditProfileScreen}
             options={{ headerShown: true, title: "Editar perfil", ...headerStyle }}
+          />
+          <AppStack.Screen
+            name="Ficha"
+            component={EditarFichaScreen}
+            options={{ headerShown: true, title: "Sua ficha", ...headerStyle }}
           />
           <AppStack.Screen
             name="Configuracoes"
