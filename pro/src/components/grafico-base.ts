@@ -20,6 +20,15 @@
 
 export const VERDE = "var(--verde)";
 
+/**
+ * Cor de referência — usada em séries que são pano de fundo, não protagonista
+ * (ex.: a meta no gráfico de calorias). A mesma variável que já apaga o eixo
+ * (`EIXO.stroke`, logo abaixo): "referência" precisa ficar mais fraca que o
+ * dado principal, e não é uma cor nova, é a cor que o painel já usa para
+ * "discreto".
+ */
+export const REFERENCIA = "var(--texto-3)";
+
 export const EIXO = { stroke: "var(--texto-3)", fontSize: 11 };
 export const GRADE = { stroke: "var(--line)", strokeDasharray: "0" };
 export const TOOLTIP = {

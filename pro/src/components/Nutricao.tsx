@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { buscarNutricao, ErroApi, type EvolucaoDeNutricao, type Janela } from "../api";
-import { diaEMes, EIXO, GRADE, TOOLTIP, VERDE } from "./grafico-base";
+import { diaEMes, EIXO, GRADE, REFERENCIA, TOOLTIP, VERDE } from "./grafico-base";
 
 // A aba de nutrição do nutricionista — a mesma regra da tela do aluno
 // (app-android/src/screens/NutricaoProgressoScreen.tsx), do outro lado do
@@ -24,7 +25,16 @@ import { diaEMes, EIXO, GRADE, TOOLTIP, VERDE } from "./grafico-base";
 //
 // E o guardrail do projeto (docs/VISAO.md) vale igual do lado do
 // profissional: a tela descreve o que houve, não acusa. Nenhum "falhou",
-// nenhum vermelho de reprovação para dia fora do alvo.
+// nenhum vermelho de reprovação para dia fora do alvo. É por isso que a meta
+// entra como REFERÊNCIA — uma segunda linha, tracejada, na cor neutra de
+// `REFERENCIA` (não a `VERDE` da marca) — e não como uma faixa de aprovado/
+// reprovado por cima do consumo.
+//
+// A meta também é POR DIA, igual ao `kcal`: vem da versão do plano que valia
+// naquela data (`alvo`), e é `null` quando não havia dieta. Uma reta única
+// atravessando o gráfico inteiro mentiria nos dias em que a meta era outra —
+// ou não existia — exatamente o mesmo motivo do `kcal` nulo virar buraco, não
+// zero. `connectNulls` fica de fora aqui também.
 //
 // O gráfico é escrito à mão em vez de reusar `Grafico.tsx`: aquele componente
 // tipa `valor` como `number`, e aqui o `null` do dia sem registro PRECISA
@@ -76,6 +86,16 @@ export function Nutricao({
     };
   }, [token, alunoId, janela]);
 
+  // Achata `alvo.kcal` num campo próprio para o recharts ler por `dataKey`
+  // simples, e não por caminho aninhado — mais fácil de auditar do que confiar
+  // que o resolvedor interno do recharts atravessa `alvo` quando ele é `null`.
+  // Hook antes dos retornos condicionais abaixo, com fallback vazio: a regra
+  // dos hooks não aceita um `useMemo` depois de um `return`.
+  const dadosDoGrafico = useMemo(
+    () => (evolucao?.dias ?? []).map((d) => ({ ...d, metaKcal: d.alvo?.kcal ?? null })),
+    [evolucao]
+  );
+
   if (carregando) return <p className="vazio">Carregando…</p>;
   if (erro || !evolucao) {
     return <p className="erro">{erro ?? "Não foi possível carregar a nutrição."}</p>;
@@ -83,6 +103,7 @@ export function Nutricao({
 
   const { dias, resumo } = evolucao;
   const semRegistro = resumo.diasComRegistro === 0;
+  const temMeta = dias.some((d) => d.alvo);
 
   // O mesmo denominador que o backend usa para contar `diasDentroDoAlvo`
   // (api/src/services/nutricao.ts: `dentro = comRegistro.filter(d => d.alvo
@@ -121,7 +142,7 @@ export function Nutricao({
       ) : (
         <>
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={dias} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
+            <AreaChart data={dadosDoGrafico} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
               <CartesianGrid {...GRADE} vertical={false} />
               <XAxis dataKey="dia" {...EIXO} tickLine={false} minTickGap={18} tickFormatter={diaEMes} />
               <YAxis
@@ -134,7 +155,14 @@ export function Nutricao({
               <Tooltip
                 {...TOOLTIP}
                 labelFormatter={diaEMes}
-                formatter={(v) => [v == null ? "sem registro" : `${v} kcal`, ""]}
+                // "sem registro" e "sem meta" são frases diferentes: a mesma
+                // ausência ("null") significa coisas diferentes em cada série,
+                // e usar "sem registro" para as duas faria o tooltip da meta
+                // soar como se o ALUNO tivesse deixado de registrar algo.
+                formatter={(v, nome) => [
+                  v == null ? (nome === "metaKcal" ? "sem meta" : "sem registro") : `${v} kcal`,
+                  nome === "metaKcal" ? "meta" : "consumido",
+                ]}
               />
               {/* `connectNulls` fica de fora de propósito: o padrão do recharts
                   é `false`, e é ele que abre o buraco no dia sem registro.
@@ -148,8 +176,30 @@ export function Nutricao({
                 fill={VERDE}
                 fillOpacity={0.08}
               />
+              {/* A meta: referência, não protagonista — tracejada, sem pontos,
+                  numa cor neutra (nunca a `VERDE` da marca, que é o consumo).
+                  Desenhada DEPOIS da `Area` para não ficar coberta por ela. */}
+              {temMeta && (
+                <Line
+                  type="monotone"
+                  dataKey="metaKcal"
+                  stroke={REFERENCIA}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
+                  dot={false}
+                  activeDot={false}
+                  legendType="none"
+                  isAnimationActive={false}
+                />
+              )}
             </AreaChart>
           </ResponsiveContainer>
+          {/* Legenda: com duas séries, o traço sozinho não diz qual é qual. */}
+          {temMeta && (
+            <p className="sub" style={{ marginTop: 8 }}>
+              Linha cheia: o que o aluno registrou. Linha tracejada: a meta do dia.
+            </p>
+          )}
           <p className="sub" style={{ marginTop: 8 }}>
             Onde a linha some, o aluno não registrou nada naquele dia.
           </p>

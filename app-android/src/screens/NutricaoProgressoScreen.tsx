@@ -135,10 +135,17 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
   // porta.
   const pontos = useMemo(() => dias.map((d) => ({ date: d.dia, value: d.kcal })), [dias]);
 
-  // O alvo do último dia que teve alvo. A meta pode ter mudado no meio da
-  // janela, e nesse caso ela não vale para os dias de antes da troca — por isso
-  // ela é dita em texto, e não desenhada como uma reta por cima de dias que
-  // tinham outra meta.
+  // A meta, dia a dia — mesma regra dos nulos de `pontos`: um dia sem meta (ou
+  // fora do vínculo de dieta) vai como `null`, e a linha tracejada QUEBRA ali
+  // em vez de herdar a meta do dia vizinho. Nunca uma reta única: a meta pode
+  // ter mudado no meio da janela, e uma reta por cima do gráfico inteiro
+  // afirmaria, para os dias antes da troca, um número que não valia para eles.
+  const pontosDaMeta = useMemo(() => dias.map((d) => ({ date: d.dia, value: d.alvo?.kcal ?? null })), [dias]);
+
+  // O alvo do último dia que teve alvo — resumo em texto para complementar o
+  // gráfico, que já mostra a meta de CADA dia (inclusive quando ela mudou no
+  // meio da janela). Aqui só se nomeia a mais recente, sem repetir a série
+  // inteira em palavras.
   const alvoVigente = useMemo(() => {
     for (let i = dias.length - 1; i >= 0; i--) {
       const alvo = dias[i]?.alvo;
@@ -362,17 +369,28 @@ export function NutricaoProgressoScreen({ embedded }: { embedded?: boolean } = {
             )}
           </Card>
 
-          {/* Gráfico: os dias vazios chegam como `null` e a linha quebra neles. */}
+          {/* Gráfico: os dias vazios chegam como `null` e a linha quebra neles.
+              A meta é a segunda série, tracejada — referência, não veredito:
+              nenhuma cor de reprovação para o dia que ficou acima ou abaixo
+              dela (docs/VISAO.md). */}
           <Card level={1}>
             <Txt variant="titleCard">Calorias por dia</Txt>
             <View style={{ marginTop: spacing.s16 }}>
               <LineChart
                 points={pontos}
+                secondary={alvoVigente ? pontosDaMeta : undefined}
+                secondaryLabel="meta"
                 width={larguraDoGrafico}
                 formatValue={(v) => String(Math.round(v))}
               />
             </View>
-            <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
+            {/* Legenda: com duas séries, o traço sozinho não diz qual é qual. */}
+            {alvoVigente && (
+              <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.s8 }}>
+                Linha cheia: o que você comeu. Linha tracejada: sua meta do dia.
+              </Txt>
+            )}
+            <Txt variant="caption" color={colors.text3} style={{ marginTop: spacing.xs }}>
               {resumo.diasComRegistro === 1
                 ? "Um dia só ainda não faz curva: ele aparece como ponto, e o resto da janela fica como buraco."
                 : "Onde a linha some, não houve registro. O app deixa o buraco à mostra em vez de inventar o dia."}
