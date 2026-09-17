@@ -189,9 +189,15 @@ export function Alunos({ token, abrir }: { token: string; abrir: (alunoId: strin
           chance de o profissional saber disso. */}
       {resultado && (
         <div className="painel" style={{ marginBottom: 16 }}>
+          {/* Zero é caso real, não impossível: dá para marcar só gente cujo
+              acompanhamento acabou de ser encerrado. "Enviado para 0 pessoas"
+              soaria como sucesso de uma coisa que não aconteceu. */}
           <p style={{ marginTop: 0, marginBottom: resultado.recusados.length ? 8 : 0 }}>
-            Recado enviado para {resultado.enviados}{" "}
-            {resultado.enviados === 1 ? "pessoa" : "pessoas"}.
+            {resultado.enviados === 0
+              ? "Ninguém recebeu o recado."
+              : `Recado enviado para ${resultado.enviados} ${
+                  resultado.enviados === 1 ? "pessoa" : "pessoas"
+                }.`}
           </p>
           {resultado.recusados.length > 0 && (
             <p className="sub" style={{ marginBottom: 8 }}>
