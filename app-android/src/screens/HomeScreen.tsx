@@ -341,7 +341,12 @@ export function HomeScreen() {
     return (
       <Screen scroll contentStyle={{ gap: spacing.md }}>
         <Skeleton width="55%" height={26} />
-        <SkeletonCard lines={1} height={120} />
+        {/* Três cartões do mesmo tamanho — treino, comida e água —, na mesma
+            ordem em que chegam prontos. Um só, maior que os outros (como era
+            antes), faria a tela "pular" ao sair do esqueleto. */}
+        <SkeletonCard lines={1} height={104} />
+        <SkeletonCard lines={1} height={104} />
+        <SkeletonCard lines={1} height={104} />
         <View style={{ flexDirection: "row", gap: spacing.card }}>
           <View style={{ flex: 1 }}>
             <SkeletonCard lines={1} height={72} />
@@ -402,104 +407,137 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {/* ---- Bloco de treino: muda conforme de onde vem a programação ---- */}
+      {/* ---- Hoje: treino, comida e água, no mesmo tamanho e peso visual ----
+           Os três andam juntos — nenhum é "mais importante" (pedido do dono).
+           Antes o treino sozinho ocupava três blocos antes de a comida
+           aparecer; agora é um cartão do tamanho dos outros dois, e quem quer
+           o detalhe (lista de exercícios, ajustes, avisos) o encontra na tela
+           do treino, que é para onde ele leva de qualquer forma. */}
+      <Txt
+        variant="label"
+        color={colors.text2}
+        style={{ marginTop: spacing.xs, textTransform: "uppercase", letterSpacing: 0.5 }}
+      >
+        Hoje
+      </Txt>
+
       {temTreino && plan?.workout ? (
-        /* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque */
-        <Card level={2} sport="musculacao" style={{ marginTop: spacing.sm }}>
-          <Txt variant="label" color={colors.text2}>
-            {ehDescanso ? "Hoje" : "Treino de hoje"}
-          </Txt>
-          <Txt variant="titleSection" style={{ marginTop: 2 }}>
-            {ehDescanso
-              ? "Dia de descanso"
-              : todaySession
-                ? todaySession.focus || todaySession.day
-                : plan.workout.split}
-          </Txt>
-          {/* Quem assinou. Só aparece quando há um nome para dizer: sem
-              treinador, "seu coach" já é como o resto da tela chama a IA, e
-              dois nomes para o mesmo sujeito na mesma tela confundem mais do
-              que a ausência do rótulo. */}
-          {plan.autor ? (
-            <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
-              prescrito por {plan.autor.nome}
+        /* AÇÃO PRINCIPAL — treino de hoje, começa em 1 toque. Tocar fora do
+           botão abre a tela do treino, como nos cartões de comida e água. */
+        <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.85}>
+          <Card>
+            <Txt variant="label" color={colors.text2}>
+              {ehDescanso ? "Hoje" : "Treino de hoje"}
             </Txt>
-          ) : treinador ? (
-            // O plano é o velho, da IA, e já existe treinador: dizer isso é
-            // melhor que deixar a tela afirmar duas coisas opostas ao mesmo
-            // tempo — "montado pela assistente" aqui e "Fulana cuida do seu
-            // treino" no cartão abaixo.
-            <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
-              {`montado antes de ${treinador.profissional.nome.split(" ")[0]} assumir`}
+            <Txt variant="titleSection" style={{ marginTop: 2 }}>
+              {ehDescanso
+                ? "Dia de descanso"
+                : todaySession
+                  ? todaySession.focus || todaySession.day
+                  : plan.workout.split}
             </Txt>
-          ) : null}
-          {/* Descanso planejado não é falta: o cartão diz isso e oferece o
-              caminho, sem cobrar nada de ninguém (brief §7). */}
-          {ehDescanso ? (
-            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-              Nada marcado para hoje. Se quiser treinar assim mesmo, é só escolher.
-            </Txt>
-          ) : null}
-          <View style={{ height: spacing.md }} />
-          {ehDescanso ? (
-            <Button
-              title="Escolher um treino"
-              variant="secondary"
-              onPress={() => navigation.navigate("TodayWorkout")}
-            />
-          ) : (
-            <>
-              <Button title="Começar treino" onPress={(e) => void startToday(e)} size="lg" glow />
-              <TouchableOpacity onPress={() => navigation.navigate("TodayWorkout")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
-                <Txt variant="label" color={colors.text2}>
-                  Escolher outro treino
-                </Txt>
-              </TouchableOpacity>
-            </>
-          )}
-        </Card>
+            {/* Quem assinou. Só aparece quando há um nome para dizer: sem
+                treinador, "seu coach" já é como o resto da tela chama a IA, e
+                dois nomes para o mesmo sujeito na mesma tela confundem mais do
+                que a ausência do rótulo. */}
+            {plan.autor ? (
+              <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                prescrito por {plan.autor.nome}
+              </Txt>
+            ) : treinador ? (
+              // O plano é o velho, da IA, e já existe treinador: dizer isso é
+              // melhor que deixar a tela afirmar duas coisas opostas ao mesmo
+              // tempo — "montado pela assistente" aqui e "Fulana cuida do seu
+              // treino" no cartão abaixo.
+              <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                {`montado antes de ${treinador.profissional.nome.split(" ")[0]} assumir`}
+              </Txt>
+            ) : null}
+            {/* Descanso planejado não é falta: o cartão diz isso e oferece o
+                caminho, sem cobrar nada de ninguém (brief §7). */}
+            {ehDescanso ? (
+              <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+                Nada marcado para hoje. Se quiser treinar assim mesmo, é só escolher.
+              </Txt>
+            ) : null}
+            {ehDescanso ? (
+              <Button
+                title="Escolher um treino"
+                variant="secondary"
+                onPress={() => navigation.navigate("TodayWorkout")}
+                style={{ marginTop: spacing.md }}
+              />
+            ) : (
+              <Button
+                title="Começar treino"
+                onPress={(e) => void startToday(e)}
+                style={{ marginTop: spacing.md }}
+              />
+            )}
+          </Card>
+        </TouchableOpacity>
       ) : seguePropria ? (
         /* Quem segue a programação do box não tem "treino de hoje" para abrir —
-           tem um treino para registrar depois de fazer. */
-        <Card level={2} style={{ marginTop: spacing.sm }}>
-          <Txt variant="label" color={colors.text2}>
-            Hoje
-          </Txt>
-          <Txt variant="titleSection" style={{ marginTop: 2, marginBottom: spacing.md }}>
-            Treinou? Registra aqui.
-          </Txt>
-          <Button title="Registrar treino" onPress={() => navigation.navigate("Registrar")} size="lg" glow />
-          <TouchableOpacity onPress={() => navigation.navigate("MinhasAtividades")} activeOpacity={0.7} style={{ paddingTop: spacing.md, alignItems: "center" }}>
+           tem um treino para registrar depois de fazer. Tocar fora do botão
+           abre "Meus treinos", que antes era um link à parte. */
+        <TouchableOpacity onPress={() => navigation.navigate("MinhasAtividades")} activeOpacity={0.85}>
+          <Card>
             <Txt variant="label" color={colors.text2}>
-              Ver meus treinos
+              Hoje
             </Txt>
-          </TouchableOpacity>
-        </Card>
+            <Txt variant="titleSection" style={{ marginTop: 2 }}>
+              Treinou? Registra aqui.
+            </Txt>
+            <Button
+              title="Registrar treino"
+              onPress={() => navigation.navigate("Registrar")}
+              style={{ marginTop: spacing.md }}
+            />
+          </Card>
+        </TouchableOpacity>
       ) : (
         !seiQuemCuida ? null : treinador ? (
         /* Com treinador, não há o que escolher: o treino dele está a caminho.
            Oferecer "montar um plano pra mim" aqui seria a IA disputando o lugar
            de quem já foi contratado — e o servidor recusaria de qualquer jeito. */
-        <Card level={2} style={{ marginTop: spacing.sm }}>
-          <Txt variant="titleCard">{treinador.profissional.nome} cuida do seu treino</Txt>
-          <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm }}>
-            Assim que o treino estiver pronto, ele aparece aqui — e você recebe um aviso.
-          </Txt>
-          <Button
-            title={`Falar com ${treinador.profissional.nome.split(" ")[0]}`}
-            variant="secondary"
-            onPress={() =>
-              navigation.navigate("Conversa", {
-                linkId: treinador.id,
-                nome: treinador.profissional.nome,
-              })
-            }
-            style={{ marginTop: spacing.md }}
-          />
-        </Card>
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate("Conversa", {
+              linkId: treinador.id,
+              nome: treinador.profissional.nome,
+            })
+          }
+          activeOpacity={0.85}
+        >
+          <Card>
+            <Txt variant="label" color={colors.text2}>
+              Treino de hoje
+            </Txt>
+            <Txt variant="titleSection" style={{ marginTop: 2 }}>
+              {treinador.profissional.nome} cuida do seu treino
+            </Txt>
+            <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
+              Assim que o treino estiver pronto, ele aparece aqui — e você recebe um aviso.
+            </Txt>
+            <Button
+              title={`Falar com ${treinador.profissional.nome.split(" ")[0]}`}
+              variant="secondary"
+              onPress={() =>
+                navigation.navigate("Conversa", {
+                  linkId: treinador.id,
+                  nome: treinador.profissional.nome,
+                })
+              }
+              style={{ marginTop: spacing.md }}
+            />
+          </Card>
+        </TouchableOpacity>
       ) : (
-        /* Ainda não escolheu. Três caminhos, e nenhum deles é obrigatório. */
-        <Card level={2} style={{ marginTop: spacing.sm }}>
+        /* Ainda não escolheu. Três caminhos, e nenhum deles é obrigatório.
+           É a única exceção ao "mesmo tamanho dos outros dois": uma decisão
+           de configuração única (não um dado do dia) tem legitimamente mais
+           conteúdo, e some assim que a pessoa escolhe. */
+        <Card level={2}>
           <Txt variant="titleCard">Como você treina?</Txt>
           <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.sm, marginBottom: spacing.md }}>
             Dá para mudar depois, em Configurações.
@@ -542,10 +580,21 @@ export function HomeScreen() {
       )
       )}
 
+      <NutritionToday
+        day={day}
+        fallbackTarget={plan?.diet?.dailyCalories}
+        onOpen={() => navigation.navigate("Diario")}
+        onRegister={() => setQuickAdd(true)}
+      />
+
+      <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
+
       {/* ---- Daqui para baixo, nada depende de existir um plano ----
            Antes tudo isto vivia dentro do ramo "tem plano": quem não tinha via
            uma tela com um cartão só. Água, comida, constância e coach nunca
-           dependeram de plano nenhum — estavam escondidos atrás dele. */}
+           dependeram de plano nenhum — estavam escondidos atrás dele.
+           A constância (streak/semana/total) descia para cá de propósito: é
+           reforço de quem já fez, não o convite do dia — esse é o trio acima. */}
 
       {stats && (
         <View style={{ flexDirection: "row", gap: spacing.card }}>
@@ -561,15 +610,6 @@ export function HomeScreen() {
           <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />
         </View>
       )}
-
-      <NutritionToday
-        day={day}
-        fallbackTarget={plan?.diet?.dailyCalories}
-        onOpen={() => navigation.navigate("Diario")}
-        onRegister={() => setQuickAdd(true)}
-      />
-
-      <WaterToday water={water} onOpen={() => navigation.navigate("Agua")} onAdd={quickWater} />
 
       {/* Quem cuida do treino. Gente, quando há gente — e aí a IA desce para
           onde ela continua útil: tirar dúvida, e não mandar no plano. */}
@@ -729,8 +769,12 @@ export function HomeScreen() {
   );
 }
 
-// Card de nutrição do dia: kcal registradas vs meta + barra. Toque no card abre o
-// diário; "Registrar" abre o quick-add sem sair da Home.
+// Card de nutrição do dia: kcal registradas vs meta + barra + botão de
+// registrar. Toque no card (fora do botão) abre o diário.
+//
+// Rótulo + linha principal + botão, do mesmo tamanho do cartão de treino ao
+// lado: era número grande (metricMd, 28px) e um link minúsculo — maior e mais
+// discreto ao mesmo tempo, o oposto de "mesmo peso" (brief da hierarquia).
 function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DaySummary | null; fallbackTarget?: number; onOpen: () => void; onRegister: () => void }) {
   const kcal = day?.totals.kcal ?? 0;
   // Sem plano não há meta — e sem meta o card mostra só o que foi comido, em
@@ -741,17 +785,12 @@ function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DayS
   return (
     <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
       <Card>
-        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
-          <Txt variant="titleCard">Nutrição de hoje</Txt>
-          <TouchableOpacity onPress={onRegister} hitSlop={8}>
-            <Txt variant="label" color={colors.lime}>
-              + Registrar
-            </Txt>
-          </TouchableOpacity>
-        </View>
-        <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
+        <Txt variant="label" color={colors.text2}>
+          Nutrição de hoje
+        </Txt>
+        <Txt variant="titleSection" tabular style={{ marginTop: 2 }}>
           {kcal}
-          <Txt variant="titleSection" color={colors.text2}>
+          <Txt variant="body" color={colors.text2}>
             {temMeta ? ` / ${target} kcal` : " kcal"}
           </Txt>
         </Txt>
@@ -760,12 +799,19 @@ function NutritionToday({ day, fallbackTarget, onOpen, onRegister }: { day: DayS
             <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.lime }} />
           </View>
         ) : null}
+        {/* Primário, como o botão do treino. A regra desta seção é UMA ação
+            primária por cartão: num fundo escuro, um botão preenchido em lima
+            puxa o olho muito mais que 14px de altura ou espessura de borda, e
+            deixar só o treino preenchido recriaria a hierarquia que esta tela
+            existe para desfazer — só que na cor, em vez de na ordem. */}
+        <Button title="Registrar refeição" onPress={onRegister} style={{ marginTop: spacing.md }} />
       </Card>
     </TouchableOpacity>
   );
 }
 
-// Card de água do dia: total vs meta + barra + atalho +250 ml. Toque abre a tela.
+// Card de água do dia: total vs meta + barra + os dois atalhos de quantidade.
+// Toque no card (fora dos botões) abre a tela de água.
 function WaterToday({ water, onOpen, onAdd }: { water: WaterDay | null; onOpen: () => void; onAdd: (ml: number) => void }) {
   const total = water?.total ?? 0;
   const goal = water?.goalMl ?? 2000;
@@ -773,18 +819,26 @@ function WaterToday({ water, onOpen, onAdd }: { water: WaterDay | null; onOpen: 
   return (
     <TouchableOpacity onPress={onOpen} activeOpacity={0.85}>
       <Card>
-        <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
-          <Txt variant="titleCard">Água de hoje</Txt>
-          <TouchableOpacity onPress={() => onAdd(250)} hitSlop={8}>
-            <Txt variant="label" color={colors.info}>+ 250 ml</Txt>
-          </TouchableOpacity>
-        </View>
-        <Txt variant="metricMd" tabular color={colors.text} style={{ marginTop: spacing.xs }}>
+        <Txt variant="label" color={colors.text2}>
+          Água de hoje
+        </Txt>
+        <Txt variant="titleSection" tabular style={{ marginTop: 2 }}>
           {total}
-          <Txt variant="titleSection" color={colors.text2}> / {goal} ml</Txt>
+          <Txt variant="body" color={colors.text2}> / {goal} ml</Txt>
         </Txt>
         <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.surface3, marginTop: spacing.sm, overflow: "hidden" }}>
           <View style={{ width: `${pct * 100}%`, height: 6, borderRadius: 3, backgroundColor: colors.info }} />
+        </View>
+        {/* Dois botões lado a lado, cada um com metade da largura: em
+            ~360px, com o número grande acima, é aqui que uma quebra de
+            linha dobraria a altura do cartão — por isso o texto do botão
+            é curto e de uma linha só (o próprio Button já garante isso). */}
+        <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>
+          {/* Só o +250 é primário: é a ação única deste cartão, e o +500 é
+              atalho da MESMA ação, não uma concorrente. Dois preenchidos aqui
+              dariam à água o dobro do peso do treino e da comida. */}
+          <Button title="+250 ml" onPress={() => onAdd(250)} style={{ flex: 1 }} />
+          <Button title="+500 ml" variant="secondary" onPress={() => onAdd(500)} style={{ flex: 1 }} />
         </View>
       </Card>
     </TouchableOpacity>
