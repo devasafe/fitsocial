@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { View, TextInput } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { notify } from "../lib/notify";
 import { registrarEvento } from "../lib/eventos";
@@ -98,8 +98,20 @@ function splitList(s: string): string[] {
  */
 const RASCUNHO = "fitsocial.onboarding.rascunho";
 
+/**
+ * Marca que a pessoa já disse "agora não".
+ *
+ * Sem isto, ela era recebida por esta mesma tela em TODA abertura do app: a
+ * saída existia, mas ter de usá-la toda vez é a parede de novo, só que com
+ * porta. Quem recusou uma vez chega direto na Home; o formulário continua a um
+ * toque de distância, pelos caminhos que a Home e as Configurações oferecem.
+ */
+const ADIADO = "fitsocial.onboarding.adiado";
+
 export function OnboardingForm() {
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const rota = useRoute<RouteProp<AppStackParams, "Onboarding">>();
+  const pedido = rota.params?.pedido === true;
   const { token, user, refreshUser } = useAuth();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [sex, setSex] = useState<Sex | null>(null);
@@ -169,8 +181,19 @@ export function OnboardingForm() {
   // alguém com a ficha pronta cair nesta tela — dados chegando fora de ordem no
   // boot, ficha preenchida em outro aparelho — nada a tiraria daqui.
   useEffect(() => {
-    if (user?.onboardingComplete) nav.replace("Tabs");
-  }, [user?.onboardingComplete, nav]);
+    if (user?.onboardingComplete) {
+      nav.replace("Tabs");
+      return;
+    }
+    // Quem já recusou não é recebido por esta tela de novo — mas continua
+    // podendo ENTRAR nela quando quiser, e é isso que `pedido` protege.
+    if (pedido) return;
+    void AsyncStorage.getItem(ADIADO)
+      .then((v) => {
+        if (v === "1") nav.replace("Tabs");
+      })
+      .catch(() => {});
+  }, [user?.onboardingComplete, nav, pedido]);
 
   // Saber QUANTOS campos a pessoa preencheu antes de desistir é o dado que diz
   // se o formulário é longo demais ou se ela nem começou.
@@ -213,6 +236,7 @@ export function OnboardingForm() {
       concluiu.current = true;
       registrarEvento("onboarding_concluiu");
       await AsyncStorage.removeItem(RASCUNHO).catch(() => {});
+      await AsyncStorage.removeItem(ADIADO).catch(() => {});
       await refreshUser();
       // Navegar aqui virou obrigação: antes, `refreshUser` trocava a árvore de
       // rotas e isto acontecia sozinho. Agora as rotas existem desde o começo,
@@ -309,6 +333,7 @@ export function OnboardingForm() {
         variant="ghost"
         onPress={() => {
           registrarEvento("onboarding_adiou", { campos: preenchidos.current });
+          void AsyncStorage.setItem(ADIADO, "1").catch(() => {});
           nav.replace("Tabs");
         }}
       />

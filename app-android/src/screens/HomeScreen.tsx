@@ -116,7 +116,7 @@ export function HomeScreen() {
     // pessoa acabou de pedir. Antes de 23/09/2026 isto não podia acontecer: o
     // app não deixava ninguém chegar na Home sem ficha.
     if (escolha === "plano" && !user?.onboardingComplete) {
-      navigation.navigate("Onboarding");
+      navigation.navigate("Onboarding", { pedido: true });
       return;
     }
 

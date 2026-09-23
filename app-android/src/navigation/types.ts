@@ -13,7 +13,12 @@ export type AuthStackParams = {
 // Stack principal (quando logado e com onboarding concluído).
 export type AppStackParams = {
   ChooseUsername: undefined;
-  Onboarding: undefined;
+  /** `pedido: true` = a pessoa NAVEGOU até aqui de propósito (pela Home, pelas
+   *  Configurações). Sem isso, a tela é a rota inicial de quem acabou de criar
+   *  a conta — e quem já disse "agora não" não deve ser recebido por ela de
+   *  novo. Os dois casos precisam ser distinguíveis: fechar a tela sozinha nas
+   *  duas situações tranca do lado de fora quem quer preencher. */
+  Onboarding: { pedido?: boolean } | undefined;
   Tabs: undefined;
   TodayWorkout: undefined;
   /** `prescritoPor` só existe quando o treino é de um profissional — e é ele

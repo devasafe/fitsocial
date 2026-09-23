@@ -253,7 +253,7 @@ export function EditarFichaScreen() {
         </Txt>
         <Button
           title="Preencher agora"
-          onPress={() => navigation.navigate("Onboarding")}
+          onPress={() => nav.navigate("Onboarding", { pedido: true })}
           size="lg"
           glow
         />
