@@ -110,6 +110,16 @@ export function HomeScreen() {
   const seiQuemCuida = acompanhamento.carregado;
 
   async function escolherProgramacao(escolha: "plano" | "propria" | null, evento?: ToqueBruto) {
+    // Quem adiou o formulário não tem ficha, e `POST /plans/generate` recusa sem
+    // ela (409). Mandar a pessoa preencher é a resposta certa — e é aqui que a
+    // ficha faz sentido pedir, porque agora ela serve para alguma coisa que a
+    // pessoa acabou de pedir. Antes de 23/09/2026 isto não podia acontecer: o
+    // app não deixava ninguém chegar na Home sem ficha.
+    if (escolha === "plano" && !user?.onboardingComplete) {
+      navigation.navigate("Onboarding");
+      return;
+    }
+
     setOrigemDaGota(origemDoToque(evento));
     setEscolhendoProgramacao(true);
     try {
@@ -585,11 +595,29 @@ export function HomeScreen() {
             <EsperaLonga ativo passos={PASSOS.plano} />
           ) : erroPlano ? null : (
             <View style={{ gap: spacing.sm }}>
+              {/* Para quem adiou a ficha, a ação primária é OUTRA.
+                  A regra do cartão continua sendo uma ação primária só — o que
+                  muda é qual delas. Quem chegou aqui sem ficha não escolheu
+                  "ainda não sei como treino": escolheu não responder oito
+                  perguntas agora. Oferecer como destaque o caminho que não pede
+                  nada (registrar o treino que ela acabou de fazer) é o que essa
+                  pessoa pode fazer hoje; montar o plano continua ali, um degrau
+                  abaixo, e leva ao formulário quando ela quiser. */}
+              {!user?.onboardingComplete ? (
+                <Button
+                  title="Registrar um treino agora"
+                  onPress={() => navigation.navigate("Registrar")}
+                  size="lg"
+                  glow
+                  disabled={escolhendoProgramacao}
+                />
+              ) : null}
               <Button
                 title="Montar um plano pra mim"
                 onPress={(e) => void escolherProgramacao("plano", e)}
                 size="lg"
-                glow
+                glow={user?.onboardingComplete !== false}
+                variant={user?.onboardingComplete === false ? "secondary" : undefined}
                 disabled={escolhendoProgramacao}
               />
               <Button
