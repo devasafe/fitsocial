@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { desligarPush } from "../lib/push";
+import { definirTokenDeEventos } from "../lib/eventos";
 import {
   loginRequest,
   registerRequest,
@@ -61,6 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })();
   }, []);
+
+  // A telemetria de percurso segue o token: um lugar só, em vez de cada tela
+  // ter de passar o token junto de cada evento que marca.
+  useEffect(() => {
+    definirTokenDeEventos(token);
+  }, [token]);
 
   const persist = useCallback(async (nextToken: string, nextUser: AppUser) => {
     await AsyncStorage.setItem(TOKEN_KEY, nextToken);

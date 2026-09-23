@@ -38,6 +38,7 @@ import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { getWaterDay, addWater, type WaterDay } from "../api/water";
 import { coachLine } from "../lib/coachContext";
+import { registrarEvento } from "../lib/eventos";
 import { ApiHttpError } from "../api/client";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -258,6 +259,28 @@ export function HomeScreen() {
   // ao fazer `plan.workout.sessions.map(...)` sem guarda.
   const temTreino = (plan?.workout?.sessions?.length ?? 0) > 0;
   const temDieta = (plan?.diet?.meals?.length ?? 0) > 0;
+
+  // O que a pessoa ENCONTRA ao chegar. Quem cai numa Home sem plano e sem
+  // preferência escolhida vê um cartão de decisão, não um treino — e é essa a
+  // tela que precisa ser comparada, antes e depois, com a taxa de quem segue
+  // para o registro.
+  //
+  // Espera `seiQuemCuida` de propósito: antes disso o cartão principal ainda
+  // não decidiu o que mostrar, e o evento diria um estado que ninguém viu.
+  const estadoDaHome = treinador
+    ? "com_treinador"
+    : temTreino
+      ? "com_plano"
+      : seguePropria
+        ? "programacao_propria"
+        : "sem_escolha";
+
+  useEffect(() => {
+    if (!seiQuemCuida) return;
+    registrarEvento("home_viu", { estado: estadoDaHome });
+    // Uma vez por estado: voltar para a Home dez vezes no mesmo dia não são dez
+    // chegadas diferentes, e o funil conta pessoas, não visitas.
+  }, [seiQuemCuida, estadoDaHome]);
   /**
    * O treino de hoje.
    *

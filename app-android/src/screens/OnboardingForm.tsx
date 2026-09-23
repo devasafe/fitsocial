@@ -1,8 +1,9 @@
 // Onboarding por FORMULÁRIO (substitui o chat com IA) — a pessoa preenche os
 // campos certos rapidinho. Gera a mesma ficha que o coach usa pra montar o plano.
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, TextInput } from "react-native";
 import { notify } from "../lib/notify";
+import { registrarEvento } from "../lib/eventos";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Button, Chip } from "../components/ui";
 import { submitProfile, type ProfileForm } from "../api/onboarding";
@@ -98,6 +99,29 @@ export function OnboardingForm() {
   const [injuries, setInjuries] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Quantos dos campos obrigatórios estão preenchidos AGORA. Fica numa ref, e
+  // não em estado, porque quem lê é a saída da tela: o efeito de desmontagem
+  // roda uma vez só, com o valor que ele capturou na montagem — e leria zero
+  // para todo mundo se dependesse do estado.
+  const preenchidos = useRef(0);
+  preenchidos.current = [goal, sex, level, days, minutes].filter(Boolean).length
+    + [age, height, weight].filter((v) => v.trim() !== "").length;
+
+  const concluiu = useRef(false);
+
+  // Esta tela é a parede do app: enquanto ela não termina, o RootNavigator não
+  // registra nenhuma outra rota. Saber QUANTOS campos a pessoa preencheu antes
+  // de desistir é o dado que diz se o formulário é longo demais ou se ela nem
+  // começou.
+  useEffect(() => {
+    registrarEvento("onboarding_abriu");
+    return () => {
+      if (!concluiu.current) {
+        registrarEvento("onboarding_saiu", { campos: preenchidos.current });
+      }
+    };
+  }, []);
+
   async function save() {
     const a = Number(age);
     const h = Number(height);
@@ -125,6 +149,8 @@ export function OnboardingForm() {
         injuriesConditions: splitList(injuries),
         notes: "",
       });
+      concluiu.current = true;
+      registrarEvento("onboarding_concluiu");
       await refreshUser(); // libera o app (RootNavigator vai pras Tabs)
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);

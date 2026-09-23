@@ -8,6 +8,7 @@ import { Txt, Screen, Button } from "../components/ui";
 import { listSports, type Sport } from "../api/sports";
 import { listActivities, type Activity } from "../api/activities";
 import { sportLabel } from "../lib/sportLabel";
+import { registrarEvento } from "../lib/eventos";
 import { colors, spacing, radius } from "../theme";
 import { SkeletonGrade } from "../components/Skeleton";
 import type { AppStackParams } from "../navigation/types";
@@ -62,6 +63,8 @@ export function RegistrarScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    registrarEvento("registrar_abriu");
+
     listSports(token!)
       .then(setSports)
       .catch(() => {})
@@ -83,6 +86,11 @@ export function RegistrarScreen() {
   }, [token]);
 
   function route(kind: string, sportId: string, label: string, activity?: Activity) {
+    // Marcado aqui, no roteador, e não em cada caso: é o ponto por onde passa
+    // toda escolha de esporte, inclusive a de "Repetir", que é o caminho mais
+    // curto do app e o que mais interessa comparar.
+    registrarEvento("registrar_esporte", { sportId, kind, repetindo: Boolean(activity) });
+
     switch (kind) {
       case "strength": {
         const prefill = activity ? strengthPrefill(activity.payload) : undefined;

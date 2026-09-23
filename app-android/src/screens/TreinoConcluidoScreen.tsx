@@ -20,6 +20,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Txt, Button } from "../components/ui";
 import { usePerguntaDePrivacidade } from "../components/PrivacidadeTreinos";
+import { registrarEvento } from "../lib/eventos";
 import { SalvarNoPlano } from "../components/SalvarNoPlano";
 import { useAuth } from "../context/AuthContext";
 import { getTreinoDeHoje } from "../api/plans";
@@ -86,6 +87,13 @@ export function TreinoConcluidoScreen({ route, navigation }: Props) {
   const { fontScale } = useWindowDimensions();
   const { token } = useAuth();
   const perguntarPrivacidade = usePerguntaDePrivacidade();
+
+  // O fim do caminho dentro do app, e o começo do caminho para fora dele: a
+  // distância entre este evento e `compartilhar_tocou` é a taxa que diz se a
+  // tela convence alguém a publicar.
+  useEffect(() => {
+    registrarEvento("concluido_viu", { kind: activity.kind });
+  }, [activity.kind]);
   const cor = sportColor(activity.sportId);
   const stats = destaques(activity);
 
@@ -140,6 +148,7 @@ export function TreinoConcluidoScreen({ route, navigation }: Props) {
   }, [navigation, perguntarPrivacidade]);
 
   function compartilhar() {
+    registrarEvento("compartilhar_tocou", { kind: activity.kind });
     navigation.navigate("CreatePost", { activity, newPRs: newPRs ?? [] });
     perguntarPrivacidade();
   }

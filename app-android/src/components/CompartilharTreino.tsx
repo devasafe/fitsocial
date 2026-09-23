@@ -24,6 +24,7 @@ import { Sheet } from "./Sheet";
 import { Txt } from "./ui";
 import { EsperaLonga } from "./Espera";
 import { notify } from "../lib/notify";
+import { registrarEvento } from "../lib/eventos";
 import {
   gerarCartao,
   type FormatoDoCartao,
@@ -133,10 +134,17 @@ export function CompartilharTreino({
         layout as LayoutDoCartao,
       );
 
+      registrarEvento("card_gerado", { formato, layout });
+
       // Story primeiro; se o Instagram não estiver instalado, a bandeja
       // resolve em vez de a pessoa tocar e nada acontecer.
       const foi = paraStory ? await abrirStoryDoInstagram(url) : false;
       if (!foi) await abrirBandeja(url);
+
+      // `foi` distingue o Story de verdade da bandeja do sistema. Sem essa
+      // separação, o número de "foi para o Instagram" incluiria quem caiu na
+      // bandeja porque o app nem está instalado.
+      registrarEvento("story_abriu", { formato, instagram: foi });
 
       aoFechar();
     } catch (err) {

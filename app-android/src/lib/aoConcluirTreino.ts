@@ -20,6 +20,7 @@ import { useCallback } from "react";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { usePRCelebration } from "../components/PRCelebration";
+import { registrarEvento } from "./eventos";
 import type { Activity, NewPR } from "../api/activities";
 import type { AppStackParams } from "../navigation/types";
 
@@ -32,6 +33,11 @@ export function useConclusaoDeTreino(): ConcluirTreinoFn {
 
   return useCallback(
     (activity, newPRs = []) => {
+      // Marcado AQUI, e não nas sete telas: este é o ponto por onde todas
+      // passam depois de salvar, então nenhuma forma de registrar treino fica
+      // fora da contagem — e nenhuma é contada duas vezes.
+      registrarEvento("treino_salvo", { kind: activity.kind, recordes: newPRs.length });
+
       // O banner de recorde desliza por cima da tela de conclusão. Ele vive num
       // provider acima do navegador justamente para sobreviver a esta troca.
       celebratePR(newPRs);
