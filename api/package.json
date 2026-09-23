@@ -24,7 +24,8 @@
     "musculos:backfill": "tsx src/scripts/backfillMuscleMetrics.ts",
     "musculos:backfill:rollback": "tsx src/scripts/backfillMuscleMetrics.ts --rollback",
     "admin:grant": "tsx src/scripts/grantAdmin.ts",
-    "pro:grant": "tsx src/scripts/grantPro.ts"
+    "pro:grant": "tsx src/scripts/grantPro.ts",
+    "retencao:diagnostico": "tsx src/scripts/diagnosticarRetencao.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1127.0",
