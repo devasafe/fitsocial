@@ -580,3 +580,16 @@ export const apagarDocumento = (
     body: { motivo, confirmacao },
     token,
   });
+
+export interface DegrauDoFunil {
+  nome: string;
+  rotulo: string;
+  pessoas: number;
+  /** % sobre quem se cadastrou na janela. */
+  doTotal: number;
+  /** % sobre o último degrau que teve gente — é aqui que o vazamento aparece. */
+  doPasso: number;
+}
+
+export const buscarFunil = (token: string, dias: number) =>
+  api<{ degraus: DegrauDoFunil[] }>(`/admin/metrics/funil?dias=${dias}`, { token });

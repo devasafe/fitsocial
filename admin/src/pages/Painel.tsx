@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { buscarPanorama, type Panorama } from "../api";
+import { buscarPanorama, buscarFunil, type Panorama, type DegrauDoFunil } from "../api";
 import { Cartao } from "../components/Cartao";
 import { GraficoBarras, GraficoLinhas } from "../components/Grafico";
 import { MARCA } from "../marca";
@@ -40,6 +40,7 @@ const ORIGEM: Record<string, string> = {
 export function Painel({ token }: { token: string }) {
   const [dias, setDias] = useState(30);
   const [dados, setDados] = useState<Panorama | null>(null);
+  const [funil, setFunil] = useState<DegrauDoFunil[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +49,11 @@ export function Painel({ token }: { token: string }) {
     buscarPanorama(token, dias)
       .then((r) => ativo && setDados(r.data))
       .catch((e: Error) => ativo && setErro(e.message));
+    // O funil falha em silêncio de propósito: ele é a seção mais nova, e uma
+    // API que ainda não a conhece não pode derrubar o painel inteiro.
+    buscarFunil(token, dias)
+      .then((r) => ativo && setFunil(r.data.degraus))
+      .catch(() => ativo && setFunil(null));
     return () => {
       ativo = false;
     };
@@ -206,6 +212,59 @@ export function Painel({ token }: { token: string }) {
                   há pouco não entra na conta — não deu tempo de voltar.
                 </p>
               </div>
+            </div>
+          </section>
+
+          <section className="secao">
+            <h2>Onde as pessoas param</h2>
+            <div className="painel">
+              {!funil || funil[0]?.pessoas === 0 ? (
+                <p className="vazio">
+                  Ainda não há percurso registrado nesta janela. Ele começa a aparecer
+                  conforme as pessoas usam a versão nova do app.
+                </p>
+              ) : (
+                <>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Passo</th>
+                        <th className="dir">Pessoas</th>
+                        <th className="dir">Do total</th>
+                        <th className="dir">Do passo anterior</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {funil.map((d) => (
+                        <tr key={d.nome}>
+                          <td>
+                            {d.rotulo}
+                            <div
+                              aria-hidden
+                              style={{
+                                marginTop: 6,
+                                height: 6,
+                                width: `${Math.max(d.doTotal, 1)}%`,
+                                background: "var(--lime)",
+                                borderRadius: 3,
+                                opacity: 0.85,
+                              }}
+                            />
+                          </td>
+                          <td className="dir num">{nf.format(d.pessoas)}</td>
+                          <td className="dir num">{d.doTotal}%</td>
+                          <td className="dir num">{d.doPasso}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="aviso" style={{ marginTop: 14, marginBottom: 0 }}>
+                    A coluna que importa é a última: ela mostra quanto se perde de um passo
+                    para o seguinte. Só conta quem criou a conta dentro da janela, e cada
+                    pessoa aparece uma vez por passo — não uma vez por visita.
+                  </p>
+                </>
+              )}
             </div>
           </section>
 
