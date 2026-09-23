@@ -22,6 +22,7 @@ import { readStateRouter } from "./routes/readState.js";
 import { pushRouter } from "./routes/push.js";
 import { checkinsRouter } from "./routes/checkins.js";
 import { gamificationRouter } from "./routes/gamification.js";
+import { eventosRouter } from "./routes/eventos.js";
 import { coachRouter } from "./routes/coach.js";
 import { billingRouter, webhookRouter } from "./routes/billing.js";
 import { exerciseVideosRouter } from "./routes/exerciseVideos.js";
@@ -76,6 +77,7 @@ export function createApp() {
   app.use("/push", pushRouter);
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
+  app.use("/events", eventosRouter);
   app.use("/coach", coachRouter);
   app.use("/billing", billingRouter);
   app.use("/exercise-videos", exerciseVideosRouter);

@@ -93,3 +93,46 @@ describe("Métricas do painel", () => {
     expect((await request(app).get("/admin/metrics/overview")).status).toBe(401);
   });
 });
+
+describe("Funil de percurso", () => {
+  it("devolve os degraus com a taxa de passagem já calculada", async () => {
+    const t = await admin();
+    const ana = await registrar("ana@teste.com");
+    await registrar("bruno@teste.com");
+
+    // Só a Ana chega a salvar treino: o degrau perde as outras contas.
+    await request(app)
+      .post("/events")
+      .set(auth(ana.token))
+      .send({ eventos: [{ nome: "home_viu" }, { nome: "treino_salvo" }] });
+
+    const r = await request(app).get("/admin/metrics/funil?dias=30").set(auth(t));
+
+    expect(r.status).toBe(200);
+    const degraus = r.body.data.degraus as {
+      nome: string;
+      rotulo: string;
+      pessoas: number;
+      doTotal: number;
+      doPasso: number;
+    }[];
+
+    const home = degraus.find((d) => d.nome === "home_viu")!;
+    const treino = degraus.find((d) => d.nome === "treino_salvo")!;
+
+    expect(home.pessoas).toBe(1);
+    expect(treino.pessoas).toBe(1);
+    // Quem chegou na Home salvou treino: a passagem DESTE degrau é inteira,
+    // mesmo com a taxa sobre o total sendo baixa. É essa diferença entre as
+    // duas que mostra onde o funil vaza.
+    expect(treino.doPasso).toBe(100);
+    expect(treino.doTotal).toBeLessThan(100);
+    expect(r.body.meta.dias).toBe(30);
+  });
+
+  it("não deixa usuário comum ver o funil", async () => {
+    const comum = await registrar("comum2@teste.com");
+    const r = await request(app).get("/admin/metrics/funil").set(auth(comum.token));
+    expect(r.status).toBe(403);
+  });
+});
