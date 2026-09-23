@@ -22,7 +22,12 @@ import mongoose, { Schema, type InferSchemaType, type HydratedDocument } from "m
 export const EVENTOS_CONHECIDOS = [
   // Entrada — o degrau onde hoje se perde a maior parte das pessoas.
   "onboarding_abriu",
+  // Fechou o app ou voltou, sem terminar.
   "onboarding_saiu",
+  // Escolheu "agora não" e foi ver o app. É diferente de sair: aqui a pessoa
+  // continuou dentro do produto, e a distância entre os dois diz se a saída
+  // está sendo usada como alívio ou como fuga.
+  "onboarding_adiou",
   "onboarding_concluiu",
   "home_viu",
   // Registro do treino.
