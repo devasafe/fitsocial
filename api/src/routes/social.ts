@@ -112,7 +112,7 @@ function serializePost(
     },
     // Resumo da atividade vinculada (quando o post é um compartilhamento e a
     // query populou `activity`) — hoje carrega os movimentos do WOD para o card.
-    activity: activitySummary(post),
+    activity: activitySummary(post.activity),
   };
 }
 
@@ -183,10 +183,12 @@ const MAX_MUSCULOS_NO_TITULO = 3;
  * Os PNGs da versão anterior ficam órfãos no storage: é o preço de não servir
  * imagem desatualizada, e é uma limpeza de ops, não de código.
  */
-// 3: o selo de recorde. Subir este numero e o que aposenta os PNGs ja
-// montados — sem isso, quem ja compartilhou continuaria recebendo o desenho
-// velho para sempre, do cache em `post.cartoes`.
-const VERSAO_DO_CARTAO = 3;
+// 3: o selo de recorde.
+// 4: a marca passou a trazer o endereco do app junto do nome.
+// Subir este numero e o que aposenta os PNGs ja montados — sem isso, quem ja
+// compartilhou continuaria recebendo o desenho velho para sempre, do cache em
+// `post.cartoes` (e agora tambem em `activity.cartoes`).
+const VERSAO_DO_CARTAO = 4;
 
 /**
  * "NOVO RECORDE · SUPINO RETO", quando o treino bateu um.
@@ -239,8 +241,7 @@ function comMusculos(a: {
 }
 
 // Resumo do treino para o card do feed — genérico por kind (title + stats + movimentos do WOD).
-function activitySummary(post: InstanceType<typeof Post>) {
-  const act = post.activity as unknown;
+function activitySummary(act: unknown) {
   if (!act || typeof act !== "object" || !("kind" in act)) return null;
   const a = act as PopulatedActivity;
   const pl = a.payload ?? {};
@@ -481,7 +482,7 @@ socialRouter.post(
       throw new HttpError(403, "Só dá para compartilhar o seu próprio post");
     }
 
-    const resumo = activitySummary(post);
+    const resumo = activitySummary(post.activity);
 
     // A foto vem do próprio storage do app; sem ela o cartão é só os números.
     let foto: Buffer | null = null;
@@ -538,6 +539,83 @@ socialRouter.post(
     // Guarda a URL COMO VEIO do storage: `toAbsoluto` depende do host da
     // requisição, e gravar isso fixaria o domínio de hoje dentro do banco.
     await Post.updateOne({ _id: post._id }, { $set: { [`cartoes.${chave}`]: salvo.url } });
+
+    res.json({ url: toAbsoluto(req, salvo.url), formato, layout });
+  })
+);
+
+/**
+ * O cartão do treino, SEM precisar publicar no feed.
+ *
+ * A rota irmã (`/posts/:id/cartao`) exige um post, e isso amarrava duas
+ * decisões que não são a mesma: publicar dentro do app e publicar no Instagram.
+ * Quem não quisesse a primeira não conseguia a segunda — e a segunda é a que
+ * funciona com base pequena, porque a audiência é a que a pessoa já tem lá
+ * fora, não o feed daqui.
+ *
+ * Sem post não há foto, então o desenho cai no layout que vive só de
+ * tipografia. O resto — resumo, selo de recorde, percurso, cache por versão —
+ * é exatamente o mesmo da outra rota, de propósito: dois cartões diferentes
+ * para o mesmo treino seria o pior resultado possível.
+ */
+socialRouter.post(
+  "/activities/:id/cartao",
+  rateLimit({ windowMs: 60_000, max: 12, name: "cartao-treino" }),
+  asyncHandler(async (req, res) => {
+    assertObjectId(req.params.id);
+    const formato: Formato = req.query.formato === "feed" ? "feed" : "story";
+
+    const atividade = await Activity.findById(req.params.id);
+    if (!atividade) throw new HttpError(404, "Treino não encontrado");
+    // O cartão leva o nome de quem treinou: gerar o de outra pessoa seria
+    // assinar por ela.
+    if (!atividade.user.equals(req.user!._id)) {
+      throw new HttpError(403, "Só dá para compartilhar o seu próprio treino");
+    }
+
+    // Sem foto, `layoutEfetivo` já resolve para o desenho tipográfico.
+    const layout = layoutEfetivo("foto", false);
+    const chave = `${formato}:${layout}:${VERSAO_DO_CARTAO}`;
+
+    const emCache = atividade.cartoes?.get(chave);
+    if (emCache) {
+      res.json({ url: toAbsoluto(req, emCache), formato, layout });
+      return;
+    }
+
+    const resumo = activitySummary(atividade);
+    const percurso = Array.isArray((atividade.payload as { points?: unknown })?.points)
+      ? ((atividade.payload as { points: { lat: number; lng: number }[] }).points)
+      : null;
+
+    const png = await montarCartao(
+      {
+        foto: null,
+        titulo: resumo?.title ?? "",
+        stats: resumo?.stats ?? [],
+        movimentos: movimentosDoCartao(
+          atividade.kind,
+          atividade.payload as Record<string, unknown> | undefined
+        ),
+        cor: (resumo && getSport(resumo.sportId)?.color) || "#3BCC06",
+        percurso,
+        autor: req.user!.name,
+        selo: seloDoRecorde(atividade.metrics),
+      },
+      formato,
+      layout
+    );
+
+    const salvo = await getStorageProvider().save({
+      buffer: png,
+      contentType: "image/png",
+      ext: ".png",
+    });
+
+    await Activity.updateOne(
+      { _id: atividade._id },
+      { $set: { [`cartoes.${chave}`]: salvo.url } }
+    );
 
     res.json({ url: toAbsoluto(req, salvo.url), formato, layout });
   })

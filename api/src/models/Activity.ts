@@ -170,6 +170,19 @@ const activitySchema = new Schema(
     clientKey: { type: String, default: undefined },
     /** Resumo estável do conteúdo — ver `services/impressaoDoTreino.ts`. */
     impressao: { type: String, default: undefined },
+    /**
+     * Cartões de compartilhar já montados, por "formato:layout:versão".
+     *
+     * Espelha `Post.cartoes` pelo mesmo motivo: montar custa um
+     * redimensionamento e uma escrita permanente no storage, e olhar a prévia
+     * antes de postar é o uso esperado — sem cache, cada olhada deixa um PNG
+     * órfão para sempre.
+     *
+     * Existe aqui, e não só no post, porque o cartão passou a poder nascer de
+     * um treino que nunca virou post: publicar no feed do app e publicar no
+     * Story do Instagram deixaram de ser a mesma decisão.
+     */
+    cartoes: { type: Map, of: String, default: undefined },
   },
   { timestamps: true }
 );
