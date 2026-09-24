@@ -8,6 +8,7 @@ import { apiFetch } from "./client";
 export type NomeDeEvento =
   | "onboarding_abriu"
   | "onboarding_saiu"
+  | "onboarding_adiou"
   | "onboarding_concluiu"
   | "home_viu"
   | "registrar_abriu"

@@ -121,6 +121,10 @@ export function EditarFichaScreen() {
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // Diferente de erro: aqui não houve falha nenhuma, a pessoa só ainda não
+  // preencheu. Virou caso comum desde que o formulário deixou de ser obrigatório
+  // para entrar no app — antes disso, chegar aqui sem ficha era impossível.
+  const [semFicha, setSemFicha] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -158,7 +162,8 @@ export function EditarFichaScreen() {
       setInjuries(data.injuriesConditions.join(", "));
       setNotes(data.notes);
     } catch (err) {
-      setErro((err as Error).message);
+      if (err instanceof ApiHttpError && err.status === 404) setSemFicha(true);
+      else setErro((err as Error).message);
     } finally {
       setCarregando(false);
     }
@@ -234,6 +239,24 @@ export function EditarFichaScreen() {
     return (
       <Screen underHeader style={{ alignItems: "center", justifyContent: "center" }}>
         <ActivityIndicator color={colors.lime} />
+      </Screen>
+    );
+  }
+
+  if (semFicha) {
+    return (
+      <Screen underHeader contentStyle={{ gap: spacing.md }}>
+        <Txt variant="titleScreen">Sua ficha</Txt>
+        <Txt variant="body" color={colors.text2}>
+          Você ainda não preencheu. É ela que o coach usa para montar seu treino e sua
+          dieta — e dá para continuar usando o app sem ela.
+        </Txt>
+        <Button
+          title="Preencher agora"
+          onPress={() => nav.navigate("Onboarding", { pedido: true })}
+          size="lg"
+          glow
+        />
       </Screen>
     );
   }

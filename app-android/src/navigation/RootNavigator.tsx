@@ -239,11 +239,23 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
       {/* Fora do Navigator seria cedo demais: o componente navega, e navegar
           exige que a árvore de rotas já exista. */}
       <ConviteDoLink ativo={!needsOnboarding} />
-      <AppStack.Navigator screenOptions={{ headerShown: false, ...transicaoDeTela }}>
-      {needsOnboarding ? (
-        <AppStack.Screen name="Onboarding" component={OnboardingForm} />
-      ) : (
+      {/* O onboarding é a primeira tela de quem acabou de entrar, e NÃO é mais a
+          única: até 23/09/2026 este navegador registrava só a rota `Onboarding`
+          enquanto a ficha não estivesse preenchida, sem pular e sem logout.
+          Quem tinha sido convidado por alguém — e não estava ali por vontade
+          própria — batia numa parede de oito perguntas antes de ver um pixel do
+          app, e a maioria não atravessava.
+
+          Agora a rota inicial muda, mas todas as outras existem desde o começo:
+          o formulário continua sendo o caminho oferecido, e deixou de ser cela.
+          Como a árvore não se reconstrói mais ao concluir, quem termina o
+          formulário precisa navegar por conta própria — ver `OnboardingForm`. */}
+      <AppStack.Navigator
+        initialRouteName={needsOnboarding ? "Onboarding" : "Tabs"}
+        screenOptions={{ headerShown: false, ...transicaoDeTela }}
+      >
         <>
+          <AppStack.Screen name="Onboarding" component={OnboardingForm} />
           <AppStack.Screen name="Tabs" component={MainTabs} />
           <AppStack.Screen
             name="Registrar"
@@ -478,7 +490,6 @@ function AppFlow({ needsOnboarding }: { needsOnboarding: boolean }) {
             options={{ ...transicaoDeFolha, headerShown: true, title: "Buscar pessoas", ...headerStyle }}
           />
         </>
-      )}
       </AppStack.Navigator>
     </>
   );

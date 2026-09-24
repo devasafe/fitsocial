@@ -2,8 +2,12 @@
 // campos certos rapidinho. Gera a mesma ficha que o coach usa pra montar o plano.
 import React, { useState, useEffect, useRef } from "react";
 import { View, TextInput } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { notify } from "../lib/notify";
 import { registrarEvento } from "../lib/eventos";
+import type { AppStackParams } from "../navigation/types";
 import { useAuth } from "../context/AuthContext";
 import { Txt, Screen, Button, Chip } from "../components/ui";
 import { submitProfile, type ProfileForm } from "../api/onboarding";
@@ -85,8 +89,30 @@ function splitList(s: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Onde o que foi digitado fica enquanto a pessoa não termina.
+ *
+ * Sem isto, fechar o app no meio do formulário apagava tudo: na volta, os oito
+ * campos estavam em branco de novo. Quem já tinha desistido uma vez não
+ * recomeça do zero uma segunda.
+ */
+const RASCUNHO = "fitsocial.onboarding.rascunho";
+
+/**
+ * Marca que a pessoa já disse "agora não".
+ *
+ * Sem isto, ela era recebida por esta mesma tela em TODA abertura do app: a
+ * saída existia, mas ter de usá-la toda vez é a parede de novo, só que com
+ * porta. Quem recusou uma vez chega direto na Home; o formulário continua a um
+ * toque de distância, pelos caminhos que a Home e as Configurações oferecem.
+ */
+const ADIADO = "fitsocial.onboarding.adiado";
+
 export function OnboardingForm() {
-  const { token, refreshUser } = useAuth();
+  const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
+  const rota = useRoute<RouteProp<AppStackParams, "Onboarding">>();
+  const pedido = rota.params?.pedido === true;
+  const { token, user, refreshUser } = useAuth();
   const [goal, setGoal] = useState<Goal | null>(null);
   const [sex, setSex] = useState<Sex | null>(null);
   const [level, setLevel] = useState<Level | null>(null);
@@ -108,11 +134,69 @@ export function OnboardingForm() {
     + [age, height, weight].filter((v) => v.trim() !== "").length;
 
   const concluiu = useRef(false);
+  const [carregando, setCarregando] = useState(true);
 
-  // Esta tela é a parede do app: enquanto ela não termina, o RootNavigator não
-  // registra nenhuma outra rota. Saber QUANTOS campos a pessoa preencheu antes
-  // de desistir é o dado que diz se o formulário é longo demais ou se ela nem
-  // começou.
+  // Volta o que ficou pela metade na última vez.
+  useEffect(() => {
+    (async () => {
+      try {
+        const cru = await AsyncStorage.getItem(RASCUNHO);
+        if (cru) {
+          const r = JSON.parse(cru) as Record<string, unknown>;
+          if (r.goal) setGoal(r.goal as Goal);
+          if (r.sex) setSex(r.sex as Sex);
+          if (r.level) setLevel(r.level as Level);
+          if (typeof r.age === "string") setAge(r.age);
+          if (typeof r.height === "string") setHeight(r.height);
+          if (typeof r.weight === "string") setWeight(r.weight);
+          if (typeof r.days === "number") setDays(r.days);
+          if (typeof r.minutes === "number") setMinutes(r.minutes);
+          if (typeof r.diet === "string") setDiet(r.diet);
+          if (typeof r.injuries === "string") setInjuries(r.injuries);
+        }
+      } catch {
+        // Rascunho corrompido é rascunho perdido, e só isso: o formulário abre
+        // vazio, como abria antes de existir rascunho nenhum.
+      } finally {
+        setCarregando(false);
+      }
+    })();
+  }, []);
+
+  // Guarda a cada mudança. Só depois de carregar, senão o estado inicial vazio
+  // sobrescreveria o rascunho que acabou de ser lido.
+  useEffect(() => {
+    if (carregando) return;
+    void AsyncStorage.setItem(
+      RASCUNHO,
+      JSON.stringify({ goal, sex, level, age, height, weight, days, minutes, diet, injuries })
+    ).catch(() => {});
+  }, [carregando, goal, sex, level, age, height, weight, days, minutes, diet, injuries]);
+
+  // Rede de segurança da mudança de 23/09/2026.
+  //
+  // `initialRouteName` só é lido quando o navegador MONTA. Enquanto esta tela
+  // era a única rota registrada, a árvore se reconstruía sozinha assim que a
+  // ficha existia e ninguém precisava sair daqui. Agora, se por qualquer motivo
+  // alguém com a ficha pronta cair nesta tela — dados chegando fora de ordem no
+  // boot, ficha preenchida em outro aparelho — nada a tiraria daqui.
+  useEffect(() => {
+    if (user?.onboardingComplete) {
+      nav.replace("Tabs");
+      return;
+    }
+    // Quem já recusou não é recebido por esta tela de novo — mas continua
+    // podendo ENTRAR nela quando quiser, e é isso que `pedido` protege.
+    if (pedido) return;
+    void AsyncStorage.getItem(ADIADO)
+      .then((v) => {
+        if (v === "1") nav.replace("Tabs");
+      })
+      .catch(() => {});
+  }, [user?.onboardingComplete, nav, pedido]);
+
+  // Saber QUANTOS campos a pessoa preencheu antes de desistir é o dado que diz
+  // se o formulário é longo demais ou se ela nem começou.
   useEffect(() => {
     registrarEvento("onboarding_abriu");
     return () => {
@@ -151,7 +235,14 @@ export function OnboardingForm() {
       });
       concluiu.current = true;
       registrarEvento("onboarding_concluiu");
-      await refreshUser(); // libera o app (RootNavigator vai pras Tabs)
+      await AsyncStorage.removeItem(RASCUNHO).catch(() => {});
+      await AsyncStorage.removeItem(ADIADO).catch(() => {});
+      await refreshUser();
+      // Navegar aqui virou obrigação: antes, `refreshUser` trocava a árvore de
+      // rotas e isto acontecia sozinho. Agora as rotas existem desde o começo,
+      // então ninguém sai desta tela por nós. `replace` para o formulário não
+      // ficar no histórico — ele já cumpriu o que tinha para cumprir.
+      nav.replace("Tabs");
     } catch (err) {
       notify("Não deu para salvar", (err as Error).message);
     } finally {
@@ -164,7 +255,8 @@ export function OnboardingForm() {
       <View>
         <Txt variant="titleScreen">Vamos montar seu perfil</Txt>
         <Txt variant="body" color={colors.text2} style={{ marginTop: spacing.xs }}>
-          Leva 1 minuto. O coach usa isso pra criar seu treino e sua dieta.
+          Leva 1 minuto, e o coach usa isso pra criar seu treino e sua dieta. Dá para
+          deixar pra depois — o que você preencher fica salvo.
         </Txt>
       </View>
 
@@ -231,6 +323,21 @@ export function OnboardingForm() {
       </View>
 
       <Button title="Criar meu perfil" onPress={save} loading={saving} size="lg" glow />
+
+      {/* A saída. Ela é o ponto desta mudança inteira: o plano do coach é UM dos
+          caminhos do app, e quem ainda não quer responder oito perguntas também
+          tem o que fazer aqui — registrar o treino que acabou de fazer, por
+          exemplo. O que estiver preenchido fica guardado para a volta. */}
+      <Button
+        title="Agora não, quero ver o app"
+        variant="ghost"
+        onPress={() => {
+          registrarEvento("onboarding_adiou", { campos: preenchidos.current });
+          void AsyncStorage.setItem(ADIADO, "1").catch(() => {});
+          nav.replace("Tabs");
+        }}
+      />
+
       <Txt variant="caption" color={colors.text3} style={{ textAlign: "center", marginBottom: spacing.lg }}>
         As sugestões do coach não substituem profissional de saúde.
       </Txt>
