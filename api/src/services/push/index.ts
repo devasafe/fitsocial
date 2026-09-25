@@ -25,19 +25,41 @@ type Id = mongoose.Types.ObjectId;
  *   profissional que a pessoa contratou ou que a acompanha — se um push vale
  *   interromper alguém, é este. Guardar seria pior que interromper.
  */
-export type AssuntoDePush = "comment" | "posts_novos" | "mensagem_pro";
+export type AssuntoDePush =
+  | "comment"
+  | "posts_novos"
+  | "mensagem_pro"
+  // Curtida e seguidor novo entraram em 25/09/2026. Ficavam de fora com o
+  // argumento de serem frequentes e pouco acionáveis — verdadeiro num app
+  // cheio. Aqui o problema é o oposto: a recompensa social morre dentro do app
+  // e ninguém volta por ela. A janela larga é o que segura o excesso.
+  | "like"
+  | "follow"
+  // O único push que não vem de outra pessoa: o app lembrando que há uma
+  // sequência viva e o dia acabando. Entra porque é acionável e tem prazo —
+  // avisar depois da meia-noite não serviria para nada.
+  | "sequencia_em_risco";
 
 /** Uma interrupção por dia por assunto já é bastante. */
 const JANELA_MS: Record<AssuntoDePush, number> = {
   // Comentário é conversa: segurar seria pior que interromper.
   comment: 0,
   posts_novos: 6 * 60 * 60 * 1000,
+  // Uma vez por dia, e olhe lá. Duas cobranças no mesmo dia não trazem
+  // ninguém de volta — desligam o aviso.
+  sequencia_em_risco: 20 * 60 * 60 * 1000,
+  // Curtida é o evento mais frequente do app: sem janela larga, dez curtidas
+  // num post viram dez interrupções e a pessoa desliga tudo.
+  like: 4 * 60 * 60 * 1000,
+  // Seguidor novo é raro e sempre bem-vindo; mesmo assim, uma janela curta
+  // evita virar enxurrada no dia em que alguém divulgar o perfil.
+  follow: 60 * 60 * 1000,
   // Conversa também, e mais direta ainda: alguém escreveu para ESTA pessoa.
   mensagem_pro: 0,
 };
 
 /** Qual chave das preferências manda em cada assunto. */
-const PREFERENCIA: Record<AssuntoDePush, "interacoes" | "novosPosts"> = {
+const PREFERENCIA: Record<AssuntoDePush, "interacoes" | "novosPosts" | "sistema"> = {
   comment: "interacoes",
   posts_novos: "novosPosts",
   // Sob "interações", e não numa chave própria: quem silencia interação está
@@ -45,6 +67,11 @@ const PREFERENCIA: Record<AssuntoDePush, "interacoes" | "novosPosts"> = {
   // também. A mensagem continua chegando na Home e na lista de conversas — o
   // que o push faz é só antecipar.
   mensagem_pro: "interacoes",
+  // Sob "sistema": quem desliga os avisos do app está dizendo exatamente que
+  // não quer ser cobrado por ele. Não cabe em "interações", que é sobre gente.
+  sequencia_em_risco: "sistema",
+  like: "interacoes",
+  follow: "interacoes",
 };
 
 /** Fan-out máximo por publicação. Acima disto o push vira trabalho de worker. */

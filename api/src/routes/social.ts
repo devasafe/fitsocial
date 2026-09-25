@@ -740,6 +740,20 @@ socialRouter.post(
         targetKind: "post",
         targetId: post._id,
       });
+
+      // A guarda de autor precisa estar AQUI: `createNotification` já ignora
+      // quem age sobre o próprio conteúdo, e o push não passa por ele — sem
+      // isto, curtir o próprio treino acorda você mesmo.
+      //
+      // A janela em `push/index.ts` é o que impede dez curtidas num post de
+      // virarem dez interrupções.
+      if (!post.author.equals(req.user!._id)) {
+        void enviarPush(post.author, "like", {
+          title: `${req.user!.name} curtiu seu treino`,
+          body: "Toque para ver.",
+          data: { tela: "post", postId: post._id.toString() },
+        }).catch(() => {});
+      }
     }
     res.json({ liked: true, likeCount: post.likeCount });
   })
@@ -788,6 +802,12 @@ socialRouter.post(
         targetKind: "profile",
         targetId: req.user!._id,
       });
+
+      void enviarPush(target._id, "follow", {
+        title: `${req.user!.name} começou a te seguir`,
+        body: "Toque para ver o perfil.",
+        data: { tela: "perfil", userId: req.user!._id.toString() },
+      }).catch(() => {});
     }
     res.json({ following: true });
   })
