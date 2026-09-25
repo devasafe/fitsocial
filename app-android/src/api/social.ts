@@ -118,6 +118,27 @@ export type FormatoDoCartao = "story" | "feed";
 export const LAYOUTS_DO_CARTAO = ["foto", "ficha", "cartao", "numeros"] as const;
 export type LayoutDoCartao = (typeof LAYOUTS_DO_CARTAO)[number];
 
+/**
+ * O cartão de um TREINO, sem exigir que ele tenha virado post.
+ *
+ * Irmã de `gerarCartao`, que parte de um post. A separação existe porque
+ * publicar no feed do app e publicar no Story do Instagram deixaram de ser a
+ * mesma decisão — e a segunda é a que funciona com base pequena.
+ *
+ * Sem post não há foto, então o servidor devolve sempre o layout tipográfico:
+ * não há o que escolher, e por isso esta chamada não recebe `layout`.
+ */
+export function gerarCartaoDoTreino(
+  token: string,
+  activityId: string,
+  formato: FormatoDoCartao = "story"
+) {
+  return apiFetch<{ url: string; formato: FormatoDoCartao; layout: LayoutDoCartao }>(
+    `/social/activities/${activityId}/cartao?formato=${formato}`,
+    { method: "POST", token }
+  );
+}
+
 export function gerarCartao(
   token: string,
   postId: string,

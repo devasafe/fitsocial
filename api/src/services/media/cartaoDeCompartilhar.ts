@@ -394,8 +394,22 @@ function selo(opts: {
   };
 }
 
+/**
+ * A assinatura do cartão — nome do app e ONDE achá-lo.
+ *
+ * O domínio entrou em 24/09/2026. Antes havia só o nome, com o comentário de
+ * que "quem posta é a pessoa, não o app" — uma decisão defensável para produto
+ * maduro e exatamente errada para um sem usuários: o cartão é a única peça que
+ * sai daqui e é vista por gente de fora, e sem endereço ninguém consegue chegar
+ * mesmo querendo.
+ *
+ * Numa linha só, e não em duas, porque `base` é o topo do texto em três
+ * layouts e o RODAPÉ em outro: uma segunda linha abaixo sairia da imagem
+ * justamente nesse.
+ */
 function marca(x: number, base: number, tamanho: number, cor = CORES.lime): string {
-  return textoEmVetor(escapar(env.appName), {
+  const dominio = env.appPublicUrl.replace(/^https?:\/\//, "");
+  return textoEmVetor(escapar(`${env.appName} · ${dominio}`), {
     x,
     y: base,
     fonte: "corpoForte",

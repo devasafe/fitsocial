@@ -24,6 +24,9 @@ import { registrarEvento } from "../lib/eventos";
 import { SalvarNoPlano } from "../components/SalvarNoPlano";
 import { useAuth } from "../context/AuthContext";
 import { getTreinoDeHoje } from "../api/plans";
+import { notify } from "../lib/notify";
+import { gerarCartaoDoTreino } from "../api/social";
+import { abrirStoryDoInstagram, abrirBandeja } from "../lib/compartilhar";
 import { sportLabel } from "../lib/sportLabel";
 import { duracao, numero, ritmo, tituloDoTreino } from "../lib/formatoDeTreino";
 import { colors, radius, spacing, sportColor } from "../theme";
@@ -87,6 +90,7 @@ export function TreinoConcluidoScreen({ route, navigation }: Props) {
   const { fontScale } = useWindowDimensions();
   const { token } = useAuth();
   const perguntarPrivacidade = usePerguntaDePrivacidade();
+  const [montandoCartao, setMontandoCartao] = useState(false);
 
   // O fim do caminho dentro do app, e o começo do caminho para fora dele: a
   // distância entre este evento e `compartilhar_tocou` é a taxa que diz se a
@@ -147,8 +151,39 @@ export function TreinoConcluidoScreen({ route, navigation }: Props) {
     perguntarPrivacidade();
   }, [navigation, perguntarPrivacidade]);
 
+  /**
+   * Do treino direto para o Story, em dois toques.
+   *
+   * Antes o caminho até aqui passava obrigatoriamente por publicar um post no
+   * feed do app, abrir esse post e só então compartilhar: seis toques, e uma
+   * publicação interna que nem todo mundo quer fazer. São coisas diferentes —
+   * o feed daqui depende de o app estar cheio; o Story usa a audiência que a
+   * pessoa já tem lá fora.
+   */
+  async function irParaOStory() {
+    if (montandoCartao) return;
+    setMontandoCartao(true);
+    registrarEvento("compartilhar_tocou", { kind: activity.kind, destino: "story" });
+    try {
+      const { url } = await gerarCartaoDoTreino(token!, activity.id);
+      registrarEvento("card_gerado", { formato: "story", origem: "treino" });
+
+      // Story primeiro; sem Instagram instalado, a bandeja do sistema resolve
+      // em vez de a pessoa tocar e nada acontecer.
+      const foi = await abrirStoryDoInstagram(url);
+      if (!foi) await abrirBandeja(url);
+      registrarEvento("story_abriu", { formato: "story", instagram: foi });
+
+      perguntarPrivacidade();
+    } catch (err) {
+      notify("Não deu para montar o cartão", (err as Error).message);
+    } finally {
+      setMontandoCartao(false);
+    }
+  }
+
   function compartilhar() {
-    registrarEvento("compartilhar_tocou", { kind: activity.kind });
+    registrarEvento("compartilhar_tocou", { kind: activity.kind, destino: "feed" });
     navigation.navigate("CreatePost", { activity, newPRs: newPRs ?? [] });
     perguntarPrivacidade();
   }
@@ -257,12 +292,27 @@ export function TreinoConcluidoScreen({ route, navigation }: Props) {
           gap: spacing.sm,
         }}
       >
-        <Txt variant="titleCard">Compartilhar no feed?</Txt>
+        <Txt variant="titleCard">Mostrar pra alguém?</Txt>
         <Txt variant="body" color={colors.text2} style={{ marginBottom: spacing.sm }}>
           Seu treino já está salvo. Compartilhar é opcional — dá para fazer isso depois, pelo
           treino em Minhas atividades.
         </Txt>
-        <Button title="Compartilhar no feed" onPress={compartilhar} size="lg" glow />
+        {/* O Story é a ação principal, e o feed vem abaixo: o feed daqui só
+            funciona com o app cheio, enquanto lá fora a pessoa já tem quem a
+            acompanhe hoje. Continua sendo UMA ação preenchida. */}
+        <Button
+          title="Story do Instagram"
+          onPress={() => void irParaOStory()}
+          loading={montandoCartao}
+          size="lg"
+          glow
+        />
+        <Button
+          title="Compartilhar no feed"
+          variant="secondary"
+          onPress={compartilhar}
+          disabled={montandoCartao}
+        />
 
         {salvoNoPlano !== null ? (
           <View style={{ paddingVertical: spacing.sm }}>

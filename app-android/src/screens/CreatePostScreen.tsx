@@ -87,20 +87,36 @@ export function CreatePostScreen() {
     else nav.goBack();
   }
 
-  async function pickImage() {
-    // Em nativo, pede permissão da galeria (no web não é necessário).
+  /**
+   * A câmera entrou ao lado da galeria em 24/09/2026.
+   *
+   * Só havia galeria aqui, e quem acabou de treinar não tem a foto guardada —
+   * ela ainda não foi tirada. Pedir para sair do app, abrir a câmera e voltar é
+   * atrito no exato ponto em que a pessoa está mais disposta a publicar.
+   *
+   * No navegador a câmera não é oferecida: `launchCameraAsync` depende de
+   * módulo nativo, e a tela roda também em react-native-web.
+   */
+  async function pickImage(daCamera = false) {
+    // Em nativo, pede a permissão certa para cada origem (no web não é preciso).
     if (Platform.OS !== "web") {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const perm = daCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        notify("Permissão necessária", "Autorize o acesso às fotos para adicionar uma imagem.");
+        notify(
+          "Permissão necessária",
+          daCamera
+            ? "Autorize a câmera para tirar a foto do treino."
+            : "Autorize o acesso às fotos para adicionar uma imagem."
+        );
         return;
       }
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.7,
-    });
+    const result = daCamera
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
     if (result.canceled) return;
 
     const asset = result.assets[0];
@@ -272,15 +288,38 @@ export function CreatePostScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.pickBtn} onPress={pickImage} disabled={uploading} activeOpacity={0.7}>
-            {uploading ? (
-              <ActivityIndicator color={colors.lime} />
-            ) : (
-              <Txt variant="bodyStrong" color={colors.text2}>
-                Adicionar foto
-              </Txt>
-            )}
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            {Platform.OS !== "web" ? (
+              <TouchableOpacity
+                style={[styles.pickBtn, { flex: 1 }]}
+                onPress={() => void pickImage(true)}
+                disabled={uploading}
+                activeOpacity={0.7}
+              >
+                {uploading ? (
+                  <ActivityIndicator color={colors.lime} />
+                ) : (
+                  <Txt variant="bodyStrong" color={colors.text2}>
+                    Tirar foto
+                  </Txt>
+                )}
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.pickBtn, { flex: 1 }]}
+              onPress={() => void pickImage(false)}
+              disabled={uploading}
+              activeOpacity={0.7}
+            >
+              {uploading && Platform.OS === "web" ? (
+                <ActivityIndicator color={colors.lime} />
+              ) : (
+                <Txt variant="bodyStrong" color={colors.text2}>
+                  {Platform.OS === "web" ? "Adicionar foto" : "Da galeria"}
+                </Txt>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
       </ScrollView>
