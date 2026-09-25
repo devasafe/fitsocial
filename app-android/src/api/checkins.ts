@@ -14,6 +14,9 @@ export interface CheckInStats {
   week: number;
   streak: number;
   lastCheckIn: string | null;
+  /** Campos novos: ausentes quando o app fala com um servidor mais antigo. */
+  melhorStreak?: number;
+  emRisco?: boolean;
 }
 
 export function createCheckIn(
