@@ -27,6 +27,7 @@ import { coachRouter } from "./routes/coach.js";
 import { billingRouter, webhookRouter } from "./routes/billing.js";
 import { exerciseVideosRouter } from "./routes/exerciseVideos.js";
 import { adminRouter } from "./routes/admin/index.js";
+import { lembretesRouter } from "./routes/lembretes.js";
 import { errorHandler } from "./middleware/error.js";
 
 /** Monta a aplicação Express (sem subir o servidor) — facilita os testes. */
@@ -78,6 +79,7 @@ export function createApp() {
   app.use("/checkins", checkinsRouter);
   app.use("/gamification", gamificationRouter);
   app.use("/events", eventosRouter);
+  app.use("/internal/lembretes", lembretesRouter);
   app.use("/coach", coachRouter);
   app.use("/billing", billingRouter);
   app.use("/exercise-videos", exerciseVideosRouter);
