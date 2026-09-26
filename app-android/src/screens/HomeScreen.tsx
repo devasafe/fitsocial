@@ -35,6 +35,7 @@ import {
   type TreinoDeHoje,
 } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
+import { getLeaderboard, type LeaderRow } from "../api/gamification";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { getWaterDay, addWater, type WaterDay } from "../api/water";
 import { coachLine } from "../lib/coachContext";
@@ -69,6 +70,7 @@ export function HomeScreen() {
   const [quickAdd, setQuickAdd] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [escolhendoProgramacao, setEscolhendoProgramacao] = useState(false);
+  const [ranking, setRanking] = useState<LeaderRow[] | null>(null);
   const [gerandoDieta, setGerandoDieta] = useState(false);
   // Onde o dedo tocou: é daí que a gota nasce. Sem isso ela viria do centro,
   // e o efeito perderia a ligação com a causa.
@@ -82,6 +84,19 @@ export function HomeScreen() {
   useEffect(() => {
     if (generating) setCenaDoPlano(true);
   }, [generating]);
+
+  // O ranking semanal existe desde sempre e vivia na terceira aba da Comunidade,
+  // que abre em "Explorar" — ou seja, praticamente ninguém via. Aqui ele é uma
+  // linha, não um cartão: é reforço, e não pode disputar com os compromissos do
+  // dia lá em cima.
+  //
+  // Falha calada: ranking é enfeite, e servidor antigo não tem a rota.
+  useEffect(() => {
+    if (!token) return;
+    getLeaderboard(token)
+      .then((r) => setRanking(r.leaderboard))
+      .catch(() => setRanking(null));
+  }, [token]);
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
   const programacao = user?.settings?.programacao ?? null;
@@ -653,15 +668,74 @@ export function HomeScreen() {
            A constância (streak/semana/total) descia para cá de propósito: é
            reforço de quem já fez, não o convite do dia — esse é o trio acima. */}
 
+      {/* Ranking da semana, em UMA linha.
+          Só aparece com pelo menos duas pessoas: "1º de 1" não é posição, é
+          uma piada — e é o que a maioria veria hoje, já que quase ninguém segue
+          ninguém. Quando a rede crescer, ele passa a valer sozinho. */}
+      {(() => {
+        if (!ranking || ranking.length < 2) return null;
+        const pos = ranking.findIndex((r) => r.isMe);
+        if (pos < 0) return null;
+        return (
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Leaderboard")}
+            activeOpacity={0.7}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingVertical: spacing.sm,
+              paddingHorizontal: spacing.md,
+              borderRadius: 16,
+              backgroundColor: colors.surface2,
+              borderWidth: 1,
+              borderColor: colors.line,
+            }}
+          >
+            <Txt variant="body" color={colors.text2}>
+              Ranking da semana
+            </Txt>
+            <Txt variant="bodyStrong" color={colors.lime}>
+              {pos + 1}º de {ranking.length}
+            </Txt>
+          </TouchableOpacity>
+        );
+      })()}
+
       {stats && (
         <View style={{ flexDirection: "row", gap: spacing.card }}>
-          <View style={{ flex: 1, borderRadius: 20, padding: spacing.md, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line }}>
+          {/* A sequência deixou de ser só um número em 25/09/2026.
+              - em risco: a borda acende e a legenda diz o que está em jogo. É o
+                único estado que cobra, e só aparece quando ainda dá para salvar
+                — quem já treinou hoje nunca vê isto.
+              - melhor marca: aparece quando a atual não é a maior. Serve para
+                dar o que reconquistar depois de perder; enquanto a atual É a
+                melhor, repetir o mesmo número duas vezes não informa nada. */}
+          <View
+            style={{
+              flex: 1,
+              borderRadius: 20,
+              padding: spacing.md,
+              backgroundColor: colors.surface2,
+              borderWidth: 1,
+              borderColor: stats.emRisco ? colors.lime : colors.line,
+            }}
+          >
             <Txt variant="metricLg" tabular color={colors.lime}>
               {stats.streak}
             </Txt>
             <Txt variant="label" color={colors.text2}>
               dias seguidos
             </Txt>
+            {stats.emRisco ? (
+              <Txt variant="caption" color={colors.lime} style={{ marginTop: 2 }}>
+                treine hoje para não zerar
+              </Txt>
+            ) : (stats.melhorStreak ?? 0) > stats.streak ? (
+              <Txt variant="caption" color={colors.text3} style={{ marginTop: 2 }}>
+                melhor: {stats.melhorStreak}
+              </Txt>
+            ) : null}
           </View>
           <MetricTile value={String(stats.week)} label="na semana" style={{ flex: 1 }} />
           <MetricTile value={String(stats.total)} label="no total" style={{ flex: 1 }} />

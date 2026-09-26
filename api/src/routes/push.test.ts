@@ -143,17 +143,61 @@ describe("O que interrompe e o que não interrompe", () => {
     expect(enviados[0].body).toBe("boa demais, qual foi a carga?");
   });
 
-  it("curtida NÃO vira push", async () => {
+  // DECISÃO REVERTIDA em 25/09/2026, a pedido do dono do produto.
+  //
+  // Curtida ficava fora do push desde o início, com o argumento — ainda válido
+  // em tese — de ser o evento mais frequente e menos acionável, o caminho mais
+  // curto para alguém desligar tudo. O que mudou foi o contexto: com 71 contas
+  // e 14 ativas, o problema não é excesso de aviso, é a recompensa social
+  // morrer dentro do app e ninguém voltar por ela.
+  //
+  // A janela é a proteção que sobra: uma curtida avisa, as seguintes ficam
+  // caladas por horas. Se a taxa de desligamento de avisos subir, isto aqui é o
+  // primeiro suspeito.
+  it("curtida vira push", async () => {
     const dono = await comAparelho("Dono");
     const post = (await request(app).post("/social/posts").set(auth(dono.token)).send({ text: "treino" })).body.post;
     const ana = await registrar("Ana");
 
     await request(app).post(`/social/posts/${post.id}/like`).set(auth(ana.token)).expect(200);
 
-    // É o evento mais frequente e o menos acionável: é por ele que as pessoas
-    // desligam tudo e nunca mais voltam.
-    await new Promise((r) => setTimeout(r, 150));
+    await vi.waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0].title).toContain("Ana");
+  });
+
+  it("a segunda curtida na mesma janela não acorda de novo", async () => {
+    const dono = await comAparelho("Dono");
+    const post = (await request(app).post("/social/posts").set(auth(dono.token)).send({ text: "treino" })).body.post;
+    const ana = await registrar("Ana");
+    const bruno = await registrar("Bruno");
+
+    await request(app).post(`/social/posts/${post.id}/like`).set(auth(ana.token)).expect(200);
+    await vi.waitFor(() => expect(enviados).toHaveLength(1));
+
+    await request(app).post(`/social/posts/${post.id}/like`).set(auth(bruno.token)).expect(200);
+
+    await new Promise((r) => setTimeout(r, 200));
+    expect(enviados).toHaveLength(1);
+  });
+
+  it("curtir o próprio post não te acorda", async () => {
+    const dono = await comAparelho("Dono");
+    const post = (await request(app).post("/social/posts").set(auth(dono.token)).send({ text: "treino" })).body.post;
+
+    await request(app).post(`/social/posts/${post.id}/like`).set(auth(dono.token)).expect(200);
+
+    await new Promise((r) => setTimeout(r, 200));
     expect(enviados).toHaveLength(0);
+  });
+
+  it("seguidor novo vira push", async () => {
+    const dono = await comAparelho("Dono");
+    const ana = await registrar("Ana");
+
+    await request(app).post(`/social/users/${dono.id}/follow`).set(auth(ana.token)).expect(200);
+
+    await vi.waitFor(() => expect(enviados).toHaveLength(1));
+    expect(enviados[0].title).toContain("Ana");
   });
 
   it("comentar no próprio post não te acorda", async () => {

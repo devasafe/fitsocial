@@ -105,6 +105,14 @@ export const env = {
    * qualquer um liberar acesso pago mandando um POST.
    */
   asaasWebhookToken: process.env.ASAAS_WEBHOOK_TOKEN ?? "",
+  /**
+   * Segredo do disparo de lembretes (ver `routes/lembretes.ts`).
+   *
+   * VAZIO DESLIGA A ROTA, e é o default de propósito: uma rota que dispara push
+   * para a base inteira não pode nascer aberta só porque alguém esqueceu de
+   * configurar. Quem quiser o lembrete noturno define a env e agenda a chamada.
+   */
+  lembretesToken: process.env.LEMBRETES_TOKEN ?? "",
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
   // O painel é uma segunda origem, então CORS_ORIGIN passou a aceitar lista
   // separada por vírgula. Uma origem só continua funcionando igual.
