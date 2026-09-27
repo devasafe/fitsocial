@@ -14,6 +14,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import { getComments, createComment, deleteComment, type Comment } from "../api/social";
 import { PostCard } from "../components/PostCard";
+import { CompartilharTreino } from "../components/CompartilharTreino";
 import { Avatar } from "../components/Avatar";
 import { Txt } from "../components/ui";
 import { colors, radius, spacing, type as typeScale } from "../theme";
@@ -41,7 +42,20 @@ export function PostDetailScreen() {
   const route = useRoute<RouteProp<AppStackParams, "PostDetail">>();
   const nav = useNavigation<NativeStackNavigationProp<AppStackParams>>();
   const { token, user } = useAuth();
-  const { post } = route.params;
+  const { post, recemPublicado } = route.params;
+
+  /**
+   * Publicou agora? A folha de compartilhar abre sozinha.
+   *
+   * Quem acabou de publicar já decidiu que quer mostrar — é o único instante em
+   * que oferecer o Story não é interrupção, é continuação. Num post antigo o
+   * mesmo comportamento seria um pop-up do nada, e por isso depende de
+   * `recemPublicado`, que só o compositor manda.
+   *
+   * Aqui o cartão sai MELHOR do que pelo atalho do treino concluído: o post tem
+   * foto, e com foto existem três desenhos possíveis em vez do tipográfico.
+   */
+  const [compartilhando, setCompartilhando] = useState(recemPublicado === true);
   /** O dono do post apaga qualquer comentário; cada um apaga o seu. */
   const souDonoDoPost = user?.id === post.author.id;
 
@@ -118,6 +132,13 @@ export function PostDetailScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      <CompartilharTreino
+        postId={post.id}
+        temFoto={Boolean(post.imageUrl)}
+        visivel={compartilhando}
+        aoFechar={() => setCompartilhando(false)}
+      />
+
       <FlatList
         data={comments}
         keyExtractor={(c) => c.id}
