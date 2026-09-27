@@ -195,6 +195,20 @@ export function getUserActivities(token: string, id: string, cursor?: string | n
   );
 }
 
+export interface Sugestao {
+  id: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string;
+  treinos: number;
+  /** Por que esta pessoa está sendo sugerida. Lista sem motivo é lista fria. */
+  motivo: string;
+}
+
+export function getSugestoes(token: string) {
+  return apiFetch<{ data: Sugestao[] }>("/social/sugestoes", { token });
+}
+
 export function followUser(token: string, id: string) {
   return apiFetch<{ following: boolean }>(`/social/users/${id}/follow`, {
     method: "POST",
