@@ -17,6 +17,7 @@ import { useAcoesDePost } from "../lib/acoesDePost";
 import { useContadores } from "../context/ContadoresContext";
 import { useMarcarAoVerNovos } from "../lib/marcarVisto";
 import { Txt, Button, ErrorState } from "../components/ui";
+import { QuemSeguir } from "../components/QuemSeguir";
 import { SkeletonCard } from "../components/Skeleton";
 import { colors, spacing } from "../theme";
 import type { AppStackParams } from "../navigation/types";
@@ -175,6 +176,11 @@ export function FeedScreen({
                 onPress={() => nav.navigate("CreatePost")}
                 style={styles.emptyBtn}
               />
+
+              {/* A sugestão entra AQUI, no vazio do "Seguindo": é onde a falta
+                  de gente para seguir é o próprio problema da tela. No
+                  "Explorar" ela não faz sentido — ali já se vê todo mundo. */}
+              {mode === "following" ? <QuemSeguir /> : null}
             </View>
           )
         }

@@ -36,6 +36,7 @@ import {
 } from "../api/plans";
 import { getCheckInStats, type CheckInStats } from "../api/checkins";
 import { getLeaderboard, type LeaderRow } from "../api/gamification";
+import { listMyChallenges, discoverChallenges, type Challenge } from "../api/challenges";
 import { getDay, type DaySummary } from "../api/nutrition";
 import { getWaterDay, addWater, type WaterDay } from "../api/water";
 import { coachLine } from "../lib/coachContext";
@@ -71,6 +72,7 @@ export function HomeScreen() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [escolhendoProgramacao, setEscolhendoProgramacao] = useState(false);
   const [ranking, setRanking] = useState<LeaderRow[] | null>(null);
+  const [desafioAberto, setDesafioAberto] = useState<Challenge | null>(null);
   const [gerandoDieta, setGerandoDieta] = useState(false);
   // Onde o dedo tocou: é daí que a gota nasce. Sem isso ela viria do centro,
   // e o efeito perderia a ligação com a causa.
@@ -96,6 +98,38 @@ export function HomeScreen() {
     getLeaderboard(token)
       .then((r) => setRanking(r.leaderboard))
       .catch(() => setRanking(null));
+  }, [token]);
+
+  /**
+   * Um desafio para entrar, para quem ainda não está em nenhum.
+   *
+   * Os desafios existem completos no app desde sempre — criar, entrar por
+   * código, ranking, mural — e ninguém usa, porque nada leva até eles: vivem
+   * na terceira aba de um hub que abre em outra. Convidar quem está fora é a
+   * ponte que faltava.
+   *
+   * Só aparece para quem não participa de nenhum: quem já está dentro não
+   * precisa de convite, precisa do desafio — e esse está na Comunidade.
+   *
+   * Só enxerga desafio PÚBLICO. Um desafio criado como "por código" é privado
+   * por escolha de quem criou, e sair convidando estranhos para ele seria o app
+   * passando por cima dessa escolha.
+   */
+  useEffect(() => {
+    if (!token) return;
+    (async () => {
+      try {
+        const meus = await listMyChallenges(token);
+        if (meus.length > 0) {
+          setDesafioAberto(null);
+          return;
+        }
+        const publicos = await discoverChallenges(token);
+        setDesafioAberto(publicos[0] ?? null);
+      } catch {
+        setDesafioAberto(null);
+      }
+    })();
   }, [token]);
 
   // De onde vem o treino desta pessoa. Sem plano e sem escolha, a Home pergunta.
@@ -667,6 +701,34 @@ export function HomeScreen() {
            dependeram de plano nenhum — estavam escondidos atrás dele.
            A constância (streak/semana/total) descia para cá de propósito: é
            reforço de quem já fez, não o convite do dia — esse é o trio acima. */}
+
+      {/* O convite para um desafio, para quem está fora de todos.
+          Vem depois da constância e do ranking de propósito: é o degrau
+          seguinte de quem já registra treino, não o compromisso do dia. */}
+      {desafioAberto ? (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("DesafioDetail", { id: desafioAberto.id })}
+          activeOpacity={0.7}
+          style={{
+            padding: spacing.md,
+            borderRadius: 16,
+            backgroundColor: colors.surface2,
+            borderWidth: 1,
+            borderColor: colors.line,
+            gap: 2,
+          }}
+        >
+          <Txt variant="label" color={colors.text2}>
+            Desafio em aberto
+          </Txt>
+          <Txt variant="titleCard">{desafioAberto.name}</Txt>
+          <Txt variant="caption" color={colors.lime}>
+            {desafioAberto.memberCount
+              ? `${desafioAberto.memberCount} participando · toque para entrar`
+              : "Toque para entrar"}
+          </Txt>
+        </TouchableOpacity>
+      ) : null}
 
       {/* Ranking da semana, em UMA linha.
           Só aparece com pelo menos duas pessoas: "1º de 1" não é posição, é

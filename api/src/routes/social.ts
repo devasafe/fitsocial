@@ -777,6 +777,78 @@ socialRouter.delete(
 
 // ---- seguir (toggle) ----
 
+/**
+ * Quem seguir.
+ *
+ * O feed "Seguindo" nasce vazio para todo mundo, porque o app nunca levou
+ * ninguém a seguir ninguém: não havia sugestão em lugar algum. Com a base
+ * atual isso não pede recomendação sofisticada — pede existir, mostrar gente
+ * VIVA e dizer por quê.
+ *
+ * Determinístico de propósito: quem treinou mais na janela recente aparece
+ * primeiro. Sugerir quem sumiu faz o contrário do que a lista existe para
+ * fazer — enche o feed de silêncio e confirma a impressão de app deserto.
+ */
+socialRouter.get(
+  "/sugestoes",
+  asyncHandler(async (req, res) => {
+    const me = req.user!._id;
+    const JANELA_DIAS = 21;
+    const desde = new Date(Date.now() - JANELA_DIAS * 24 * 60 * 60 * 1000);
+
+    const ativos = await Activity.aggregate<{ _id: mongoose.Types.ObjectId; treinos: number }>([
+      { $match: { startedAt: { $gte: desde } } },
+      { $group: { _id: "$user", treinos: { $sum: 1 } } },
+      { $sort: { treinos: -1 } },
+      { $limit: 50 },
+    ]);
+
+    const jaSigo = new Set(
+      (await Follow.find({ follower: me }).select("following")).map((f) => f.following.toString())
+    );
+
+    const candidatos = ativos
+      .filter((a) => !a._id.equals(me) && !jaSigo.has(a._id.toString()))
+      .slice(0, 10);
+
+    if (candidatos.length === 0) {
+      res.json({ data: [], meta: {} });
+      return;
+    }
+
+    // Conta suspensa, banida ou com conteúdo escondido não entra: a lista é um
+    // convite do app, e convidar para seguir quem a moderação tirou do ar seria
+    // o app se contradizendo.
+    const pessoas = await User.find({
+      _id: { $in: candidatos.map((c) => c._id) },
+      status: "active",
+      deletedAt: null,
+      contentVisible: true,
+    }).select("name username avatarUrl");
+
+    const porId = new Map(pessoas.map((p) => [p._id.toString(), p]));
+
+    // A ordem vem da agregação, não do `find` — o Mongo não promete ordem em
+    // consulta por lista de ids, e a ordem AQUI é a recomendação em si.
+    const data = candidatos
+      .map((c) => {
+        const p = porId.get(c._id.toString());
+        if (!p) return null;
+        return {
+          id: p._id.toString(),
+          name: p.name,
+          username: p.username ?? null,
+          avatarUrl: p.avatarUrl ?? "",
+          treinos: c.treinos,
+          motivo: c.treinos === 1 ? "1 treino nas últimas semanas" : `${c.treinos} treinos nas últimas semanas`,
+        };
+      })
+      .filter(Boolean);
+
+    res.json({ data, meta: { janelaDias: JANELA_DIAS } });
+  })
+);
+
 socialRouter.post(
   "/users/:id/follow",
   asyncHandler(async (req, res) => {
