@@ -198,7 +198,8 @@ export function CreatePostScreen() {
     if (!fromWorkout) {
       // O compositor sai da pilha e o que estava embaixo (em geral o feed, com
       // a rolagem e o cursor de paginação) continua vivo.
-      nav.replace("PostDetail", { post });
+      // `recemPublicado`: a tela do post oferece o Story sozinha. Ver PostDetailScreen.
+      nav.replace("PostDetail", { post, recemPublicado: true });
       return;
     }
 
@@ -215,7 +216,7 @@ export function CreatePostScreen() {
         // feed e o cursor da paginação continuam de pé. Com chave nova, ela
         // voltaria do post caindo em "Hoje" com tudo recarregado.
         { name: "Tabs" as const, key: tabs?.key },
-        { name: "PostDetail" as const, params: { post } },
+        { name: "PostDetail" as const, params: { post, recemPublicado: true } },
       ],
     });
   }

@@ -43,7 +43,10 @@ export type AppStackParams = {
   Subscription: undefined;
   Leaderboard: undefined;
   EditarPost: { post: Post };
-  PostDetail: { post: Post };
+  /** `recemPublicado` = a pessoa chegou aqui publicando agora, e não navegando
+   *  até um post antigo. É o que autoriza abrir a folha de compartilhar
+   *  sozinha: no post de ontem isso seria um pop-up do nada. */
+  PostDetail: { post: Post; recemPublicado?: boolean };
   ImportPlan: undefined;
   History: undefined;
   MeusPRs: undefined;
